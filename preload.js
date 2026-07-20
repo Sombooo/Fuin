@@ -8,7 +8,6 @@ contextBridge.exposeInMainWorld('kekkai', {
   close:               ()               => ipcRenderer.send('win-close'),
   openUrl:             (url)            => ipcRenderer.send('open-url', url),
   openBackupFolder:    ()               => ipcRenderer.invoke('open-backup-folder'),
-  onForceLock:         (callback)       => ipcRenderer.on('force-lock', callback),
 
   encrypt:             (data, password) => ipcRenderer.invoke('encrypt', { data, password }),
   decrypt:             (b64, password)  => ipcRenderer.invoke('decrypt', { b64, password }),

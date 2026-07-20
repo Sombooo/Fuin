@@ -74,6 +74,9 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin' && isQuitt
 app.on('before-quit', () => {
   isQuitting = true;
   stopExtensionBridge();
+  if (clipboardTimer) {
+    try { clipboard.writeText(''); } catch {}
+  }
 });
 
 function createTray() {
@@ -449,13 +452,13 @@ function backupFile(sourcePath) {
 ipcMain.handle('load-data',   ()        => fs.existsSync(DATA_FILE) ? fs.readFileSync(DATA_FILE, 'utf8') : null);
 ipcMain.handle('save-data',   (_, enc)  => { 
   backupFile(DATA_FILE);
-  fs.writeFileSync(DATA_FILE, enc, 'utf8'); 
+  fs.writeFileSync(DATA_FILE, enc, { encoding: 'utf8', mode: 0o600 }); 
   return true; 
 });
 ipcMain.handle('data-exists', ()        => fs.existsSync(DATA_FILE));
 
 // ── IPC: Recovery ─────────────────────────────────────────────────
-ipcMain.handle('save-recovery',   (_, d) => { fs.writeFileSync(RECOVERY_FILE, d, 'utf8'); return true; });
+ipcMain.handle('save-recovery',   (_, d) => { fs.writeFileSync(RECOVERY_FILE, d, { encoding: 'utf8', mode: 0o600 }); return true; });
 ipcMain.handle('load-recovery',   ()     => fs.existsSync(RECOVERY_FILE) ? fs.readFileSync(RECOVERY_FILE, 'utf8') : null);
 ipcMain.handle('recovery-exists', ()     => fs.existsSync(RECOVERY_FILE));
 
@@ -463,7 +466,7 @@ ipcMain.handle('recovery-exists', ()     => fs.existsSync(RECOVERY_FILE));
 // localStorage yerine bu dosya kullanılır; renderer erişemez, yalnızca IPC üzerinden
 ipcMain.handle('save-master-enc', (_, d) => { 
   backupFile(MASTER_ENC_FILE);
-  fs.writeFileSync(MASTER_ENC_FILE, d, 'utf8'); 
+  fs.writeFileSync(MASTER_ENC_FILE, d, { encoding: 'utf8', mode: 0o600 }); 
   return true; 
 });
 ipcMain.handle('load-master-enc', ()     => fs.existsSync(MASTER_ENC_FILE) ? fs.readFileSync(MASTER_ENC_FILE, 'utf8') : null);

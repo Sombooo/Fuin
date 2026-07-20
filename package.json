@@ -1,0 +1,42 @@
+{
+  "name": "fuin",
+  "version": "1.0.0",
+  "description": "Fuin — Güvenli Şifre Yöneticisi",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-mac": "electron-builder --mac",
+    "build-win": "electron-builder --win --x64",
+    "build-linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "argon2": "^0.31.0",
+    "zxcvbn": "^4.4.2"
+  },
+  "build": {
+    "appId": "com.fuin.app",
+    "productName": "Fuin",
+    "icon": "assets/icon",
+    "asar": true,
+    "directories": { "output": "dist" },
+    "extraResources": [
+      { "from": "native-host", "to": "native-host", "filter": ["host.js"] }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "target": "dmg"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

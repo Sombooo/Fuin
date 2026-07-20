@@ -1,27 +1,70 @@
-# ⬡ KEKKAI — Şifre Yöneticisi
+<div align="center">
+  
+# ◉ Fuin
+**Quietly secure.**
 
-## Kurulum
+A minimalist, air-gapped, and ultra-secure local password manager. Built for privacy.
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Platform: macOS | Windows | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgray.svg)](#)
+
+</div>
+
+<br />
+
+Fuin is a next-generation password manager that runs entirely **offline**. It never connects to a server, never syncs your vault to a hidden cloud, and never asks for a subscription. Your data stays completely on your local machine, protected by military-grade encryption.
+
+## 🛡️ Security Architecture
+
+Fuin is designed with a paranoid approach to security, ensuring that even if your machine is compromised, your vault remains uncrackable.
+
+| Layer | Technology | Description |
+|---|---|---|
+| **Key Derivation** | `Argon2id` | The strongest KDF against brute-force and GPU attacks. (64MB memory cost, 3 iterations) |
+| **Encryption** | `AES-256-GCM` | Authenticated encryption that guarantees both privacy and data integrity. |
+| **Memory Zeroing** | `Buffer.fill(0)` | Master keys are wiped entirely from your RAM the millisecond they are used. |
+| **Timing Attacks** | `crypto.timingSafeEqual()` | Constant-time comparisons to prevent side-channel leaks. |
+| **Entropy Analysis** | `zxcvbn` | Advanced password strength estimation built-in. |
+| **Data Privacy** | `Air-Gapped` | No background telemetry, no cloud syncing. 100% offline. |
+
+## 🚀 Installation & Usage
+
+You can download the pre-compiled, ready-to-use installation files for your operating system from the [Releases](../../releases) tab.
+
+### Building from Source
+
+If you prefer to compile Fuin yourself:
 
 ```bash
+# Clone the repository
+git clone https://github.com/Sombooo/Fuin.git
+cd Fuin
+
+# Install dependencies
 npm install
+
+# Run in development mode
 npm start
+
+# Build for your platform
+npm run build-mac    # macOS (.dmg)
+npm run build-win    # Windows (.exe)
+npm run build-linux  # Linux (.AppImage)
 ```
 
-## Güvenlik Mimarisi
+## 🧩 Browser Extension
+Fuin comes with a companion browser extension for Chrome, Brave, and Firefox-based browsers. You can seamlessly autofill your credentials into websites directly from your local Fuin vault.
+* Download the extension package from the `browser-extension` folder or install it via the Chrome Web Store / Firefox Add-ons (Links coming soon).
 
-| Katman              | Teknoloji                        | Açıklama                              |
-|---------------------|----------------------------------|---------------------------------------|
-| Anahtar Türetme     | Argon2id (64MB RAM, 3 iter)      | Brute force'a karşı en güçlü KDF      |
-| Şifreleme           | AES-256-GCM                      | Authenticated encryption              |
-| RAM Zeroing         | Node.js Buffer.fill(0)           | Anahtar bellekten gerçekten silinir   |
-| Timing Attack       | crypto.timingSafeEqual()         | Sabit zamanlı karşılaştırma           |
-| Entropi Analizi     | zxcvbn                           | Gerçek tahmin bazlı güç analizi       |
-| Sızıntı Kontrolü   | HaveIBeenPwned k-Anonymity       | Şifre internete gönderilmez           |
+## ☕ Support the Development
 
-## Build
+Fuin is an independent, open-source project. If you enjoy the absolute privacy and security it provides, consider supporting the continuous development of the desktop and upcoming mobile apps!
 
-```bash
-npm run build-mac    # macOS .dmg
-npm run build-win    # Windows .exe
-npm run build-linux  # Linux .AppImage
-```
+[![Support via Lemon Squeezy](https://img.shields.io/badge/Support_Fuin-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](#)
+*(Note: Replace the "#" in the link above with your actual Lemon Squeezy checkout URL once you set it up).*
+
+---
+<div align="center">
+  <i>"Built for privacy. Designed for security."</i><br>
+  Copyright © 2026 Fuin Dev.
+</div>

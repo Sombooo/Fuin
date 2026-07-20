@@ -1,6 +1,6 @@
 <div align="center">
   
-# ◉ Fuin
+# ⬡ Fuin
 **Quietly secure.**
 
 A minimalist, air-gapped, and ultra-secure local password manager. Built for privacy.

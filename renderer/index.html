@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  style-src 'self' 'unsafe-inline';
+  font-src 'self';
+  script-src 'self' 'unsafe-inline';
+  connect-src https://api.pwnedpasswords.com;
+">
+<title>Fuin</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div class="titlebar">
+  <div class="tb-left">
+    <div class="titlebar-controls">
+      <button class="wbtn close" onclick="window.kekkai?.close()"></button>
+      <button class="wbtn min"   onclick="window.kekkai?.minimize()"></button>
+      <button class="wbtn max"   onclick="window.kekkai?.maximize()"></button>
+    </div>
+    <span class="tb-sep">|</span>
+    <div class="tb-logo">FUIN</div>
+    <div class="tb-sub" data-i18n="appSubtitle">Şifre Yöneticisi</div>
+  </div>
+  <div class="tb-right">
+    <button class="theme-toggle" id="langToggle" onclick="toggleLanguage()" data-i18n-title="langToggleTitle" title="Dil / Language">EN</button>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" data-i18n-title="themeToggleTitle" title="Koyu/Açık mod">◐</button>
+    <div class="crypto-badge" id="cryptoBadge">yükleniyor...</div>
+  </div>
+</div>
+
+<!-- LOCK SCREEN -->
+<div id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-head">
+      <div class="lock-logo">
+      <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="19,2 35,10.5 35,27.5 19,36 3,27.5 3,10.5" stroke="#2a2520" stroke-width="1.5" fill="none"/>
+      </svg>
+    </div>
+      <div class="lock-title">FUIN</div>
+      <div class="lock-rule"></div>
+      <div class="lock-sub" data-i18n="appSubtitle">Şifre Yöneticisi</div>
+    </div>
+    <div>
+      <div class="field-label" data-i18n="lockMasterLabel">Ana Şifre</div>
+      <div class="inp-wrap">
+        <input id="masterInp" type="password" data-i18n-placeholder="lockMasterPh" placeholder="şifrenizi girin..." autocomplete="off">
+        <button class="eye-btn" onclick="toggleEye('masterInp')">●</button>
+      </div>
+    </div>
+    <div class="lock-loading" id="lockLoading">
+      <span id="lockLoadingText" data-i18n="lockVerifying">doğrulanıyor...</span>
+      <div class="lock-progress"><div class="lock-progress-bar"></div></div>
+    </div>
+    <button class="btn-primary" id="unlockBtn" onclick="unlock()" data-i18n="lockUnlockBtn">AÇIK →</button>
+    <button class="btn-forgot" onclick="openForgot()" data-i18n="lockForgot">şifremi unuttum</button>
+    <button class="btn-forgot" style="color:var(--red);opacity:.6" onclick="openHardReset()" data-i18n="lockHardReset">tüm verileri sıfırla</button>
+    <div class="lock-hint">
+      <span data-i18n="lockHintFirstUse">İlk kullanımda istediğiniz şifreyi belirleyin.</span><br>
+      <span data-i18n="lockHintLocalOnly">Tüm veriler <em>yalnızca bu cihazda</em> saklanır.</span>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="app-body">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label" data-i18n="navSectionView">Görünüm</div>
+        <button class="nav-item active" id="nav-all" onclick="setView('all',this)">
+          <span class="icon">▤</span> <span data-i18n="navAll">Tüm Kayıtlar</span>
+        </button>
+        <button class="nav-item" id="nav-fav" onclick="setView('fav',this)">
+          <span class="icon">◆</span> <span data-i18n="navFav">Favoriler</span>
+        </button>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="sidebar-section" id="categoryNavSection" style="display:none">
+        <div class="sidebar-label" data-i18n="navSectionCategories">Kategoriler</div>
+        <div id="categoryNav"></div>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-label" data-i18n="navSectionTools">Araçlar</div>
+        <button class="nav-item" onclick="setView('health',this)">
+          <span class="icon">◎</span> <span data-i18n="navHealth">Sağlık Raporu</span>
+        </button>
+        <button class="nav-item" onclick="setView('security',this)">
+          <span class="icon">▣</span> <span data-i18n="navSecurity">Güvenlik Bilgisi</span>
+        </button>
+        <button class="nav-item" onclick="setView('io',this)">
+          <span class="icon">⇄</span> <span data-i18n="navIO">Dışa / İçe Aktar</span>
+        </button>
+        <button class="nav-item" onclick="openSyncWindow()">
+          <span class="icon">◈</span> <span data-i18n="navSync">Air-Gap Sync</span>
+        </button>
+      </div>
+      <div class="sidebar-bottom">
+        <div class="slogan" style="text-align:center; opacity:0.3; font-family:var(--mono); font-size:10px; margin-bottom:12px; cursor:default; user-select:none; letter-spacing:0.5px;" data-i18n="slogan">Quietly secure.</div>
+        <button class="btn-lock-side" onclick="lock()" data-i18n="navLock">◉ Kilitle</button>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main">
+
+      <!-- passwords view -->
+      <div id="view-passwords" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <div class="main-header">
+          <div class="main-title" id="viewTitle" data-i18n="viewTitleAll">TÜM KAYITLAR</div>
+          <div class="spacer"></div>
+          <div class="search-wrap">
+            <span class="search-icon">⌕</span>
+            <input id="searchInp" data-i18n-placeholder="searchPh" placeholder="ara..." oninput="renderList()">
+          </div>
+          <button class="btn-add" onclick="openAddModal()" data-i18n="btnNew">+ YENİ</button>
+        </div>
+        <div class="pw-list-wrap" id="pwList"></div>
+      </div>
+
+      <!-- health view -->
+      <div id="view-health" style="display:none;flex:1;overflow-y:auto;padding:16px 20px;background:var(--bg)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div class="main-title" data-i18n="healthTitle">SAĞLIK RAPORU</div>
+          <button class="btn-scan" id="scanBtn" onclick="runHIBPScan()" data-i18n="healthScanBtn">⌖ Sızıntı Taraması</button>
+        </div>
+        <div class="info-box" data-i18n="healthInfoBox">
+          <em>k-Anonymity:</em> Şifreleriniz hiçbir zaman gönderilmez.
+          Yalnızca SHA-1 hash'inin ilk 5 karakteri HaveIBeenPwned'e gider;
+          eşleşme kontrolü tamamen bu cihazda yapılır.
+        </div>
+        <div class="health-grid" id="healthGrid"></div>
+        <div id="hibpResults"></div>
+        <div id="healthDetails"></div>
+      </div>
+
+      <!-- security info view -->
+      <div id="view-security" style="display:none;padding:16px 20px;background:var(--bg);overflow-y:auto;flex:1">
+        <div class="main-title" style="margin-bottom:14px" data-i18n="securityTitle">GÜVENLİK BİLGİSİ</div>
+        <div class="sec-grid" id="secGrid"></div>
+        <div class="info-box" style="margin-top:0" data-i18n="securityInfoBox">
+          Bu uygulama tüm kriptografik işlemleri Electron'un ana procesinde
+          Node.js <em>crypto</em> modülü ile çalıştırır. Şifreleme mantığı hiçbir zaman
+          tarayıcı ortamına (renderer) taşınmaz.
+        </div>
+      </div>
+
+      <!-- io view -->
+      <div id="view-io" style="display:none;padding:16px 20px;background:var(--bg)">
+        <div class="main-title" style="margin-bottom:14px" data-i18n="ioTitle">DIŞA / İÇE AKTAR</div>
+        <div class="io-grid">
+          <div class="io-card">
+            <div class="io-title" data-i18n="ioExportJsonTitle">↑ JSON Dışa Aktar</div>
+            <div class="io-sub" data-i18n="ioExportJsonSub">Tüm kayıtları JSON formatında kaydedin.</div>
+            <button class="btn-io pri" onclick="exportJSON()" data-i18n="ioExportJsonBtn">JSON İndir</button>
+          </div>
+          <div class="io-card">
+            <div class="io-title" data-i18n="ioExportCsvTitle">↑ CSV Dışa Aktar</div>
+            <div class="io-sub" data-i18n="ioExportCsvSub">Tüm kayıtları CSV olarak kaydedin.</div>
+            <button class="btn-io pri" onclick="exportCSV()" data-i18n="ioExportCsvBtn">CSV İndir</button>
+          </div>
+          <div class="io-card">
+            <div class="io-title" data-i18n="ioImportJsonTitle">↓ JSON İçe Aktar</div>
+            <div class="io-sub" data-i18n="ioImportJsonSub">Önceki Fuin yedeğini geri yükleyin.</div>
+            <button class="btn-io" onclick="importJSON()" data-i18n="ioImportJsonBtn">JSON Seç</button>
+          </div>
+          <div class="io-card">
+            <div class="io-title" data-i18n="ioImportCsvTitle">↓ CSV İçe Aktar</div>
+            <div class="io-sub" data-i18n="ioImportCsvSub">site, username, password sütunlu CSV.</div>
+            <button class="btn-io" onclick="importCSV()" data-i18n="ioImportCsvBtn">CSV Seç</button>
+          </div>
+        </div>
+        <div class="warn-box" data-i18n="ioWarnBox">⚠ Dışa aktarılan dosyalar şifresiz düz metin içerir. Güvenli bir konumda saklayın.</div>
+
+        <div class="main-title" style="margin-top:32px; margin-bottom:16px;" data-i18n="sysTitle">SİSTEM & GÜNCELLEMELER</div>
+        <div class="io-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+          <div class="io-card">
+            <div class="io-title" data-i18n="sysUpdateCheckTitle">⟳ Sürüm Kontrolü</div>
+            <div class="io-sub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin. Mevcut sürüm: v1.0.0</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+              <button class="btn-io" id="updateBtn" onclick="checkForUpdates()" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
+              <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text)"></span>
+            </div>
+          </div>
+          <div class="io-card">
+            <div class="io-title" data-i18n="sysBackupTitle">⛁ Yedekleme Klasörü</div>
+            <div class="io-sub" data-i18n="sysBackupSub">Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+              <button class="btn-io" onclick="window.kekkai?.openBackupFolder()" data-i18n="sysBackupBtn">Klasörü Aç</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="overlay" id="addOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="addModalTitle" data-i18n="modalNewEntry">YENİ KAYIT</div>
+      <button class="modal-close" onclick="closeModal('addOverlay')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg"><label data-i18n="fieldSite">Site / Uygulama</label><input class="fi" id="f-site" data-i18n-placeholder="fieldSitePh" placeholder="Gmail, GitHub..."></div>
+      <div class="fg"><label data-i18n="fieldCategory">Kategori</label>
+        <select class="fi" id="f-category">
+          <option value="Sosyal Medya" data-i18n="cat_social">Sosyal Medya</option>
+          <option value="E-posta" data-i18n="cat_email">E-posta</option>
+          <option value="Finans" data-i18n="cat_finance">Finans</option>
+          <option value="Alışveriş" data-i18n="cat_shopping">Alışveriş</option>
+          <option value="İş / Kurumsal" data-i18n="cat_work">İş / Kurumsal</option>
+          <option value="Oyun" data-i18n="cat_gaming">Oyun</option>
+          <option value="Geliştirici / Araçlar" data-i18n="cat_dev">Geliştirici / Araçlar</option>
+          <option value="Diğer" data-i18n="cat_other" selected>Diğer</option>
+        </select>
+      </div>
+      <div class="fg"><label data-i18n="fieldUser">Kullanıcı Adı / E-posta</label><input class="fi" id="f-user" data-i18n-placeholder="fieldUserPh" placeholder="kullanici@email.com"></div>
+      <div class="fg">
+        <label data-i18n="fieldPassword">Şifre</label>
+        <div class="pw-row">
+          <input class="fi" id="f-pw" type="password" placeholder="••••••••" oninput="onPwInput()">
+          <div class="pw-row-btns">
+            <button class="icon-btn" onclick="toggleEye('f-pw')" data-i18n-title="showPwTitle" title="Göster">●</button>
+            <button class="icon-btn" onclick="genPw()" data-i18n-title="genPwTitle" title="Üret">⟳</button>
+          </div>
+        </div>
+        <!-- zxcvbn strength -->
+        <div class="zxcvbn-wrap" id="zxcvbnWrap" style="display:none">
+          <div class="zxcvbn-bars">
+            <div class="zxcvbn-seg" id="zs0"></div>
+            <div class="zxcvbn-seg" id="zs1"></div>
+            <div class="zxcvbn-seg" id="zs2"></div>
+            <div class="zxcvbn-seg" id="zs3"></div>
+          </div>
+          <div class="zxcvbn-label">
+            <span id="zxcvbnLabel">—</span>
+            <span class="zxcvbn-crack" id="zxcvbnCrack"></span>
+          </div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--red);margin-top:3px" id="zxcvbnWarn"></div>
+        </div>
+      </div>
+      <div class="fg"><label data-i18n="fieldNote">Not (opsiyonel)</label><input class="fi" id="f-note" data-i18n-placeholder="fieldNotePh" placeholder="güvenlik sorusu, ipucu..."></div>
+      <div class="fg"><label data-i18n="fieldUrl">URL (opsiyonel)</label><input class="fi" id="f-url" placeholder="https://..."></div>
+      <div class="modal-divider"></div>
+      <div class="modal-section" data-i18n="section2FA">İki Faktörlü Doğrulama</div>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span data-i18n="toggle2FALabel">2FA Kodu Sakla</span>
+          <span>TOTP secret key</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="f-2fa-toggle" onchange="toggle2FA()"><span class="slider"></span></label>
+      </div>
+      <div id="totp-section" style="display:none">
+        <div class="fg" style="margin-top:4px">
+          <label>Secret Key</label>
+          <input class="fi" id="f-totp" placeholder="JBSWY3DPEHPK3PXP">
+        </div>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span data-i18n="toggleFavLabel">Favorilere Ekle</span>
+          <span data-i18n="toggleFavSub">Kenar çubuğunda göster</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="f-fav"><span class="slider"></span></label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('addOverlay')" data-i18n="btnCancel">İptal</button>
+      <button class="btn-save" onclick="saveEntry()" data-i18n="btnSave">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- 2FA MODAL -->
+<div class="overlay" id="totpOverlay">
+  <div class="modal" style="max-width:320px">
+    <div class="modal-head">
+      <div class="modal-title" id="totpSiteName" data-i18n="totpModalTitle">2FA KODU</div>
+      <button class="modal-close" onclick="closeTOTP()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="totp-code" id="totpCode" onclick="copyTOTP()">--- ---</div>
+      <div class="totp-timer-wrap"><div class="totp-progress" id="totpBar"></div></div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--mu);text-align:center;margin-top:6px" data-i18n="totpHint">koda tıkla → kopyala</div>
+    </div>
+  </div>
+</div>
+
+<!-- RECOVERY KEY MODAL -->
+<div class="overlay" id="recoveryOverlay">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="recoveryTitle">KURTARMA ANAHTARI</div>
+    </div>
+    <div class="modal-body">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.8">
+        <span data-i18n="recoveryBody">Ana şifrenizi unutursanız bu anahtar ile şifrenizi sıfırlayabilirsiniz.</span><br>
+        <span style="color:var(--red)" data-i18n="recoveryWarn">Güvenli bir yere not edin. Bir daha gösterilmeyecek.</span>
+      </div>
+      <div class="recovery-key-display" id="recoveryKeyDisplay" onclick="copyRecoveryKey()"></div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--mu);text-align:center" data-i18n="recoveryHint">anahtara tıkla → kopyala</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-save" onclick="closeModal('recoveryOverlay')" data-i18n="recoverySavedBtn">Kaydettim, Kapat</button>
+    </div>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div class="overlay" id="forgotOverlay">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="forgotTitle">ŞİFRE SIFIRLAMA</div>
+      <button class="modal-close" onclick="closeForgot()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.8" data-i18n="forgotBody">
+        Kurtarma anahtarınızı girin, ardından yeni şifre belirleyin.
+      </div>
+      <div class="fg">
+        <label data-i18n="forgotKeyLabel">Kurtarma Anahtarı</label>
+        <input class="fi" id="recoveryInp" placeholder="XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX">
+      </div>
+      <div class="fg" id="newPwGroup" style="display:none">
+        <label data-i18n="forgotNewPwLabel">Yeni Ana Şifre</label>
+        <div class="inp-wrap">
+          <input class="fi" id="newPwInp" type="password" data-i18n-placeholder="forgotNewPwPh" placeholder="yeni şifreniz...">
+          <button class="eye-btn" onclick="toggleEye('newPwInp')">●</button>
+        </div>
+      </div>
+      <div class="forgot-msg" id="forgotMsg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeForgot()" data-i18n="btnCancel">İptal</button>
+      <button class="btn-save" id="forgotBtn" onclick="handleForgot()" data-i18n="forgotVerifyBtn">Doğrula</button>
+    </div>
+  </div>
+</div>
+
+<!-- HARD RESET MODAL -->
+<div class="overlay" id="hardResetOverlay">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-head">
+      <div class="modal-title" style="color:var(--red)" data-i18n="hardResetTitle">⚠ UYARI: TAM SIFIRLAMA</div>
+      <button class="modal-close" onclick="closeHardReset()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.9;padding:10px 14px;background:rgba(160,52,42,.07);border:1px solid rgba(160,52,42,.2);border-radius:1px">
+        <span data-i18n="hardResetBody1">Bu işlem <span style="color:var(--red);font-weight:600">tüm kayıtlarınızı, şifrenizi ve kurtarma anahtarınızı kalıcı olarak siler.</span></span><br>
+        <span data-i18n="hardResetBody2">Geri alınamaz. Devam etmek için aşağıya <span style="color:var(--red)">SIFIRLA</span> yazın.</span>
+      </div>
+      <div class="fg">
+        <label data-i18n="hardResetConfirmLabel">Onay</label>
+        <input class="fi" id="hardResetInp" placeholder="SIFIRLA" data-i18n-placeholder="resetConfirmWord" autocomplete="off"
+          oninput="document.getElementById('hardResetMsg').style.display='none'">
+      </div>
+      <div id="hardResetMsg" style="font-family:var(--mono);font-size:11px;color:var(--red);display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeHardReset()" data-i18n="btnCancel">İptal</button>
+      <button class="btn-save" style="background:var(--red)" onclick="confirmHardReset()" data-i18n="hardResetBtn">Sıfırla</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- AUTO-LOCK WARNING MODAL (Faz 2) -->
+<div class="overlay" id="autoLockOverlay">
+  <div class="modal" style="max-width:340px">
+    <div class="modal-head">
+      <div class="modal-title" style="color:var(--amber)" data-i18n="autoLockTitle">⏱ HAREKETSİZLİK UYARISI</div>
+    </div>
+    <div class="modal-body">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.8;text-align:center" data-i18n="autoLockBody">
+        Uzun süredir hareket algılanmadı.<br>Aşağıdaki sürenin sonunda otomatik kilitlenecek.
+      </div>
+      <div class="totp-code" id="autoLockCountdown" style="color:var(--amber)">30</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-save" onclick="dismissAutoLockWarning()" data-i18n="autoLockStillHere">Hâlâ Buradayım</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- EKLENTİ İZİN MODALI -->
+<div class="overlay" id="extRevealOverlay">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-head">
+      <div class="modal-title" style="color:var(--ac)" data-i18n="extReqTitle">⬡ TARAYICI EKLENTİSİ İSTEĞİ</div>
+    </div>
+    <div class="modal-body">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.8;text-align:center">
+        <span style="color:var(--text)" id="extRevealDomain">—</span> <span data-i18n="extReqFor">için kimlik bilgisi isteniyor.</span>
+      </div>
+      <div class="status-row" style="margin-top:4px">
+        <div class="status-line"><span class="status-key" data-i18n="extReqSite">KAYIT</span><span class="status-val" id="extRevealSite">—</span></div>
+        <div class="status-line"><span class="status-key" data-i18n="extReqUser">KULLANICI</span><span class="status-val" id="extRevealUser">—</span></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="denyExtReveal()" data-i18n="extReqDeny">Reddet</button>
+      <button class="btn-save" onclick="approveExtReveal()" data-i18n="extReqAllow">İzin Ver</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"><span id="toastMsg">—</span></div>
+
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

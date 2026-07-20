@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  script-src 'self' 'unsafe-inline';
+">
+<title>Fuin — Sync</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+
+  .sync-titlebar {
+    height: 38px; background: var(--paper); border-bottom: 1px solid var(--b);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; flex-shrink: 0; -webkit-app-region: drag;
+  }
+  .sync-title { font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 1px; }
+  .sync-close {
+    -webkit-app-region: no-drag; background: none; border: none;
+    color: var(--mu); cursor: pointer; font-size: 15px;
+  }
+  .sync-close:hover { color: var(--red); }
+
+  .sync-body {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: flex-start; padding: 20px 24px; gap: 14px;
+    overflow-y: auto; background: var(--bg);
+  }
+
+  /* ── QR CANVAS ── */
+  .qr-wrap {
+    position: relative; width: 280px; height: 280px; flex-shrink: 0;
+    background: #fff; border: 1px solid var(--b); border-radius: 2px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #qrCanvas { display: block; border-radius: 1px; }
+
+  /* hazırlanıyor overlay */
+  .qr-preparing {
+    position: absolute; inset: 0; background: var(--paper);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; border-radius: 2px;
+  }
+  .qr-preparing .spin {
+    width: 28px; height: 28px; border: 2px solid var(--b);
+    border-top-color: var(--ac); border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .qr-preparing span { font-family: var(--mono); font-size: 11px; color: var(--mu); letter-spacing: 1px; }
+
+  /* ── STATUS ── */
+  .status-row {
+    width: 100%; background: var(--paper); border: 1px solid var(--b);
+    border-radius: 1px; padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .status-line {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .status-key { font-family: var(--mono); font-size: 11px; color: var(--mu); letter-spacing: .5px; }
+  .status-val { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text); }
+  .status-val.green { color: var(--green); }
+  .status-val.amber { color: var(--amber); }
+
+  /* chunk progress bar */
+  .chunk-bar-wrap { width: 100%; height: 3px; background: var(--b); border-radius: 2px; overflow: hidden; }
+  .chunk-bar { height: 100%; background: var(--ac); border-radius: 2px; transition: width .15s; }
+
+  /* transfer ID */
+  .transfer-id {
+    font-family: var(--mono); font-size: 11px; color: var(--mu);
+    letter-spacing: 2px; text-align: center; word-break: break-all;
+    padding: 6px 10px; background: var(--card); border: 1px solid var(--b);
+    border-radius: 1px; width: 100%;
+  }
+  .transfer-id span { color: var(--ac); font-weight: 600; }
+
+  /* ── SPEED SELECTOR ── */
+  .speed-row {
+    display: flex; gap: 6px; width: 100%;
+  }
+  .speed-btn {
+    flex: 1; padding: 7px; background: var(--paper);
+    border: 1px solid var(--b); border-radius: 1px;
+    font-family: var(--mono); font-size: 11px; color: var(--mu);
+    cursor: pointer; transition: all .12s; text-align: center;
+  }
+  .speed-btn:hover  { border-color: var(--ac); color: var(--ac); }
+  .speed-btn.active { background: var(--ac); color: var(--bg); border-color: var(--ac); }
+
+  /* ── CONTROLS ── */
+  .ctrl-row { display: flex; gap: 8px; width: 100%; }
+  .btn-ctrl {
+    flex: 1; padding: 9px; background: var(--paper);
+    border: 1px solid var(--b); border-radius: 1px;
+    font-family: var(--mono); font-size: 12px; color: var(--text);
+    cursor: pointer; transition: all .15s; letter-spacing: .5px;
+  }
+  .btn-ctrl:hover { border-color: var(--ac); color: var(--ac); }
+  .btn-ctrl.pause { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .btn-ctrl.pause:hover { background: var(--ac); border-color: var(--ac); }
+
+  /* ── EXPIRED ── */
+  .expired-overlay {
+    display: none; position: absolute; inset: 0;
+    background: rgba(245,240,232,.95);
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; border-radius: 2px;
+  }
+  .expired-overlay.show { display: flex; }
+  .expired-overlay span { font-family: var(--mono); font-size: 12px; color: var(--red); text-align: center; line-height: 1.7; }
+
+  .info-note {
+    font-family: var(--mono); font-size: 10px; color: var(--mu);
+    text-align: center; line-height: 1.7; padding: 0 8px;
+  }
+  .info-note em { color: var(--ac); font-style: normal; }
+</style>
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div class="sync-titlebar">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="sync-title" data-i18n="syncTitle">⬡ AIR-GAP SYNC</div>
+    <div class="crypto-badge" id="syncBadge" data-i18n="syncKeyActive">SyncKey Aktif</div>
+  </div>
+  <button class="sync-close" onclick="closeSyncWindow()">✕</button>
+</div>
+
+<!-- BODY -->
+<div class="sync-body">
+
+  <!-- QR CANVAS -->
+  <div class="qr-wrap">
+    <canvas id="qrCanvas" width="260" height="260"></canvas>
+
+    <!-- Hazırlanıyor -->
+    <div class="qr-preparing" id="preparingOverlay">
+      <div class="spin"></div>
+      <span id="preparingText" data-i18n="syncPreparing">PAKET HAZIRLANIYOR...</span>
+    </div>
+
+    <!-- Sync key süresi doldu -->
+    <div class="expired-overlay" id="expiredOverlay">
+      <span data-i18n="syncExpired">⚠ Sync oturumu sona erdi<br>(5 dk zaman aşımı)<br><br>Lütfen pencereyi kapatıp<br>yeniden açın.</span>
+    </div>
+  </div>
+
+  <!-- STATUS -->
+  <div class="status-row">
+    <div class="status-line">
+      <span class="status-key" data-i18n="syncStatus">DURUM</span>
+      <span class="status-val green" id="stStatus" data-i18n="syncStatusPreparing">Hazırlanıyor...</span>
+    </div>
+    <div class="status-line">
+      <span class="status-key" data-i18n="syncChunk">PARÇA</span>
+      <span class="status-val" id="stChunk">— / —</span>
+    </div>
+    <div class="chunk-bar-wrap"><div class="chunk-bar" id="chunkBar" style="width:0%"></div></div>
+    <div class="status-line">
+      <span class="status-key" data-i18n="syncSpeed">HIZ</span>
+      <span class="status-val" id="stFps">— FPS</span>
+    </div>
+  </div>
+
+  <!-- TRANSFER ID -->
+  <div class="transfer-id" id="transferIdEl">
+    <span data-i18n="syncTransferId">TRANSFER ID:</span> <span id="transferIdVal">—</span>
+  </div>
+
+  <!-- HIZ SEÇICI -->
+  <div style="width:100%">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--mu);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px" data-i18n="syncSpeedLabel">Aktarım Hızı</div>
+    <div class="speed-row">
+      <button class="speed-btn" onclick="setFps(3,this)"><span data-i18n="syncSlow">Yavaş</span><br><span style="font-size:10px;opacity:.7">3 FPS</span></button>
+      <button class="speed-btn active" onclick="setFps(6,this)"><span data-i18n="syncMedium">Orta</span><br><span style="font-size:10px;opacity:.7">6 FPS</span></button>
+      <button class="speed-btn" onclick="setFps(10,this)"><span data-i18n="syncFast">Hızlı</span><br><span style="font-size:10px;opacity:.7">10 FPS</span></button>
+    </div>
+  </div>
+
+  <!-- KONTROLLER -->
+  <div class="ctrl-row">
+    <button class="btn-ctrl pause" id="pauseBtn" onclick="togglePause()" data-i18n="syncPause">❙❙ Duraklat</button>
+    <button class="btn-ctrl" onclick="resetTransfer()" data-i18n="syncReset">↺ Yeniden Başlat</button>
+  </div>
+
+  <div class="info-note">
+    <span data-i18n="syncInfoNote">QR kodları telefonunuzun kamerası ile okuyun.</span><br>
+    <span data-i18n="syncErrorLevel"><em>Hata Düzeltme: Level M</em> · Tüm transfer şifreli</span>
+  </div>
+
+</div>
+
+<!-- qrcode.js — lokal (air-gap: CDN'e bağımlı olmamalı) -->
+<script src="vendor/qrcode.js"></script>
+<script src="i18n.js"></script>
+<script>
+'use strict';
+
+const api = window.kekkai;
+
+// ── STATE ─────────────────────────────────────────────────────────
+let chunks       = [];
+let currentIdx   = 0;
+let fps          = 6;
+let paused       = false;
+let animHandle   = null;
+let lastFrameTime= 0;
+let encryptedB64 = null; // yeniden build için sakla
+
+// ── API EVENTS ────────────────────────────────────────────────────
+api.onSyncChunksReady(payload => {
+  chunks = payload.chunks;
+  encryptedB64 = payload.encryptedB64; // "yeniden başlat" için sakla — taze transferId/IV üretmek üzere
+  startAnimation();
+});
+
+api.onSyncError(msg => {
+  document.getElementById('preparingText').textContent = t('syncErrorPrefix') + msg;
+});
+
+api.onSyncKeyExpired(() => {
+  stopAnimation();
+  document.getElementById('expiredOverlay').classList.add('show');
+  document.getElementById('stStatus').textContent = t('syncTimedOut');
+  document.getElementById('stStatus').style.color = 'var(--red)';
+});
+
+// ── QR RENDERER ───────────────────────────────────────────────────
+const canvas = document.getElementById('qrCanvas');
+const ctx    = canvas.getContext('2d');
+
+function renderChunkToCanvas(chunk) {
+  const json = JSON.stringify(chunk);
+
+  // qrcode.js → offscreen div → canvas'a çiz
+  const div = document.createElement('div');
+  div.style.display = 'none';
+  document.body.appendChild(div);
+
+  try {
+    new QRCode(div, {
+      text:           json,
+      width:          260,
+      height:         260,
+      colorDark:      '#2a2520',
+      colorLight:     '#ffffff',
+      correctLevel:   QRCode.CorrectLevel.M, // Level M
+    });
+
+    // qrcode.js canvas'ı div'e ekler
+    const qrCanvasEl = div.querySelector('canvas');
+    if (qrCanvasEl) {
+      ctx.clearRect(0, 0, 260, 260);
+      ctx.drawImage(qrCanvasEl, 0, 0, 260, 260);
+    }
+  } catch(e) {
+    // QR chunk çok büyükse uyar
+    ctx.fillStyle = '#f5f0e8';
+    ctx.fillRect(0,0,260,260);
+    ctx.fillStyle = '#a0342a';
+    ctx.font = '12px monospace';
+    ctx.fillText('Chunk çok büyük', 20, 130);
+  } finally {
+    document.body.removeChild(div);
+  }
+}
+
+// ── ANİMASYON ────────────────────────────────────────────────────
+// requestAnimationFrame + zaman kontrolü: main thread donmaz
+function animate(timestamp) {
+  if (paused || !chunks.length) { animHandle = requestAnimationFrame(animate); return; }
+
+  const interval = 1000 / fps;
+  if (timestamp - lastFrameTime >= interval) {
+    lastFrameTime = timestamp;
+    renderFrame();
+  }
+  animHandle = requestAnimationFrame(animate);
+}
+
+function renderFrame() {
+  const chunk = chunks[currentIdx];
+  renderChunkToCanvas(chunk);
+
+  // UI güncelle
+  document.getElementById('stChunk').textContent  = `${chunk.index} / ${chunk.total}`;
+  document.getElementById('stStatus').textContent = t('syncTransferring');
+  document.getElementById('stStatus').style.color = 'var(--green)';
+  document.getElementById('stFps').textContent    = `${fps} FPS`;
+  document.getElementById('transferIdVal').textContent = chunk.transferId;
+  document.getElementById('chunkBar').style.width = (chunk.index / chunk.total * 100) + '%';
+
+  currentIdx = (currentIdx + 1) % chunks.length;
+}
+
+function startAnimation() {
+  document.getElementById('preparingOverlay').style.display = 'none';
+  currentIdx = 0; lastFrameTime = 0;
+  if (animHandle) cancelAnimationFrame(animHandle);
+  animHandle = requestAnimationFrame(animate);
+}
+
+function stopAnimation() {
+  if (animHandle) { cancelAnimationFrame(animHandle); animHandle = null; }
+}
+
+// ── KONTROLLER ───────────────────────────────────────────────────
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  if (paused) {
+    btn.textContent = t('syncResume');
+    btn.classList.remove('pause');
+    document.getElementById('stStatus').textContent = t('syncPaused');
+    document.getElementById('stStatus').style.color = 'var(--amber)';
+  } else {
+    btn.textContent = t('syncPause');
+    btn.classList.add('pause');
+  }
+}
+
+function setFps(newFps, btn) {
+  fps = newFps;
+  document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('stFps').textContent = `${fps} FPS`;
+}
+
+async function resetTransfer() {
+  if (paused) togglePause();
+  if (!encryptedB64) { currentIdx = 0; lastFrameTime = 0; return; }
+  // Taze transferId + IV + tag ile yeni paket üret (eskisini tekrar yayınlamak yerine)
+  stopAnimation();
+  document.getElementById('preparingOverlay').style.display = 'flex';
+  document.getElementById('preparingText').textContent = t('syncPreparingRebuild');
+  try {
+    const fresh = await api.rebuildChunks(encryptedB64);
+    chunks = fresh;
+    startAnimation();
+  } catch (e) {
+    document.getElementById('preparingText').textContent = t('syncErrorPrefix') + e.message;
+  }
+}
+
+async function closeSyncWindow() {
+  stopAnimation();
+  await api.clearSyncKey();
+  api.closeSyncWindow();
+}
+
+// ── BADGE ─────────────────────────────────────────────────────────
+async function initBadge() {
+  const info = await api.cryptoInfo();
+  const badge = document.getElementById('syncBadge');
+  badge.textContent = info.argon2 ? 'Argon2id · SyncKey' : 'PBKDF2 · SyncKey';
+  badge.style.color  = info.argon2 ? 'var(--green)' : 'var(--amber)';
+}
+initBadge();
+setLanguage(localStorage.getItem('fuin-lang') || 'tr');
+</script>
+</body>
+</html>

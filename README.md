@@ -32,7 +32,7 @@ Fuin is designed with a paranoid approach to security, ensuring that even if you
 You can download the pre-compiled, ready-to-use installation files for your operating system from the [Releases](../../releases) tab.
 
 > [!NOTE]
-> **For macOS Users:** Since Fuin is a free and independent open-source project, the installer is not signed with a $99/year Apple Developer certificate. When you open the `.dmg`, macOS Gatekeeper might show an "unidentified developer" warning. This is completely normal for open-source apps. Simply **Right-Click** the Fuin app icon and select **Open** to bypass this warning safely. You only need to do this once.
+> **For macOS Users:** As Fuin is currently a community-driven open-source project, we haven't acquired an Apple Developer signing certificate yet. When you open the `.dmg`, macOS Gatekeeper might show an "unidentified developer" warning. This is completely normal for unsigned apps. Simply **Right-Click** the Fuin app icon and select **Open** to bypass this warning safely. You only need to do this once.
 
 ### Building from Source
 
@@ -60,8 +60,8 @@ Fuin comes with a companion browser extension for Chrome, Brave, and Firefox-bas
 * Download the extension package from the `browser-extension` folder or install it via the Chrome Web Store / Firefox Add-ons (Links coming soon).
 
 ## 🗺️ Roadmap: Mobile App (Coming Late August)
-The core cryptographic engine and the desktop version of Fuin are fully complete and stable. We are currently actively developing the **iOS and Android** versions!
-Expect the mobile companion app to drop by the **end of August 2026**, bringing the exact same military-grade, offline-first security to your pocket.
+The desktop version of Fuin is fully complete and stable. We are currently developing the **iOS and Android** companion apps!
+Expect the mobile version to drop by the **end of August 2026**, bringing the exact same offline-first security to your pocket.
 
 ## ☕ Support the Development
 

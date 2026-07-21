@@ -24,12 +24,18 @@ function askFuin(payload) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Güvenlik: Yalnızca content script'lerden gelen mesajları kabul et
+  if (!sender.tab?.url) return;
+  // Domain'i sender.tab.url'den türet — content script'in bildirdiği domain'e güvenme
+  let actualDomain;
+  try { actualDomain = new URL(sender.tab.url).hostname; } catch { return; }
+
   if (msg.type === 'fuin-lookup') {
-    askFuin({ type: 'lookup', domain: msg.domain }).then(sendResponse);
+    askFuin({ type: 'lookup', domain: actualDomain }).then(sendResponse);
     return true; // async cevap
   }
   if (msg.type === 'fuin-reveal') {
-    askFuin({ type: 'reveal', entryId: msg.entryId, domain: msg.domain }).then(sendResponse);
+    askFuin({ type: 'reveal', entryId: msg.entryId, domain: actualDomain }).then(sendResponse);
     return true;
   }
 });

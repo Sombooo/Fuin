@@ -6,8 +6,8 @@
   default-src 'self';
   style-src 'self' 'unsafe-inline';
   font-src 'self';
-  script-src 'self' 'unsafe-inline';
-  connect-src https://api.pwnedpasswords.com;
+  script-src 'self';
+  connect-src https://api.pwnedpasswords.com https://api.github.com;
 ">
 <title>Fuin</title>
 <link rel="stylesheet" href="style.css">
@@ -18,17 +18,17 @@
 <div class="titlebar">
   <div class="tb-left">
     <div class="titlebar-controls">
-      <button class="wbtn close" onclick="window.kekkai?.close()"></button>
-      <button class="wbtn min"   onclick="window.kekkai?.minimize()"></button>
-      <button class="wbtn max"   onclick="window.kekkai?.maximize()"></button>
+      <button class="wbtn close"></button>
+      <button class="wbtn min"></button>
+      <button class="wbtn max"></button>
     </div>
     <span class="tb-sep">|</span>
     <div class="tb-logo">FUIN</div>
     <div class="tb-sub" data-i18n="appSubtitle">Şifre Yöneticisi</div>
   </div>
   <div class="tb-right">
-    <button class="theme-toggle" id="langToggle" onclick="toggleLanguage()" data-i18n-title="langToggleTitle" title="Dil / Language">EN</button>
-    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" data-i18n-title="themeToggleTitle" title="Koyu/Açık mod">◐</button>
+    <button class="theme-toggle" id="langToggle" data-i18n-title="langToggleTitle" title="Dil / Language">EN</button>
+    <button class="theme-toggle" id="themeToggle" data-i18n-title="themeToggleTitle" title="Koyu/Açık mod">◐</button>
     <div class="crypto-badge" id="cryptoBadge">yükleniyor...</div>
   </div>
 </div>
@@ -50,16 +50,16 @@
       <div class="field-label" data-i18n="lockMasterLabel">Ana Şifre</div>
       <div class="inp-wrap">
         <input id="masterInp" type="password" data-i18n-placeholder="lockMasterPh" placeholder="şifrenizi girin..." autocomplete="off">
-        <button class="eye-btn" onclick="toggleEye('masterInp')">●</button>
+        <button class="eye-btn" id="btnEyeMaster">●</button>
       </div>
     </div>
     <div class="lock-loading" id="lockLoading">
       <span id="lockLoadingText" data-i18n="lockVerifying">doğrulanıyor...</span>
       <div class="lock-progress"><div class="lock-progress-bar"></div></div>
     </div>
-    <button class="btn-primary" id="unlockBtn" onclick="unlock()" data-i18n="lockUnlockBtn">AÇIK →</button>
-    <button class="btn-forgot" onclick="openForgot()" data-i18n="lockForgot">şifremi unuttum</button>
-    <button class="btn-forgot" style="color:var(--red);opacity:.6" onclick="openHardReset()" data-i18n="lockHardReset">tüm verileri sıfırla</button>
+    <button class="btn-primary" id="unlockBtn" data-i18n="lockUnlockBtn">AÇIK →</button>
+    <button class="btn-forgot" id="btnForgot" data-i18n="lockForgot">şifremi unuttum</button>
+    <button class="btn-forgot" id="btnHardReset" style="color:var(--red);opacity:.6" data-i18n="lockHardReset">tüm verileri sıfırla</button>
     <div class="lock-hint">
       <span data-i18n="lockHintFirstUse">İlk kullanımda istediğiniz şifreyi belirleyin.</span><br>
       <span data-i18n="lockHintLocalOnly">Tüm veriler <em>yalnızca bu cihazda</em> saklanır.</span>
@@ -75,10 +75,10 @@
     <div class="sidebar">
       <div class="sidebar-section">
         <div class="sidebar-label" data-i18n="navSectionView">Görünüm</div>
-        <button class="nav-item active" id="nav-all" onclick="setView('all',this)">
+        <button class="nav-item active" id="nav-all">
           <span class="icon">▤</span> <span data-i18n="navAll">Tüm Kayıtlar</span>
         </button>
-        <button class="nav-item" id="nav-fav" onclick="setView('fav',this)">
+        <button class="nav-item" id="nav-fav">
           <span class="icon">◆</span> <span data-i18n="navFav">Favoriler</span>
         </button>
       </div>
@@ -90,22 +90,22 @@
       <div class="nav-divider"></div>
       <div class="sidebar-section">
         <div class="sidebar-label" data-i18n="navSectionTools">Araçlar</div>
-        <button class="nav-item" onclick="setView('health',this)">
+        <button class="nav-item" id="nav-health">
           <span class="icon">◎</span> <span data-i18n="navHealth">Sağlık Raporu</span>
         </button>
-        <button class="nav-item" onclick="setView('security',this)">
+        <button class="nav-item" id="nav-security">
           <span class="icon">▣</span> <span data-i18n="navSecurity">Güvenlik Bilgisi</span>
         </button>
-        <button class="nav-item" onclick="setView('io',this)">
+        <button class="nav-item" id="nav-io">
           <span class="icon">⇄</span> <span data-i18n="navIO">Dışa / İçe Aktar</span>
         </button>
-        <button class="nav-item" onclick="openSyncWindow()">
+        <button class="nav-item" id="nav-sync">
           <span class="icon">◈</span> <span data-i18n="navSync">Air-Gap Sync</span>
         </button>
       </div>
       <div class="sidebar-bottom">
         <div class="slogan" style="text-align:center; opacity:0.3; font-family:var(--mono); font-size:10px; margin-bottom:12px; cursor:default; user-select:none; letter-spacing:0.5px;" data-i18n="slogan">Quietly secure.</div>
-        <button class="btn-lock-side" onclick="lock()" data-i18n="navLock">◉ Kilitle</button>
+        <button class="btn-lock-side" id="nav-lock" data-i18n="navLock">◉ Kilitle</button>
       </div>
     </div>
 
@@ -119,9 +119,9 @@
           <div class="spacer"></div>
           <div class="search-wrap">
             <span class="search-icon">⌕</span>
-            <input id="searchInp" data-i18n-placeholder="searchPh" placeholder="ara..." oninput="renderList()">
+            <input id="searchInp" data-i18n-placeholder="searchPh" placeholder="ara...">
           </div>
-          <button class="btn-add" onclick="openAddModal()" data-i18n="btnNew">+ YENİ</button>
+          <button class="btn-add" id="btnAddNew" data-i18n="btnNew">+ YENİ</button>
         </div>
         <div class="pw-list-wrap" id="pwList"></div>
       </div>
@@ -130,7 +130,7 @@
       <div id="view-health" style="display:none;flex:1;overflow-y:auto;padding:16px 20px;background:var(--bg)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <div class="main-title" data-i18n="healthTitle">SAĞLIK RAPORU</div>
-          <button class="btn-scan" id="scanBtn" onclick="runHIBPScan()" data-i18n="healthScanBtn">⌖ Sızıntı Taraması</button>
+          <button class="btn-scan" id="scanBtn" data-i18n="healthScanBtn">⌖ Sızıntı Taraması</button>
         </div>
         <div class="info-box" data-i18n="healthInfoBox">
           <em>k-Anonymity:</em> Şifreleriniz hiçbir zaman gönderilmez.
@@ -160,22 +160,22 @@
           <div class="io-card">
             <div class="io-title" data-i18n="ioExportJsonTitle">↑ JSON Dışa Aktar</div>
             <div class="io-sub" data-i18n="ioExportJsonSub">Tüm kayıtları JSON formatında kaydedin.</div>
-            <button class="btn-io pri" onclick="exportJSON()" data-i18n="ioExportJsonBtn">JSON İndir</button>
+            <button class="btn-io pri" id="btnExportJSON" data-i18n="ioExportJsonBtn">JSON İndir</button>
           </div>
           <div class="io-card">
             <div class="io-title" data-i18n="ioExportCsvTitle">↑ CSV Dışa Aktar</div>
             <div class="io-sub" data-i18n="ioExportCsvSub">Tüm kayıtları CSV olarak kaydedin.</div>
-            <button class="btn-io pri" onclick="exportCSV()" data-i18n="ioExportCsvBtn">CSV İndir</button>
+            <button class="btn-io pri" id="btnExportCSV" data-i18n="ioExportCsvBtn">CSV İndir</button>
           </div>
           <div class="io-card">
             <div class="io-title" data-i18n="ioImportJsonTitle">↓ JSON İçe Aktar</div>
             <div class="io-sub" data-i18n="ioImportJsonSub">Önceki Fuin yedeğini geri yükleyin.</div>
-            <button class="btn-io" onclick="importJSON()" data-i18n="ioImportJsonBtn">JSON Seç</button>
+            <button class="btn-io" id="btnImportJSON" data-i18n="ioImportJsonBtn">JSON Seç</button>
           </div>
           <div class="io-card">
             <div class="io-title" data-i18n="ioImportCsvTitle">↓ CSV İçe Aktar</div>
             <div class="io-sub" data-i18n="ioImportCsvSub">site, username, password sütunlu CSV.</div>
-            <button class="btn-io" onclick="importCSV()" data-i18n="ioImportCsvBtn">CSV Seç</button>
+            <button class="btn-io" id="btnImportCSV" data-i18n="ioImportCsvBtn">CSV Seç</button>
           </div>
         </div>
         <div class="warn-box" data-i18n="ioWarnBox">⚠ Dışa aktarılan dosyalar şifresiz düz metin içerir. Güvenli bir konumda saklayın.</div>
@@ -186,7 +186,7 @@
             <div class="io-title" data-i18n="sysUpdateCheckTitle">⟳ Sürüm Kontrolü</div>
             <div class="io-sub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin. Mevcut sürüm: v1.0.0</div>
             <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
-              <button class="btn-io" id="updateBtn" onclick="checkForUpdates()" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
+              <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
               <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text)"></span>
             </div>
           </div>
@@ -194,7 +194,7 @@
             <div class="io-title" data-i18n="sysBackupTitle">⛁ Yedekleme Klasörü</div>
             <div class="io-sub" data-i18n="sysBackupSub">Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.</div>
             <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
-              <button class="btn-io" onclick="window.kekkai?.openBackupFolder()" data-i18n="sysBackupBtn">Klasörü Aç</button>
+              <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
             </div>
           </div>
         </div>
@@ -209,7 +209,7 @@
   <div class="modal">
     <div class="modal-head">
       <div class="modal-title" id="addModalTitle" data-i18n="modalNewEntry">YENİ KAYIT</div>
-      <button class="modal-close" onclick="closeModal('addOverlay')">✕</button>
+      <button class="modal-close" id="btnCloseAddModal">✕</button>
     </div>
     <div class="modal-body">
       <div class="fg"><label data-i18n="fieldSite">Site / Uygulama</label><input class="fi" id="f-site" data-i18n-placeholder="fieldSitePh" placeholder="Gmail, GitHub..."></div>
@@ -229,10 +229,10 @@
       <div class="fg">
         <label data-i18n="fieldPassword">Şifre</label>
         <div class="pw-row">
-          <input class="fi" id="f-pw" type="password" placeholder="••••••••" oninput="onPwInput()">
+          <input class="fi" id="f-pw" type="password" placeholder="••••••••">
           <div class="pw-row-btns">
-            <button class="icon-btn" onclick="toggleEye('f-pw')" data-i18n-title="showPwTitle" title="Göster">●</button>
-            <button class="icon-btn" onclick="genPw()" data-i18n-title="genPwTitle" title="Üret">⟳</button>
+            <button class="icon-btn" id="btnEyePw" data-i18n-title="showPwTitle" title="Göster">●</button>
+            <button class="icon-btn" id="btnGenPw" data-i18n-title="genPwTitle" title="Üret">⟳</button>
           </div>
         </div>
         <!-- zxcvbn strength -->
@@ -259,7 +259,7 @@
           <span data-i18n="toggle2FALabel">2FA Kodu Sakla</span>
           <span>TOTP secret key</span>
         </div>
-        <label class="toggle"><input type="checkbox" id="f-2fa-toggle" onchange="toggle2FA()"><span class="slider"></span></label>
+        <label class="toggle"><input type="checkbox" id="f-2fa-toggle"><span class="slider"></span></label>
       </div>
       <div id="totp-section" style="display:none">
         <div class="fg" style="margin-top:4px">
@@ -276,8 +276,8 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeModal('addOverlay')" data-i18n="btnCancel">İptal</button>
-      <button class="btn-save" onclick="saveEntry()" data-i18n="btnSave">Kaydet</button>
+      <button class="btn-cancel" id="btnCancelAdd" data-i18n="btnCancel">İptal</button>
+      <button class="btn-save" id="btnSaveEntry" data-i18n="btnSave">Kaydet</button>
     </div>
   </div>
 </div>
@@ -287,10 +287,10 @@
   <div class="modal" style="max-width:320px">
     <div class="modal-head">
       <div class="modal-title" id="totpSiteName" data-i18n="totpModalTitle">2FA KODU</div>
-      <button class="modal-close" onclick="closeTOTP()">✕</button>
+      <button class="modal-close" id="btnCloseTOTP">✕</button>
     </div>
     <div class="modal-body">
-      <div class="totp-code" id="totpCode" onclick="copyTOTP()">--- ---</div>
+      <div class="totp-code" id="totpCode">--- ---</div>
       <div class="totp-timer-wrap"><div class="totp-progress" id="totpBar"></div></div>
       <div style="font-family:var(--mono);font-size:11px;color:var(--mu);text-align:center;margin-top:6px" data-i18n="totpHint">koda tıkla → kopyala</div>
     </div>
@@ -308,11 +308,11 @@
         <span data-i18n="recoveryBody">Ana şifrenizi unutursanız bu anahtar ile şifrenizi sıfırlayabilirsiniz.</span><br>
         <span style="color:var(--red)" data-i18n="recoveryWarn">Güvenli bir yere not edin. Bir daha gösterilmeyecek.</span>
       </div>
-      <div class="recovery-key-display" id="recoveryKeyDisplay" onclick="copyRecoveryKey()"></div>
+      <div class="recovery-key-display" id="recoveryKeyDisplay"></div>
       <div style="font-family:var(--mono);font-size:11px;color:var(--mu);text-align:center" data-i18n="recoveryHint">anahtara tıkla → kopyala</div>
     </div>
     <div class="modal-footer">
-      <button class="btn-save" onclick="closeModal('recoveryOverlay')" data-i18n="recoverySavedBtn">Kaydettim, Kapat</button>
+      <button class="btn-save" id="btnCloseRecovery" data-i18n="recoverySavedBtn">Kaydettim, Kapat</button>
     </div>
   </div>
 </div>
@@ -322,7 +322,7 @@
   <div class="modal" style="max-width:420px">
     <div class="modal-head">
       <div class="modal-title" data-i18n="forgotTitle">ŞİFRE SIFIRLAMA</div>
-      <button class="modal-close" onclick="closeForgot()">✕</button>
+      <button class="modal-close" id="btnCloseForgot">✕</button>
     </div>
     <div class="modal-body">
       <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.8" data-i18n="forgotBody">
@@ -336,14 +336,14 @@
         <label data-i18n="forgotNewPwLabel">Yeni Ana Şifre</label>
         <div class="inp-wrap">
           <input class="fi" id="newPwInp" type="password" data-i18n-placeholder="forgotNewPwPh" placeholder="yeni şifreniz...">
-          <button class="eye-btn" onclick="toggleEye('newPwInp')">●</button>
+          <button class="eye-btn" id="btnEyeNewPw">●</button>
         </div>
       </div>
       <div class="forgot-msg" id="forgotMsg"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeForgot()" data-i18n="btnCancel">İptal</button>
-      <button class="btn-save" id="forgotBtn" onclick="handleForgot()" data-i18n="forgotVerifyBtn">Doğrula</button>
+      <button class="btn-cancel" id="btnCancelForgot" data-i18n="btnCancel">İptal</button>
+      <button class="btn-save" id="forgotBtn" data-i18n="forgotVerifyBtn">Doğrula</button>
     </div>
   </div>
 </div>
@@ -353,7 +353,7 @@
   <div class="modal" style="max-width:400px">
     <div class="modal-head">
       <div class="modal-title" style="color:var(--red)" data-i18n="hardResetTitle">⚠ UYARI: TAM SIFIRLAMA</div>
-      <button class="modal-close" onclick="closeHardReset()">✕</button>
+      <button class="modal-close" id="btnCloseHardReset">✕</button>
     </div>
     <div class="modal-body">
       <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.9;padding:10px 14px;background:rgba(160,52,42,.07);border:1px solid rgba(160,52,42,.2);border-radius:1px">
@@ -362,14 +362,13 @@
       </div>
       <div class="fg">
         <label data-i18n="hardResetConfirmLabel">Onay</label>
-        <input class="fi" id="hardResetInp" placeholder="SIFIRLA" data-i18n-placeholder="resetConfirmWord" autocomplete="off"
-          oninput="document.getElementById('hardResetMsg').style.display='none'">
+        <input class="fi" id="hardResetInp" placeholder="SIFIRLA" data-i18n-placeholder="resetConfirmWord" autocomplete="off">
       </div>
       <div id="hardResetMsg" style="font-family:var(--mono);font-size:11px;color:var(--red);display:none"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeHardReset()" data-i18n="btnCancel">İptal</button>
-      <button class="btn-save" style="background:var(--red)" onclick="confirmHardReset()" data-i18n="hardResetBtn">Sıfırla</button>
+      <button class="btn-cancel" id="btnCancelHardReset" data-i18n="btnCancel">İptal</button>
+      <button class="btn-save" id="btnConfirmHardReset" style="background:var(--red)" data-i18n="hardResetBtn">Sıfırla</button>
     </div>
   </div>
 </div>
@@ -388,7 +387,7 @@
       <div class="totp-code" id="autoLockCountdown" style="color:var(--amber)">30</div>
     </div>
     <div class="modal-footer">
-      <button class="btn-save" onclick="dismissAutoLockWarning()" data-i18n="autoLockStillHere">Hâlâ Buradayım</button>
+      <button class="btn-save" id="btnDismissAutoLock" data-i18n="autoLockStillHere">Hâlâ Buradayım</button>
     </div>
   </div>
 </div>
@@ -410,8 +409,8 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn-cancel" onclick="denyExtReveal()" data-i18n="extReqDeny">Reddet</button>
-      <button class="btn-save" onclick="approveExtReveal()" data-i18n="extReqAllow">İzin Ver</button>
+      <button class="btn-cancel" id="btnDenyExtReveal" data-i18n="extReqDeny">Reddet</button>
+      <button class="btn-save" id="btnApproveExtReveal" data-i18n="extReqAllow">İzin Ver</button>
     </div>
   </div>
 </div>

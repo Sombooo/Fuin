@@ -40,6 +40,8 @@ function readMessages(onMessage) {
     while (true) {
       if (buf.length < 4) return;
       const len = buf.readUInt32LE(0);
+      const MAX_MSG_SIZE = 1024 * 1024; // 1 MB güvenlik sınırı
+      if (len > MAX_MSG_SIZE) { process.stderr.write('Message too large\n'); process.exit(1); }
       if (buf.length < 4 + len) return;
       const msgBuf = buf.slice(4, 4 + len);
       buf = buf.slice(4 + len);
@@ -58,8 +60,18 @@ function writeMessage(obj) {
 // ── Fuin'e bağlan ve isteği ilet ────────────────────────────────────
 function forwardToFuin(request, cb) {
   let token;
-  try { token = fs.readFileSync(TOKEN_FILE, 'utf8').trim(); }
-  catch { return cb({ error: 'fuin-not-installed-or-never-run' }); }
+  try {
+    // Güvenlik: Token dosyasının izinlerini ve sahipliğini doğrula
+    const stat = fs.statSync(TOKEN_FILE);
+    if (process.getuid && stat.uid !== process.getuid()) {
+      return cb({ error: 'token-file-wrong-owner' });
+    }
+    const mode = stat.mode & 0o777;
+    if (mode !== 0o600) {
+      return cb({ error: 'token-file-insecure-permissions' });
+    }
+    token = fs.readFileSync(TOKEN_FILE, 'utf8').trim();
+  } catch { return cb({ error: 'fuin-not-installed-or-never-run' }); }
 
   const socket = net.createConnection(SOCKET_PATH);
   let buf = '';
@@ -78,12 +90,16 @@ function forwardToFuin(request, cb) {
   });
   socket.on('error', () => cb({ error: 'fuin-not-running' }));
   socket.on('timeout', () => { socket.destroy(); cb({ error: 'timeout' }); });
-  socket.setTimeout(35000);
+  socket.setTimeout(10000);
 }
 
 readMessages((msg) => {
   if (!msg || !msg.type) return writeMessage({ error: 'bad-request' });
-  forwardToFuin(msg, (result) => writeMessage(result));
+  // Güvenlik: İletilen mesajlarda yalnızca bilinen alanları geçir (field whitelist)
+  const sanitized = { type: String(msg.type) };
+  if (msg.type === 'lookup') sanitized.domain = String(msg.domain || '');
+  if (msg.type === 'reveal') { sanitized.entryId = String(msg.entryId || ''); sanitized.domain = String(msg.domain || ''); }
+  forwardToFuin(sanitized, (result) => writeMessage(result));
 });
 
 // stdin kapanınca (tarayıcı eklentiyi/portu kapattı) sessizce çık

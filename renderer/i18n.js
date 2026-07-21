@@ -147,7 +147,7 @@ const TRANSLATIONS = {
     toastClipCleared: 'pano temizlendi ✓',
     toastCopiedDefault: 'kopyalandı',
     toastClipTimer: 'pano {s}s sonra temizlenir',
-    toastMinChars: 'en az 4 karakter girin',
+    toastMinChars: 'en az 8 karakter girin',
     toastWrongPassword: 'yanlış şifre',
     toastExtCredSent: 'kimlik bilgisi eklentiye gönderildi',
     toastSiteRequired: 'site ve şifre zorunlu',
@@ -343,7 +343,7 @@ const TRANSLATIONS = {
     toastClipCleared: 'clipboard cleared ✓',
     toastCopiedDefault: 'copied',
     toastClipTimer: 'clipboard clears in {s}s',
-    toastMinChars: 'enter at least 4 characters',
+    toastMinChars: 'enter at least 8 characters',
     toastWrongPassword: 'wrong password',
     toastExtCredSent: 'credentials sent to extension',
     toastSiteRequired: 'site and password are required',
@@ -413,10 +413,16 @@ function t(key) {
   return TRANSLATIONS[lang][key] ?? TRANSLATIONS.tr[key] ?? key;
 }
 
+// Güvenlik: Yalnızca bilinen HTML içeren anahtarlar için innerHTML kullan
+const I18N_HTML_KEYS = new Set([
+  'lockHintLocalOnly', 'hardResetBody1', 'hardResetBody2',
+  'autoLockBody', 'syncErrorLevel', 'healthInfoBox', 'securityInfoBox',
+]);
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
-    el.innerHTML = t(key);
+    if (I18N_HTML_KEYS.has(key)) el.innerHTML = t(key);
+    else el.textContent = t(key);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     el.placeholder = t(el.getAttribute('data-i18n-placeholder'));

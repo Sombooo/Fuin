@@ -10,11 +10,12 @@
     "build-linux": "electron-builder --linux"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "electron": "^30.0.0",
     "electron-builder": "^24.0.0"
   },
   "dependencies": {
-    "argon2": "^0.31.0",
+    "argon2": "^0.31.2",
     "zxcvbn": "^4.4.2"
   },
   "build": {
@@ -22,9 +23,17 @@
     "productName": "Fuin",
     "icon": "assets/icon",
     "asar": true,
-    "directories": { "output": "dist" },
+    "directories": {
+      "output": "dist"
+    },
     "extraResources": [
-      { "from": "native-host", "to": "native-host", "filter": ["host.js"] }
+      {
+        "from": "native-host",
+        "to": "native-host",
+        "filter": [
+          "host.js"
+        ]
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",

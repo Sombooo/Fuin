@@ -256,8 +256,19 @@ async function encryptData(plaintext, passwordStr) {
   return Buffer.concat([vaultSalt, iv, tag, enc1, enc2]).toString('base64');
 }
 
+// Güvenlik: Brute-force rate limiting — başarısız denemelerden sonra üstel gecikme
+let decryptFailCount = 0;
+let decryptLockUntil = 0;
+
 // AES-256-GCM şifre çözme — vaultKey ile
 async function decryptData(b64Str, passwordStr) {
+  // Brute-force koruması: üstel geri çekilme
+  const now = Date.now();
+  if (now < decryptLockUntil) {
+    const waitSec = Math.ceil((decryptLockUntil - now) / 1000);
+    throw new Error(`Too many attempts. Wait ${waitSec}s`);
+  }
+
   const buf       = Buffer.from(b64Str, 'base64');
   const vaultSalt = buf.slice(0, 32);
   const iv        = buf.slice(32, 44);
@@ -273,17 +284,21 @@ async function decryptData(b64Str, passwordStr) {
     vaultKey.fill(0);
     const jsonStr = Buffer.concat([dec1, dec2]).toString('utf8');
     dec1.fill(0); dec2.fill(0);
+    decryptFailCount = 0; decryptLockUntil = 0; // başarılı — sayacı sıfırla
     return JSON.parse(jsonStr);
   } catch {
     vaultKey.fill(0);
+    decryptFailCount++;
+    decryptLockUntil = Date.now() + Math.min(1000 * Math.pow(2, decryptFailCount), 30000);
     throw new Error('Decryption failed');
   }
 }
 
 function safeCompare(a, b) {
   const aBuf = Buffer.from(String(a), 'utf8');
-  const bBuf = Buffer.alloc(aBuf.length);
-  Buffer.from(String(b), 'utf8').copy(bBuf);
+  const bBuf = Buffer.from(String(b), 'utf8');
+  // Güvenlik: Uzunluk farkı varsa doğrudan false dön (truncation önleme)
+  if (aBuf.length !== bBuf.length) { aBuf.fill(0); bBuf.fill(0); return false; }
   const result = crypto.timingSafeEqual(aBuf, bBuf);
   aBuf.fill(0); bBuf.fill(0);
   return result;
@@ -354,7 +369,13 @@ async function buildQRChunks(encryptedB64, chunkSize = 400) {
 }
 
 ipcMain.on('open-url', (e, url) => {
-  if (url && url.startsWith('http')) shell.openExternal(url);
+  // Güvenlik: URL'yi doğrula — yalnızca https:// ve http:// kabul et
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      shell.openExternal(parsed.href);
+    }
+  } catch { /* geçersiz URL — yoksay */ }
 });
 
 // ── IPC: Temel crypto ─────────────────────────────────────────────
@@ -376,6 +397,7 @@ ipcMain.handle('zxcvbn', (_, password) => {
 ipcMain.handle('crypto-info', () => ({
   argon2: !!argon2, zxcvbn: !!zxcvbn, dualKey: true, separateSalts: true,
   kdf: argon2 ? 'Argon2id (64MB, 3 iter)' : 'PBKDF2-SHA512 (200k iter)',
+  argon2Warning: !argon2, // Renderer'da uyarı göstermek için
 }));
 
 // ── IPC: Sync session ─────────────────────────────────────────────
@@ -424,7 +446,7 @@ function backupFile(sourcePath) {
   if (!fs.existsSync(sourcePath)) return;
   try {
     const backupDir = path.join(app.getPath('userData'), 'backups');
-    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir);
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { mode: 0o700 });
     
     const ext = path.extname(sourcePath);
     const base = path.basename(sourcePath, ext);
@@ -571,7 +593,7 @@ function ensureNativeHostWrapper() {
   }
   const shPath = path.join(wrapperDir, 'fuin-host.sh');
   fs.writeFileSync(shPath, `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec "${electronPath}" "${hostJs}" "$@"\n`);
-  fs.chmodSync(shPath, 0o755);
+  fs.chmodSync(shPath, 0o700);
   return shPath;
 }
 

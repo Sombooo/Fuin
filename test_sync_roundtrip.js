@@ -111,10 +111,11 @@ async function receiveAndDecrypt(scrambledChunks, passwordStr) {
 // TEST SENARYOLARI
 // ═══════════════════════════════════════════════════════════════════
 async function main() {
-  const MASTER_PASSWORD = 'test-master-şifre-Ω-🔒-2026';
+  // ⚠ TÜM DEĞERLER SENTETİK TEST VERİSİDİR — GERÇEK KİMLİK BİLGİSİ DEĞİLDİR
+  const MASTER_PASSWORD = 'TEST-ONLY-not-real-şifre-Ω-🔒';
   const vault = [
-    { id: '1', site: 'github.com', category: 'Geliştirici / Araçlar', username: 'sombo', password: 'S3cr3t!Pass', totp: null },
-    { id: '2', site: 'gmail.com', category: 'E-posta', username: 'sombo@example.com', password: 'AnotherP@ss99', totp: 'JBSWY3DPEHPK3PXP' },
+    { id: '1', site: 'test-example.invalid', category: 'Geliştirici / Araçlar', username: 'test-user-fake', password: 'TEST-ONLY-FakeP@ss!123', totp: null },
+    { id: '2', site: 'test-mail.invalid', category: 'E-posta', username: 'fake-test@example.invalid', password: 'TEST-ONLY-AnotherFake@99', totp: 'JBSWY3DPEHPK3PXP' },
   ];
 
   console.log('\n[1/4] Vault, master password ile şifreleniyor (vaultKey)...');

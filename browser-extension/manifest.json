@@ -3,15 +3,15 @@
   "name": "Fuin — Şifre Doldurucu",
   "version": "0.1.0",
   "description": "Fuin masaüstü uygulamanızdaki kayıtları web formlarına doldurun.",
-  "permissions": ["nativeMessaging", "activeTab", "scripting", "storage"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["nativeMessaging", "activeTab", "scripting"],
+  "host_permissions": ["https://*/*", "http://*/*"],
   "background": {
     "service_worker": "background.js",
     "scripts": ["background.js"]
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://*/*", "http://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

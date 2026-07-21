@@ -100,7 +100,7 @@ async function saveRecoveryKey(key, masterPw) {
 // ── LOCK / UNLOCK ─────────────────────────────────────────────────
 async function unlock() {
   const pw = document.getElementById('masterInp').value;
-  if (!pw || pw.length < 4) { toast(t('toastMinChars')); return; }
+  if (!pw || pw.length < 8) { toast(t('toastMinChars')); return; }
 
   const exists = await api.dataExists();
   const btn    = document.getElementById('unlockBtn');
@@ -360,7 +360,7 @@ async function renderList() {
 
   wrap.innerHTML = list.map((e,i) => `
     <div class="pw-card" style="animation-delay:${i*15}ms">
-      <div class="pw-icon">${e.site.slice(0,2).toUpperCase()}</div>
+      <div class="pw-icon">${esc(e.site.slice(0,2).toUpperCase())}</div>
       <div class="pw-info">
         <div class="pw-site">${esc(e.site)}${e.fav?' ◆':''}</div>
         <div class="pw-meta">
@@ -484,7 +484,10 @@ function revealPw(id) {
   } else {
     el.textContent=e.password; el.classList.add('pw-reveal');
     clearTimeout(revealT[id]);
-    revealT[id]=setTimeout(()=>{el.textContent='••••••';el.classList.remove('pw-reveal');},5000);
+    revealT[id]=setTimeout(()=>{el.textContent='••••••';el.classList.remove('pw-reveal');},3000);
+    // Güvenlik: Pencere odağı kaybedildiğinde parolayı hemen gizle
+    const hideOnBlur = () => { el.textContent='••••••'; el.classList.remove('pw-reveal'); clearTimeout(revealT[id]); window.removeEventListener('blur', hideOnBlur); };
+    window.addEventListener('blur', hideOnBlur);
   }
 }
 
@@ -599,7 +602,7 @@ function showForgotMsg(text, type) {
 
 function copyRecoveryKey() {
   const key=document.getElementById('recoveryKeyDisplay').textContent;
-  navigator.clipboard.writeText(key).then(()=>toast(t('toastRecoveryCopied')));
+  copySecure(key, t('toastRecoveryCopied')); // Güvenlik: 30 saniye sonra panoyu temizle
 }
 
 // ── SIFIRLAMA (giriş ekranından — tüm verileri sil) ───────────────
@@ -856,7 +859,7 @@ async function importJSON() {
         created:  Date.now(), updated: Date.now(),
       };
       // Fuin native formatı
-      return { ...e, id: e.id || crypto.randomUUID() };
+      return { ...e, id: crypto.randomUUID() }; // Güvenlik: import edilen ID'lere güvenme
     });
 
     const newEntries = normalized.filter(x =>
@@ -923,7 +926,7 @@ function genPw(){
   setTimeout(()=>{inp.type='password';},2000);
 }
 
-function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');}
 
 let toastT;
 function toast(msg){
@@ -976,7 +979,20 @@ async function checkForUpdates() {
     
     // Sürüm kontrolü (Eğer GitHub'daki sürüm v1.0.0'dan farklıysa güncelleme uyarısı ver)
     if (latestVersion && latestVersion !== currentVersion && latestVersion !== 'v' + currentVersion) {
-      msg.innerHTML = `<span style="color:var(--green)">Yeni sürüm mevcut: ${latestVersion}</span> <a href="#" onclick="window.kekkai?.openUrl('${data.html_url}')" style="color:var(--text);text-decoration:underline;margin-left:8px;cursor:pointer">İndir</a>`;
+      msg.textContent = '';
+      const vSpan = document.createElement('span');
+      vSpan.style.color = 'var(--green)';
+      vSpan.textContent = `Yeni sürüm mevcut: ${latestVersion}`;
+      msg.appendChild(vSpan);
+      // Güvenlik: URL'yi doğrula — sadece github.com domaininden kabul et
+      if (data.html_url && data.html_url.startsWith('https://github.com/')) {
+        const link = document.createElement('a');
+        link.href = '#';
+        link.textContent = 'İndir';
+        link.style.cssText = 'color:var(--text);text-decoration:underline;margin-left:8px;cursor:pointer';
+        link.addEventListener('click', (ev) => { ev.preventDefault(); window.kekkai?.openUrl(data.html_url); });
+        msg.appendChild(link);
+      }
     } else {
       msg.textContent = 'En güncel sürümü kullanıyorsunuz.';
     }
@@ -987,3 +1003,77 @@ async function checkForUpdates() {
     btn.textContent = t('sysUpdateBtn');
   }
 }
+
+// ── GÜVENLİK: Inline onclick handler'lar kaldırıldı — addEventListener ile bağla ──
+document.addEventListener('DOMContentLoaded', () => {
+  // Titlebar
+  document.querySelector('.wbtn.close')?.addEventListener('click', () => window.kekkai?.close());
+  document.querySelector('.wbtn.min')?.addEventListener('click', () => window.kekkai?.minimize());
+  document.querySelector('.wbtn.max')?.addEventListener('click', () => window.kekkai?.maximize());
+  document.getElementById('langToggle')?.addEventListener('click', toggleLanguage);
+  document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
+
+  // Lock screen
+  document.getElementById('btnEyeMaster')?.addEventListener('click', () => toggleEye('masterInp'));
+  document.getElementById('unlockBtn')?.addEventListener('click', unlock);
+  document.getElementById('btnForgot')?.addEventListener('click', openForgot);
+  document.getElementById('btnHardReset')?.addEventListener('click', openHardReset);
+
+  // Sidebar nav
+  document.getElementById('nav-all')?.addEventListener('click', function() { setView('all', this); });
+  document.getElementById('nav-fav')?.addEventListener('click', function() { setView('fav', this); });
+  document.getElementById('nav-health')?.addEventListener('click', function() { setView('health', this); });
+  document.getElementById('nav-security')?.addEventListener('click', function() { setView('security', this); });
+  document.getElementById('nav-io')?.addEventListener('click', function() { setView('io', this); });
+  document.getElementById('nav-sync')?.addEventListener('click', openSyncWindow);
+  document.getElementById('nav-lock')?.addEventListener('click', lock);
+
+  // Main content
+  document.getElementById('searchInp')?.addEventListener('input', renderList);
+  document.getElementById('btnAddNew')?.addEventListener('click', () => openAddModal());
+  document.getElementById('scanBtn')?.addEventListener('click', runHIBPScan);
+
+  // IO buttons
+  document.getElementById('btnExportJSON')?.addEventListener('click', exportJSON);
+  document.getElementById('btnExportCSV')?.addEventListener('click', exportCSV);
+  document.getElementById('btnImportJSON')?.addEventListener('click', importJSON);
+  document.getElementById('btnImportCSV')?.addEventListener('click', importCSV);
+  document.getElementById('updateBtn')?.addEventListener('click', checkForUpdates);
+  document.getElementById('btnBackupFolder')?.addEventListener('click', () => window.kekkai?.openBackupFolder());
+
+  // Add/Edit modal
+  document.getElementById('btnCloseAddModal')?.addEventListener('click', () => closeModal('addOverlay'));
+  document.getElementById('f-pw')?.addEventListener('input', onPwInput);
+  document.getElementById('btnEyePw')?.addEventListener('click', () => toggleEye('f-pw'));
+  document.getElementById('btnGenPw')?.addEventListener('click', genPw);
+  document.getElementById('f-2fa-toggle')?.addEventListener('change', toggle2FA);
+  document.getElementById('btnCancelAdd')?.addEventListener('click', () => closeModal('addOverlay'));
+  document.getElementById('btnSaveEntry')?.addEventListener('click', saveEntry);
+
+  // TOTP modal
+  document.getElementById('btnCloseTOTP')?.addEventListener('click', closeTOTP);
+  document.getElementById('totpCode')?.addEventListener('click', copyTOTP);
+
+  // Recovery modal
+  document.getElementById('recoveryKeyDisplay')?.addEventListener('click', copyRecoveryKey);
+  document.getElementById('btnCloseRecovery')?.addEventListener('click', () => closeModal('recoveryOverlay'));
+
+  // Forgot modal
+  document.getElementById('btnCloseForgot')?.addEventListener('click', closeForgot);
+  document.getElementById('btnEyeNewPw')?.addEventListener('click', () => toggleEye('newPwInp'));
+  document.getElementById('btnCancelForgot')?.addEventListener('click', closeForgot);
+  document.getElementById('forgotBtn')?.addEventListener('click', handleForgot);
+
+  // Hard reset modal
+  document.getElementById('btnCloseHardReset')?.addEventListener('click', closeHardReset);
+  document.getElementById('hardResetInp')?.addEventListener('input', () => { document.getElementById('hardResetMsg').style.display='none'; });
+  document.getElementById('btnCancelHardReset')?.addEventListener('click', closeHardReset);
+  document.getElementById('btnConfirmHardReset')?.addEventListener('click', confirmHardReset);
+
+  // Auto-lock modal
+  document.getElementById('btnDismissAutoLock')?.addEventListener('click', dismissAutoLockWarning);
+
+  // Extension reveal modal
+  document.getElementById('btnDenyExtReveal')?.addEventListener('click', denyExtReveal);
+  document.getElementById('btnApproveExtReveal')?.addEventListener('click', approveExtReveal);
+});

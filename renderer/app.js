@@ -971,7 +971,7 @@ async function checkForUpdates() {
   try {
     // TODO: GitHub'da projeyi yayınladıktan sonra 'kadir/fuin' kısmını kendi GitHub kullanıcı ve repo adınla değiştir.
     // Örnek: 'https://api.github.com/repos/KULLANICI_ADI/REPO_ADI/releases/latest'
-    const res = await fetch('https://api.github.com/repos/kadir/fuin/releases/latest');
+    const res = await fetch('https://api.github.com/repos/Sombooo/Fuin/releases/latest');
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
     const latestVersion = data.tag_name; // örn: "v1.1.0"

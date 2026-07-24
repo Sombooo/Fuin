@@ -59,9 +59,6 @@ npm run build-linux  # Linux (.AppImage)
 Fuin comes with a companion browser extension for Chrome, Brave, and Firefox-based browsers. You can seamlessly autofill your credentials into websites directly from your local Fuin vault.
 * Download the extension package from the `browser-extension` folder or install it via the Chrome Web Store / Firefox Add-ons (Links coming soon).
 
-## 🗺️ Roadmap: Mobile App (Coming Late August)
-The desktop version of Fuin is fully complete and stable. We are currently developing the **iOS and Android** companion apps!
-Expect the mobile version to drop by the **end of August 2026**, bringing the exact same offline-first security to your pocket.
 
 ## ☕ Support the Development
 

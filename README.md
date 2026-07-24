@@ -67,8 +67,8 @@ Expect the mobile version to drop by the **end of August 2026**, bringing the ex
 
 Fuin is an independent, open-source project. If you enjoy the absolute privacy and security it provides, consider supporting the continuous development of the desktop and upcoming mobile apps!
 
-[![Support via Lemon Squeezy](https://img.shields.io/badge/Support_Fuin-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](#)
-*(Note: Replace the "#" in the link above with your actual Lemon Squeezy checkout URL once you set it up).*
+[![Support via Lemon Squeezy](https://img.shields.io/badge/Support_Fuin-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://fuindev.lemonsqueezy.com/checkout/buy/c898c753-098b-4c0b-a721-77332db06bdc)
+
 
 ---
 <div align="center">

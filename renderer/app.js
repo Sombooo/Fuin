@@ -134,6 +134,7 @@ async function unlock() {
   renderList();
   renderCategoryNav();
   api.setUnlockState(true);
+  silentCheckForUpdates();
 
   if (!exists) {
     await persist();
@@ -960,6 +961,22 @@ function refreshDynamicI18nLabels() {
 }
 
 // ── UPDATES ────────────────────────────────────────────────────────
+async function silentCheckForUpdates() {
+  try {
+    const res = await fetch('https://api.github.com/repos/Sombooo/Fuin/releases/latest');
+    if (!res.ok) return;
+    const data = await res.json();
+    const latestVersion = data.tag_name;
+    const currentVersion = 'v1.0.0';
+    if (latestVersion && latestVersion !== currentVersion && latestVersion !== 'v' + currentVersion) {
+      const badge = document.getElementById('navUpdateBadge');
+      if (badge) badge.style.display = 'block';
+    }
+  } catch (e) {
+    // Sessiz hata (internet yok veya firewall engelledi)
+  }
+}
+
 async function checkForUpdates() {
   const btn = document.getElementById('updateBtn');
   const msg = document.getElementById('updateMsg');

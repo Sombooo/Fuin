@@ -1,0 +1,14 @@
+
+> fuin@1.0.0 start
+> electron .
+
+[6667:0725/224245.367050:WARNING:address_sorter_posix.cc(459)] FromSockAddr failed on netmask
+[6667:0725/224245.367298:WARNING:address_sorter_posix.cc(459)] FromSockAddr failed on netmask
+[native-host-install] 2/2 manifest yazıldı
+[fuin-ext-bridge] dinliyor: /Users/kadir/Library/Application Support/fuin/fuin-ext.sock
+[6668:0725/224245.589351:WARNING:runtime_features.cc(730)] AttributionReportingCrossAppWeb cannot be enabled in this configuration. Use --enable-features=ConversionMeasurement,AttributionReportingCrossAppWeb in addition.
+[6662:0725/224245.624621:INFO:CONSOLE(422)] "Refused to load the image 'data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0' y='0' width='1' height='1' fill='%23c8c0b0' opacity='0.15'/%3E%3C/svg%3E' because it violates the following Content Security Policy directive: "default-src 'self'". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback.
+", source: file:///Users/kadir/Fuin/renderer/index.html (422)
+[6662:0725/224245.715645:INFO:CONSOLE(423)] "Refused to load the image 'data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0' y='0' width='1' height='1' fill='%233d3830' opacity='0.2'/%3E%3C/svg%3E' because it violates the following Content Security Policy directive: "default-src 'self'". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback.
+", source: file:///Users/kadir/Fuin/renderer/index.html (423)
+[6662:0725/224246.275290:INFO:CONSOLE(975)] "TEST_SUCCESS: Update Badge Displayed!", source: file:///Users/kadir/Fuin/renderer/app.js (975)

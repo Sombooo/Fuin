@@ -49,6 +49,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  mainWindow.setContentProtection(true); // Ekran görüntüsü ve ekran kaydı alınmasını engeller (Siyah ekran verir)
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   
   mainWindow.on('close', (e) => {
@@ -73,6 +74,7 @@ function createSyncWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  syncWindow.setContentProtection(true);
   syncWindow.loadFile(path.join(__dirname, 'renderer', 'sync.html'));
   syncWindow.on('closed', () => {
     syncWindow = null;

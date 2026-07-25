@@ -9,6 +9,28 @@ let argon2, zxcvbn;
 try { argon2 = require('argon2'); } catch { argon2 = null; }
 try { zxcvbn = require('zxcvbn'); } catch { zxcvbn = null; }
 
+// --- FAZ 3: Hardware & RAM Security ---
+let machineId = null;
+try {
+  const { machineIdSync } = require('node-machine-id');
+  machineId = machineIdSync();
+} catch { machineId = 'fallback-machine-id'; }
+
+let sodium = null;
+try { sodium = require('sodium-native'); } catch { sodium = null; }
+
+function secureBuffer(buf) {
+  if (sodium && buf && Buffer.isBuffer(buf)) {
+    try { sodium.sodium_mlock(buf); } catch (e) { /* ignore */ }
+  }
+}
+function unsecureBuffer(buf) {
+  if (sodium && buf && Buffer.isBuffer(buf)) {
+    try { sodium.sodium_munlock(buf); } catch (e) { /* ignore */ }
+  }
+}
+// --------------------------------------
+
 const DATA_FILE        = path.join(app.getPath('userData'), 'fuin.enc');
 const RECOVERY_FILE    = path.join(app.getPath('userData'), 'fuin.recovery');
 const MASTER_ENC_FILE  = path.join(app.getPath('userData'), 'fuin.master.enc');
@@ -182,34 +204,48 @@ ipcMain.on('sync-win-close', () => syncWindow?.close());
 // diğeri syncSalt — her sync oturumu için ayrı üretilir.
 // Böylece vaultKey ↔ syncKey arasında hiçbir matematiksel ilişki kalmaz.
 
-async function deriveVaultKey(passwordStr, vaultSalt) {
+async function deriveVaultKey(passwordStr, vaultSalt, bindHardware = true) {
   const pwBuf = Buffer.from(passwordStr, 'utf8');
+  secureBuffer(pwBuf);
+  
+  let actualSalt = vaultSalt;
+  if (bindHardware && machineId) {
+    actualSalt = Buffer.concat([vaultSalt, Buffer.from(machineId, 'utf8')]);
+  }
+
   let key;
 
   if (argon2) {
     try {
       const raw = await argon2.hash(pwBuf, {
-        type: argon2.argon2id, salt: vaultSalt,
+        type: argon2.argon2id, salt: actualSalt,
         memoryCost: 65536, timeCost: 3, parallelism: 1,
         hashLength: 32, raw: true,
       });
       key = Buffer.from(raw);
+      secureBuffer(key);
       raw.fill(0);
     } catch { key = null; }
   }
 
   if (!key) {
     key = await new Promise((res, rej) =>
-      crypto.pbkdf2(pwBuf, vaultSalt, 200000, 32, 'sha512', (e, k) => e ? rej(e) : res(k))
+      crypto.pbkdf2(pwBuf, actualSalt, 200000, 32, 'sha512', (e, k) => {
+        if (e) return rej(e);
+        secureBuffer(k);
+        res(k);
+      })
     );
   }
 
+  unsecureBuffer(pwBuf);
   pwBuf.fill(0);
-  return key; // caller'ın fill(0) sorumluluğu
+  return key; // caller'ın fill(0) ve unsecureBuffer sorumluluğu
 }
 
 async function deriveSyncKey(passwordStr, syncSalt) {
   const pwBuf = Buffer.from(passwordStr, 'utf8');
+  secureBuffer(pwBuf);
   // syncSalt'a "SYNC" domain separator ekle — vaultKey ile çakışmayı önler
   const domainSalt = Buffer.concat([syncSalt, Buffer.from('FUIN_SYNC_V1', 'utf8')]);
   let key;
@@ -223,16 +259,22 @@ async function deriveSyncKey(passwordStr, syncSalt) {
         hashLength: 32, raw: true,
       });
       key = Buffer.from(raw);
+      secureBuffer(key);
       raw.fill(0);
     } catch { key = null; }
   }
 
   if (!key) {
     key = await new Promise((res, rej) =>
-      crypto.pbkdf2(pwBuf, domainSalt, 200000, 32, 'sha512', (e, k) => e ? rej(e) : res(k))
+      crypto.pbkdf2(pwBuf, domainSalt, 200000, 32, 'sha512', (e, k) => {
+        if (e) return rej(e);
+        secureBuffer(k);
+        res(k);
+      })
     );
   }
 
+  unsecureBuffer(pwBuf);
   pwBuf.fill(0);
   domainSalt.fill(0);
   return key;
@@ -242,15 +284,19 @@ async function deriveSyncKey(passwordStr, syncSalt) {
 async function encryptData(plaintext, passwordStr) {
   const vaultSalt = crypto.randomBytes(32);
   const iv        = crypto.randomBytes(12);
-  const vaultKey  = await deriveVaultKey(passwordStr, vaultSalt);
+  const vaultKey  = await deriveVaultKey(passwordStr, vaultSalt, true);
 
   const jsonBuf = Buffer.from(JSON.stringify(plaintext), 'utf8');
+  secureBuffer(jsonBuf);
+  
   const cipher  = crypto.createCipheriv('aes-256-gcm', vaultKey, iv);
   const enc1    = cipher.update(jsonBuf);
   const enc2    = cipher.final();
   const tag     = cipher.getAuthTag();
 
+  unsecureBuffer(vaultKey);
   vaultKey.fill(0);
+  unsecureBuffer(jsonBuf);
   jsonBuf.fill(0);
 
   return Buffer.concat([vaultSalt, iv, tag, enc1, enc2]).toString('base64');
@@ -274,23 +320,54 @@ async function decryptData(b64Str, passwordStr) {
   const iv        = buf.slice(32, 44);
   const tag       = buf.slice(44, 60);
   const data      = buf.slice(60);
-  const vaultKey  = await deriveVaultKey(passwordStr, vaultSalt);
-
+  
+  let vaultKey;
+  
   try {
+    vaultKey = await deriveVaultKey(passwordStr, vaultSalt, true); // Önce donanım mühürlü dene
     const decipher = crypto.createDecipheriv('aes-256-gcm', vaultKey, iv);
     decipher.setAuthTag(tag);
-    const dec1 = decipher.update(data);
-    const dec2 = decipher.final();
+    let dec1 = decipher.update(data);
+    let dec2 = decipher.final();
+    
+    unsecureBuffer(vaultKey);
     vaultKey.fill(0);
+    
+    secureBuffer(dec1); secureBuffer(dec2);
     const jsonStr = Buffer.concat([dec1, dec2]).toString('utf8');
+    unsecureBuffer(dec1); unsecureBuffer(dec2);
     dec1.fill(0); dec2.fill(0);
+    
     decryptFailCount = 0; decryptLockUntil = 0; // başarılı — sayacı sıfırla
     return JSON.parse(jsonStr);
-  } catch {
-    vaultKey.fill(0);
-    decryptFailCount++;
-    decryptLockUntil = Date.now() + Math.min(1000 * Math.pow(2, decryptFailCount), 30000);
-    throw new Error('Decryption failed');
+  } catch (e) {
+    if (vaultKey) { unsecureBuffer(vaultKey); vaultKey.fill(0); }
+    
+    // Eğer HwBound hata verdiyse (eski vault olabilir), eski standart (bindHardware = false) ile dene
+    try {
+      vaultKey = await deriveVaultKey(passwordStr, vaultSalt, false);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', vaultKey, iv);
+      decipher.setAuthTag(tag);
+      let dec1 = decipher.update(data);
+      let dec2 = decipher.final();
+      
+      unsecureBuffer(vaultKey);
+      vaultKey.fill(0);
+      
+      secureBuffer(dec1); secureBuffer(dec2);
+      const jsonStr = Buffer.concat([dec1, dec2]).toString('utf8');
+      unsecureBuffer(dec1); unsecureBuffer(dec2);
+      dec1.fill(0); dec2.fill(0);
+      
+      decryptFailCount = 0; decryptLockUntil = 0;
+      console.log('Decrypted with legacy standard key (migration mode)');
+      return JSON.parse(jsonStr);
+    } catch (e2) {
+      if (vaultKey) { unsecureBuffer(vaultKey); vaultKey.fill(0); }
+      decryptFailCount++;
+      decryptLockUntil = Date.now() + Math.min(1000 * Math.pow(2, decryptFailCount), 30000);
+      throw new Error('Decryption failed');
+    }
   }
 }
 
@@ -314,7 +391,7 @@ let activeSyncSalt   = null;
 let activeSyncTimer  = null;
 
 function clearActiveSyncKey() {
-  if (activeSyncKey)  { activeSyncKey.fill(0);  activeSyncKey  = null; }
+  if (activeSyncKey)  { unsecureBuffer(activeSyncKey); activeSyncKey.fill(0);  activeSyncKey  = null; }
   if (activeSyncSalt) { activeSyncSalt.fill(0); activeSyncSalt = null; }
   if (activeSyncTimer){ clearTimeout(activeSyncTimer); activeSyncTimer = null; }
 }

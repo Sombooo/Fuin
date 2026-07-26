@@ -1,7 +1,7 @@
 {
   "name": "fuin",
-  "version": "1.0.0",
-  "description": "Fuin — Güvenli Şifre Yöneticisi",
+  "version": "1.0.1",
+  "description": "Offline-first password manager",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

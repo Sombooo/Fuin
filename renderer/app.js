@@ -967,7 +967,7 @@ async function silentCheckForUpdates() {
     if (!res.ok) return;
     const data = await res.json();
     const latestVersion = data.tag_name;
-    const currentVersion = 'v1.0.0';
+    const currentVersion = 'v1.0.1';
     if (latestVersion && latestVersion !== currentVersion && latestVersion !== 'v' + currentVersion) {
       const badge = document.getElementById('navUpdateBadge');
       if (badge) badge.style.display = 'block';
@@ -992,9 +992,9 @@ async function checkForUpdates() {
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
     const latestVersion = data.tag_name; // örn: "v1.1.0"
-    const currentVersion = 'v1.0.0';
+    const currentVersion = 'v1.0.1';
     
-    // Sürüm kontrolü (Eğer GitHub'daki sürüm v1.0.0'dan farklıysa güncelleme uyarısı ver)
+    // Sürüm kontrolü (Eğer GitHub'daki sürüm v1.0.1'dan farklıysa güncelleme uyarısı ver)
     if (latestVersion && latestVersion !== currentVersion && latestVersion !== 'v' + currentVersion) {
       msg.textContent = '';
       const vSpan = document.createElement('span');

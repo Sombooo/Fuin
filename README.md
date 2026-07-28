@@ -12,6 +12,15 @@ A minimalist, air-gapped, and ultra-secure local password manager. Built for pri
 
 <br />
 
+> [!WARNING]
+> **🚧 WORK IN PROGRESS / HEAVY DEVELOPMENT 🚧**
+> 
+> The project is currently undergoing a deep architectural review and active learning phase by the author. Both the Desktop and upcoming Mobile applications are being meticulously crafted and reworked to ensure the highest possible standards for security, stability, and architecture. 
+> 
+> *Stable releases are temporarily suspended during this period. We will be back with the ultimate, polished version for both PC and Mobile soon!*
+
+<br />
+
 Fuin is a next-generation password manager that runs entirely **offline**. It never connects to a server, never syncs your vault to a hidden cloud, and never asks for a subscription. Your data stays completely on your local machine, protected by military-grade encryption.
 
 ## 🛡️ Security Architecture

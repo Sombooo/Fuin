@@ -1,0 +1,82 @@
+{
+  "name": "fuin",
+  "version": "1.0.0-beta.1",
+  "description": "Offline-first password manager",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-builder --dir",
+    "build-mac": "electron-builder --mac",
+    "build-win": "electron-builder --win --x64",
+    "build-linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "argon2": "^0.31.2",
+    "base45": "^2.0.1",
+    "cbor": "^10.0.12",
+    "crc-32": "^1.2.2",
+    "node-machine-id": "^1.1.12",
+    "sodium-native": "^5.1.0",
+    "zstdify": "^1.4.0",
+    "zxcvbn": "^4.4.2"
+  },
+  "build": {
+    "appId": "com.fuin.app",
+    "productName": "Fuin",
+    "icon": "assets/icon",
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "sync-v2.js",
+      "sync-v2-crypto.js",
+      "sync-v2-payload.js",
+      "sync-v2-transport.js",
+      "renderer/**/*",
+      "assets/**/*",
+      "!renderer/sync.js",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,pow-test}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!test_*.js",
+      "!*.md",
+      "!fuin-extension.zip",
+      "!scratch-touchid.js",
+      "!fuin.sync-generation"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "extraResources": [
+      {
+        "from": "native-host",
+        "to": "native-host",
+        "filter": [
+          "host.js"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "target": "dmg"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": "nsis"
+    },
+    "nsis": {
+      "include": "build/installer.nsh"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
+  }
+}

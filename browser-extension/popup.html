@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { width: 260px; margin: 0; padding: 14px; font-family: monospace; background: #f5f0e8; color: #2a2520; }
+  h1 { font-size: 13px; letter-spacing: 1px; margin: 0 0 10px; }
+  .status { display: flex; align-items: center; gap: 8px; padding: 8px; background: #fff; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #999; }
+  .dot.ok { background: #3a9d5c; }
+  .dot.err { background: #a0342a; }
+  button { width: 100%; margin-top: 10px; padding: 8px; font-family: monospace; font-size: 12px; border: 1px solid #2a2520; background: #2a2520; color: #f5f0e8; border-radius: 3px; cursor: pointer; }
+  .hint { font-size: 10px; color: #888; margin-top: 8px; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <h1>⬡ FUIN EKLENTİSİ</h1>
+  <div class="status"><div class="dot" id="dot"></div><span id="statusText">Kontrol ediliyor...</span></div>
+  <button id="fillBtn">Bu sayfayı doldur</button>
+  <div class="hint">Fuin masaüstü uygulaması açık ve kilidi kapalı olmalı.</div>
+  <script src="popup.js"></script>
+</body>
+</html>

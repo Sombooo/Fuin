@@ -878,6 +878,8 @@ ipcMain.handle('crypto-info', () => ({
   argon2Warning: !argon2, // Renderer'da uyarı göstermek için
 }));
 
+ipcMain.handle('get-app-version', () => app.getVersion());
+
 // ── IPC: Sync V2 session ──────────────────────────────────────────
 //
 // 'open-sync-window': V2 entry point.

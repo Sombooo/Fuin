@@ -584,7 +584,7 @@ select.fi option { background: var(--paper); }
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
   background: var(--text); color: var(--bg); font-family: var(--mono);
   font-size: 12px; padding: 10px 18px; border-radius: 1px;
-  opacity: 0; pointer-events: none; transition: all .3s; z-index: 9999;
+  opacity: 0; pointer-events: none; transition: all .3s; z-index: 100000;
   letter-spacing: 1px; text-transform: uppercase;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

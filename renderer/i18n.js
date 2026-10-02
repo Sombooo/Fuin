@@ -153,7 +153,7 @@ const TRANSLATIONS = {
     ioWarnBox: '⚠ Dışa aktarılan dosyalar şifresiz düz metin içerir. Güvenli bir konumda saklayın.',
     sysTitle: 'SİSTEM & GÜNCELLEMELER',
     sysUpdateCheckTitle: '⟳ Sürüm Kontrolü',
-    sysUpdateCheckSub: 'Fuin\'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin. Mevcut sürüm: v1.0.1',
+    sysUpdateCheckSub: 'Fuin\'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.',
     sysUpdateBtn: 'Şimdi Denetle',
     sysBackupTitle: '⛁ Yedekleme Klasörü',
     sysBackupSub: 'Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.',
@@ -245,8 +245,8 @@ const TRANSLATIONS = {
     syncPassLabel: 'Senkronizasyon Şifresi',
     btnContinue: 'Devam Et',
     toastSyncPassRequired: 'Sync şifresi gereklidir.',
-    toastSyncPassMinLength: 'Sync şifresi en az 10 karakter olmalıdır.',
-    syncPassMinLen: 'Sync şifresi en az 10 karakter olmalıdır.'
+    toastSyncPassMinLength: 'Sync şifresi en az 6 karakter olmalıdır.',
+    syncPassMinLen: 'Sync şifresi en az 6 karakter olmalıdır.'
   },
 
   en: {
@@ -387,7 +387,7 @@ const TRANSLATIONS = {
     ioWarnBox: '⚠ Exported files contain unencrypted plain text. Store them somewhere secure.',
     sysTitle: 'SYSTEM & UPDATES',
     sysUpdateCheckTitle: '⟳ Version Check',
-    sysUpdateCheckSub: 'Check GitHub for newer versions of Fuin. Current version: v1.0.1',
+    sysUpdateCheckSub: 'Check GitHub for newer versions of Fuin.',
     sysUpdateBtn: 'Check Now',
     sysBackupTitle: '⛁ Backup Folder',
     sysBackupSub: 'Access your automatically generated vault backups (.bak files).',
@@ -479,8 +479,8 @@ const TRANSLATIONS = {
     syncPassLabel: 'Sync Password',
     btnContinue: 'Continue',
     toastSyncPassRequired: 'Sync password is required.',
-    toastSyncPassMinLength: 'Sync password must be at least 10 characters.',
-    syncPassMinLen: 'Sync password must be at least 10 characters.'
+    toastSyncPassMinLength: 'Sync password must be at least 6 characters.',
+    syncPassMinLen: 'Sync password must be at least 6 characters.'
   }
 };
 

@@ -11,7 +11,9 @@ dist/
 dist_old_backup/
 release/
 out/
-build/
+build/*
+!build/installer.nsh
+!build/afterPack.js
 fuin-extension.zip
 
 # Misc

@@ -33,6 +33,7 @@
     "productName": "Fuin",
     "icon": "assets/icon",
     "asar": true,
+    "afterPack": "build/afterPack.js",
     "files": [
       "main.js",
       "preload.js",

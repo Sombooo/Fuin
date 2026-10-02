@@ -1,6 +1,6 @@
 {
   "name": "fuin",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "Offline-first password manager",
   "main": "main.js",
   "scripts": {

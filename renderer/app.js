@@ -1452,7 +1452,7 @@ async function getLocalAppVersion() {
     const v = await window.kekkai?.getAppVersion?.();
     if (v) return v;
   } catch {}
-  return '1.0.0-beta.2';
+  return '1.0.0-beta.3';
 }
 
 async function silentCheckForUpdates() {

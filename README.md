@@ -12,6 +12,9 @@ A minimalist, air-gapped, and ultra-secure local password manager. Built for pri
 
 <br />
 
+> [!NOTE]
+> **Vibe Coding Project:** Fuin is built with AI-assisted "vibe coding". While it implements strict offline-first security principles, please explore, audit, and use it at your own discretion.
+
 ## What is Fuin?
 
 Fuin is a local-first password manager designed to be simple, reliable, and completely private. 

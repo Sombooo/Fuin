@@ -1041,8 +1041,8 @@ async function openSyncWindow() {
       inputSyncPass.focus();
       return;
     }
-    if (syncPassword.trim().length < 6) {
-      toast(t('toastSyncPassMinLength') || 'Sync şifresi en az 6 karakter olmalıdır.');
+    if (syncPassword.trim().length < 10) {
+      toast(t('toastSyncPassMinLength') || 'Sync şifresi en az 10 karakter olmalıdır.');
       inputSyncPass.focus();
       return;
     }

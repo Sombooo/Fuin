@@ -41,6 +41,7 @@
       "sync-v2-crypto.js",
       "sync-v2-payload.js",
       "sync-v2-transport.js",
+      "sync-lan.js",
       "renderer/**/*",
       "assets/**/*",
       "!renderer/sync.js",

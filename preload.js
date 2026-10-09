@@ -23,6 +23,19 @@ contextBridge.exposeInMainWorld('kekkai', {
   onSyncKeyExpired:    (cb)             => { ipcRenderer.on('sync-key-expired', cb); return () => ipcRenderer.removeListener('sync-key-expired', cb); },
   closeSyncWindow:     ()               => ipcRenderer.send('sync-win-close'),
 
+  // Hybrid LAN Sync (R1, R2, R4)
+  getSyncMode:         ()               => ipcRenderer.invoke('lan-get-sync-mode'),
+  setSyncMode:         (mode)           => ipcRenderer.invoke('lan-set-sync-mode', mode),
+  generatePairingQR:   (opts)           => ipcRenderer.invoke('lan-generate-pairing-qr', opts),
+  getPairedDevices:    ()               => ipcRenderer.invoke('lan-get-paired-devices'),
+  revokePairedDevice:  (deviceId)       => ipcRenderer.invoke('lan-revoke-paired-device', deviceId),
+  startLanSync:        (entries)        => ipcRenderer.invoke('lan-start-sync', { entries }),
+  stopLanSync:         ()               => ipcRenderer.invoke('lan-stop-sync'),
+  getLanStatus:        ()               => ipcRenderer.invoke('lan-status'),
+  onLanSyncApplied:    (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('lan-sync-applied', h); return () => ipcRenderer.removeListener('lan-sync-applied', h); },
+  onLanSyncClosed:     (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('lan-sync-closed', h); return () => ipcRenderer.removeListener('lan-sync-closed', h); },
+  onLanDevicePaired:   (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('lan-device-paired', h); return () => ipcRenderer.removeListener('lan-device-paired', h); },
+
   // Pano — main process üzerinden, 30s sonra temizlenir
   copySecure:          (text)           => ipcRenderer.invoke('copy-secure', text),
   cancelClipboardClear:()               => ipcRenderer.invoke('cancel-clipboard-clear'),

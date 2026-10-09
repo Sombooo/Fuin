@@ -246,7 +246,28 @@ const TRANSLATIONS = {
     btnContinue: 'Devam Et',
     toastSyncPassRequired: 'Sync şifresi gereklidir.',
     toastSyncPassMinLength: 'Sync şifresi en az 6 karakter olmalıdır.',
-    syncPassMinLen: 'Sync şifresi en az 6 karakter olmalıdır.'
+    syncPassMinLen: 'Sync şifresi en az 6 karakter olmalıdır.',
+
+    settingSyncModeTitle: 'Eşitleme Modu',
+    settingSyncModeSub: 'Yerel ağ (Wi-Fi) üzerinden tek tıkla şifreli senkronizasyon veya tam hava boşluklu QR modu.',
+    syncModeLan: 'Yerel Ağ Eşitlemesi (Wi-Fi/LAN — Tek tık, hızlı) [Varsayılan]',
+    syncModeAirgap: 'Tam Hava Boşluğu Modu (Air-Gap QR — Ağ kapalı)',
+    settingPairedDevicesTitle: 'Eşleşmiş Cihazlar',
+    settingPairedDevicesSub: 'Yerel ağda şifreli eşitleme yapabilecek yetkilendirilmiş mobil cihazlar.',
+    btnPairPhone: 'Telefon Eşle',
+    btnRevokePair: 'İptal Et',
+    lanSyncModalTitle: 'YEREL AĞ EŞİTLEMESİ',
+    lanSyncWaiting: 'Yerel ağ dinleyicisi başlatıldı. Telefonunuzdan Eşitle\'ye basın...',
+    lanSyncAddresses: 'Yerel IP Adresi: ',
+    lanSyncTimer: 'Kalan süre: ',
+    lanSyncSuccess: 'Senkronizasyon başarıyla tamamlandı!',
+    pairModalTitle: 'TELEFON EŞLE (STATİK QR)',
+    pairModalSub: 'Fuin Mobile uygulamasından bu QR kodunu tarayarak cihazınızı güvenle eşleyin.',
+    noPairedDevices: 'Henüz eşleşmiş cihaz yok.',
+    toastDeviceRevoked: 'Cihaz eşleşmesi iptal edildi.',
+    toastDevicePaired: 'Cihaz başarıyla eşlendi.',
+    toastLanSyncCompleted: 'Yerel ağ senkronizasyonu tamamlandı.',
+    toastLanSyncCancelled: 'Yerel ağ dinleyicisi kapatıldı.'
   },
 
   en: {
@@ -480,7 +501,28 @@ const TRANSLATIONS = {
     btnContinue: 'Continue',
     toastSyncPassRequired: 'Sync password is required.',
     toastSyncPassMinLength: 'Sync password must be at least 6 characters.',
-    syncPassMinLen: 'Sync password must be at least 6 characters.'
+    syncPassMinLen: 'Sync password must be at least 6 characters.',
+
+    settingSyncModeTitle: 'Sync Mode',
+    settingSyncModeSub: 'One-click encrypted local network (Wi-Fi) synchronization or full air-gapped QR mode.',
+    syncModeLan: 'Local Network Sync (Wi-Fi/LAN — One-click, fast) [Default]',
+    syncModeAirgap: 'Full Air-Gap Mode (Air-Gap QR — Network disabled)',
+    settingPairedDevicesTitle: 'Paired Devices',
+    settingPairedDevicesSub: 'Authorized mobile devices allowed for encrypted local network sync.',
+    btnPairPhone: 'Pair Phone',
+    btnRevokePair: 'Revoke',
+    lanSyncModalTitle: 'LOCAL NETWORK SYNC',
+    lanSyncWaiting: 'Local network listener started. Tap Sync on your mobile app...',
+    lanSyncAddresses: 'Local IP Address: ',
+    lanSyncTimer: 'Remaining time: ',
+    lanSyncSuccess: 'Synchronization completed successfully!',
+    pairModalTitle: 'PAIR PHONE (STATIC QR)',
+    pairModalSub: 'Scan this QR code from your Fuin Mobile app to securely pair your device.',
+    noPairedDevices: 'No paired devices yet.',
+    toastDeviceRevoked: 'Device pairing revoked.',
+    toastDevicePaired: 'Device paired successfully.',
+    toastLanSyncCompleted: 'Local network sync completed.',
+    toastLanSyncCancelled: 'Local network listener closed.'
   }
 };
 

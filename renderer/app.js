@@ -537,6 +537,7 @@ function setView(v, btn) {
     document.getElementById('view-io').style.display='block';
   } else if (v==='settings') {
     document.getElementById('view-settings').style.display='block';
+    loadSyncSettings();
     getLocalAppVersion().then(ver => {
       const sub = document.getElementById('sysUpdateCheckSub');
       if (sub) sub.textContent = `${t('sysUpdateCheckSub') || "Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin."} (Mevcut: v${normalizeVersion(ver)})`;
@@ -710,6 +711,8 @@ async function saveEntry() {
   const site=document.getElementById('f-site').value.trim();
   const pw=document.getElementById('f-pw').value;
   if(!site||!pw){toast(t('toastSiteRequired'));return;}
+  const now = Date.now();
+  const existing = editId ? entries.find(x=>x.id===editId) : null;
   const entry={
     id: editId||crypto.randomUUID(), site,
     category: document.getElementById('f-category').value,
@@ -719,10 +722,16 @@ async function saveEntry() {
     url:      document.getElementById('f-url').value.trim(),
     totp:     await memEncrypt(document.getElementById('f-2fa-toggle').checked ? document.getElementById('f-totp').value.trim() : ''),
     fav:      document.getElementById('f-fav').checked,
-    updated:  Date.now(),
+    updated:  now,
+    updatedAt: now,
+    created:  existing ? (existing.created || now) : now,
+    createdAt: existing ? (existing.createdAt || existing.created || now) : now,
+    deletedAt: null,
+    isDeleted: false,
+    history:  existing && Array.isArray(existing.history) ? existing.history : []
   };
   if(editId){const i=entries.findIndex(x=>x.id===editId);entries[i]=entry;}
-  else entries.unshift({...entry,created:Date.now()});
+  else entries.unshift(entry);
   await persist(); closeModal('addOverlay'); renderList();
   toast(editId?t('toastUpdated'):t('toastSaved'));
 }
@@ -730,8 +739,11 @@ async function saveEntry() {
 async function delEntry(id) {
   const i = entries.findIndex(x=>x.id===id);
   if(i !== -1) {
+    const now = Date.now();
     entries[i].isDeleted = true;
-    entries[i].updated = Date.now();
+    entries[i].deletedAt = now;
+    entries[i].updated = now;
+    entries[i].updatedAt = now;
     await persist(); renderList(); toast(t('toastDeleted') || 'Çöp kutusuna taşındı');
   }
 }
@@ -739,8 +751,11 @@ async function delEntry(id) {
 async function restoreEntry(id) {
   const i = entries.findIndex(x=>x.id===id);
   if(i !== -1) {
+    const now = Date.now();
     entries[i].isDeleted = false;
-    entries[i].updated = Date.now();
+    entries[i].deletedAt = null;
+    entries[i].updated = now;
+    entries[i].updatedAt = now;
     await persist(); renderList(); toast('Kayıt geri yüklendi');
   }
 }
@@ -1082,6 +1097,178 @@ async function openSyncWindow() {
       if (spin) spin.style.display = 'none';
     }
   };
+}
+
+// ── HYBRID SYNC: LAN & AIR-GAP ROUTING (R1, R2, R4) ────────────────
+let lanSyncCountdownTimer = null;
+
+async function handleSyncClick() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  const mode = api.getSyncMode ? (await api.getSyncMode()) : 'lan';
+  if (mode === 'airgap') {
+    openSyncWindow();
+  } else {
+    startLanSyncFlow();
+  }
+}
+
+async function startLanSyncFlow() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+
+  const overlay = document.getElementById('lanSyncOverlay');
+  const statusText = document.getElementById('lanSyncStatusText');
+  const timerText = document.getElementById('lanSyncTimer');
+  const addrText = document.getElementById('lanSyncAddresses');
+
+  if (statusText) statusText.textContent = t('lanSyncWaiting') || 'Yerel ağ dinleyicisi başlatıldı. Telefonunuzdan Eşitle\'ye basın...';
+  if (timerText) timerText.textContent = 'Kalan süre: 120s';
+  if (addrText) addrText.textContent = 'Hazırlanıyor...';
+  if (overlay) overlay.classList.add('open');
+
+  try {
+    if (entries && entries.length > 0) {
+      await persist();
+    }
+    const exportSyncList = Array.isArray(entries) && entries.length > 0 ? await Promise.all(
+      entries.map(async e => ({
+        ...e,
+        password: await memDecrypt(e.password),
+        totp: await memDecrypt(e.totp)
+      }))
+    ) : [];
+
+    const res = await api.startLanSync(exportSyncList);
+    if (addrText) {
+      addrText.textContent = (res.addresses || []).map(a => `${a}:${res.port}`).join('  |  ');
+    }
+
+    let remaining = res.timeoutSec || 120;
+    if (lanSyncCountdownTimer) clearInterval(lanSyncCountdownTimer);
+    lanSyncCountdownTimer = setInterval(() => {
+      remaining--;
+      if (timerText) timerText.textContent = `Kalan süre: ${remaining}s`;
+      if (remaining <= 0) {
+        clearInterval(lanSyncCountdownTimer);
+        lanSyncCountdownTimer = null;
+      }
+    }, 1000);
+  } catch (err) {
+    if (overlay) overlay.classList.remove('open');
+    toast(t('toastSyncFailed') + err.message);
+  }
+}
+
+async function loadSyncSettings() {
+  if (!api.getSyncMode) return;
+  try {
+    const mode = await api.getSyncMode();
+    const modeSelect = document.getElementById('syncModeSelect');
+    if (modeSelect) modeSelect.value = mode;
+
+    const pairedCard = document.getElementById('pairedDevicesCard');
+    if (pairedCard) {
+      pairedCard.style.display = mode === 'airgap' ? 'none' : 'block';
+    }
+
+    await refreshPairedDevicesList();
+  } catch (e) {
+    console.error('loadSyncSettings error:', e);
+  }
+}
+
+async function refreshPairedDevicesList() {
+  if (!api.getPairedDevices) return;
+  const listEl = document.getElementById('pairedDevicesList');
+  if (!listEl) return;
+
+  const devices = await api.getPairedDevices();
+  if (!devices || devices.length === 0) {
+    listEl.innerHTML = `<div style="font-size:12px;color:var(--mu);padding:8px 0;" data-i18n="noPairedDevices">${t('noPairedDevices') || 'Henüz eşleşmiş cihaz yok.'}</div>`;
+    return;
+  }
+
+  listEl.innerHTML = devices.map(d => `
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;">
+      <div>
+        <div style="font-weight:600;font-size:13px;color:var(--text);">${esc(d.deviceName || 'Mobil Cihaz')}</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--mu);margin-top:2px;">
+          ${esc(d.deviceId)} · ${esc(d.keyPreview)} · ${d.pairedAt ? new Date(d.pairedAt).toLocaleDateString() : '—'}
+        </div>
+      </div>
+      <button class="btn-io" style="color:var(--red);border-color:var(--border);" onclick="window.revokePairedDevice('${esc(d.deviceId)}')">
+        ${t('btnRevokePair') || 'İptal Et'}
+      </button>
+    </div>
+  `).join('');
+}
+
+window.revokePairedDevice = async function(deviceId) {
+  if (!confirm('Bu cihazın eşleşmesini kaldırmak istediğinize emin misiniz?')) return;
+  await api.revokePairedDevice(deviceId);
+  toast(t('toastDeviceRevoked') || 'Cihaz eşleşmesi iptal edildi.');
+  await refreshPairedDevicesList();
+};
+
+async function openPairingModal() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  if (!api.generatePairingQR) return;
+  const mode = api.getSyncMode ? (await api.getSyncMode()) : 'lan';
+  if (mode === 'airgap') {
+    toast(t('syncModeAirgap') || 'Hava boşluğu modunda yerel ağ eşleştirmesi kullanılamaz.');
+    return;
+  }
+
+  try {
+    if (entries && entries.length > 0) {
+      await persist();
+    }
+    const exportSyncList = Array.isArray(entries) && entries.length > 0 ? await Promise.all(
+      entries.map(async e => ({
+        ...e,
+        password: await memDecrypt(e.password),
+        totp: await memDecrypt(e.totp)
+      }))
+    ) : [];
+
+    const res = await api.startLanSync(exportSyncList);
+    const payload = await api.generatePairingQR({ port: res.port });
+    const qrString = JSON.stringify(payload);
+
+    const canvas = document.getElementById('pairQrCanvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      const div = document.createElement('div');
+      div.style.display = 'none';
+      document.body.appendChild(div);
+
+      try {
+        new QRCode(div, {
+          text: qrString,
+          width: 240,
+          height: 240,
+          colorDark: '#2a2520',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M,
+        });
+        const qrCanvasEl = div.querySelector('canvas');
+        if (qrCanvasEl) {
+          ctx.clearRect(0, 0, 240, 240);
+          ctx.drawImage(qrCanvasEl, 0, 0, 240, 240);
+        }
+      } finally {
+        div.remove();
+      }
+    }
+
+    const infoEl = document.getElementById('pairDeviceInfo');
+    if (infoEl) {
+      infoEl.textContent = `Cihaz: ${payload.deviceId} · Port: ${payload.port}`;
+    }
+
+    document.getElementById('pairOverlay')?.classList.add('open');
+  } catch (err) {
+    toast(t('toastSyncFailed') + err.message);
+  }
 }
 
 // ── IMPORT / EXPORT ───────────────────────────────────────────────
@@ -1580,8 +1767,45 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('nav-health')?.addEventListener('click', function() { setView('health', this); });
   document.getElementById('nav-security')?.addEventListener('click', function() { setView('security', this); });
   document.getElementById('nav-io')?.addEventListener('click', function() { setView('io', this); });
-  document.getElementById('nav-sync')?.addEventListener('click', openSyncWindow);
+  document.getElementById('nav-sync')?.addEventListener('click', handleSyncClick);
   document.getElementById('nav-lock')?.addEventListener('click', lock);
+
+  // Hybrid Sync UI listeners (R1, R2, R4)
+  document.getElementById('syncModeSelect')?.addEventListener('change', async function() {
+    await api.setSyncMode(this.value);
+    const pairedCard = document.getElementById('pairedDevicesCard');
+    if (pairedCard) {
+      pairedCard.style.display = this.value === 'airgap' ? 'none' : 'block';
+    }
+    toast(t('toastSaved'));
+  });
+  document.getElementById('btnOpenPairModal')?.addEventListener('click', openPairingModal);
+  document.getElementById('btnClosePairModal')?.addEventListener('click', async () => {
+    document.getElementById('pairOverlay')?.classList.remove('open');
+    await api.stopLanSync();
+    refreshPairedDevicesList();
+  });
+  document.getElementById('btnClosePairModalBtn')?.addEventListener('click', async () => {
+    document.getElementById('pairOverlay')?.classList.remove('open');
+    await api.stopLanSync();
+    refreshPairedDevicesList();
+  });
+  document.getElementById('btnCancelLanSync')?.addEventListener('click', async () => {
+    if (lanSyncCountdownTimer) {
+      clearInterval(lanSyncCountdownTimer);
+      lanSyncCountdownTimer = null;
+    }
+    document.getElementById('lanSyncOverlay')?.classList.remove('open');
+    await api.stopLanSync();
+  });
+  document.getElementById('btnCloseLanSync')?.addEventListener('click', async () => {
+    if (lanSyncCountdownTimer) {
+      clearInterval(lanSyncCountdownTimer);
+      lanSyncCountdownTimer = null;
+    }
+    document.getElementById('lanSyncOverlay')?.classList.remove('open');
+    await api.stopLanSync();
+  });
 
   // Main content
   document.getElementById('searchInp')?.addEventListener('input', renderList);
@@ -1724,6 +1948,55 @@ if (api.onSyncKeyExpired) {
     document.getElementById('expiredOverlay').classList.add('show');
     document.getElementById('stStatus').textContent = t('syncTimedOut');
     document.getElementById('stStatus').style.color = 'var(--red)';
+  });
+}
+
+if (api.onLanSyncApplied) {
+  api.onLanSyncApplied(async ({ entries: merged, stats }) => {
+    if (lanSyncCountdownTimer) {
+      clearInterval(lanSyncCountdownTimer);
+      lanSyncCountdownTimer = null;
+    }
+    document.getElementById('lanSyncOverlay')?.classList.remove('open');
+    document.getElementById('pairOverlay')?.classList.remove('open');
+
+    try {
+      entries = await Promise.all(
+        merged.map(async e => ({
+          ...e,
+          password: await memEncrypt(e.password),
+          totp: await memEncrypt(e.totp)
+        }))
+      );
+      await persist();
+      renderList();
+      await refreshPairedDevicesList();
+      toast(t('toastLanSyncCompleted') || 'Yerel ağ senkronizasyonu tamamlandı.');
+    } catch (e) {
+      toast('Senkronize veriler işlenirken hata: ' + e.message);
+    }
+  });
+}
+
+if (api.onLanSyncClosed) {
+  api.onLanSyncClosed(({ reason }) => {
+    if (lanSyncCountdownTimer) {
+      clearInterval(lanSyncCountdownTimer);
+      lanSyncCountdownTimer = null;
+    }
+    document.getElementById('lanSyncOverlay')?.classList.remove('open');
+    document.getElementById('pairOverlay')?.classList.remove('open');
+    if (reason === 'timeout') {
+      toast('Yerel ağ eşitlemesi zaman aşımına uğradı (120s).');
+    }
+  });
+}
+
+if (api.onLanDevicePaired) {
+  api.onLanDevicePaired(() => {
+    document.getElementById('pairOverlay')?.classList.remove('open');
+    refreshPairedDevicesList();
+    toast(t('toastDevicePaired') || 'Cihaz başarıyla eşlendi.');
   });
 }
 

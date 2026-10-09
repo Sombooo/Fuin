@@ -5,6 +5,7 @@ const path   = require('path');
 const fs     = require('fs');
 const crypto = require('crypto');
 const syncV2 = require('./sync-v2.js'); // Phase 4 orchestration
+const syncLan = require('./sync-lan.js'); // Hybrid LAN Sync
 
 if (app.isPackaged) {
   console.log = () => {};
@@ -116,11 +117,17 @@ app.whenReady().then(() => {
   syncV2.onSessionExpiry(() => {
     mainWindow?.webContents.send('sync-key-expired');
   });
+
+  // ── Hybrid LAN Sync initialization ────────────────────────────────────────
+  initLanSync(app.getPath('userData'));
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin' && isQuitting) app.quit(); });
 app.on('before-quit', () => {
   isQuitting = true;
   stopExtensionBridge();
+  if (_ephemeralLanServer) {
+    try { _ephemeralLanServer.stop('quitting'); } catch {}
+  }
   if (clipboardTimer) {
     try { clipboard.writeText(''); } catch {}
   }
@@ -235,6 +242,9 @@ function triggerForceLock(reason) {
   stopIdleWatcher();
   isUnlocked = false;
   clearAuthoritativeVaultSession();
+  if (_ephemeralLanServer) {
+    try { _ephemeralLanServer.stop('vault-locked'); } catch {}
+  }
   mainWindow?.webContents.send('force-lock', reason);
 }
 
@@ -248,7 +258,12 @@ function startPowerMonitorWatchers() {
 // Renderer, unlock()/lock() olduğunda bu state'i main process'e bildirir
 ipcMain.handle('set-unlock-state', (_, unlocked) => {
   isUnlocked = !!unlocked;
-  if (!isUnlocked) clearAuthoritativeVaultSession();
+  if (!isUnlocked) {
+    clearAuthoritativeVaultSession();
+    if (_ephemeralLanServer) {
+      try { _ephemeralLanServer.stop('vault-locked'); } catch {}
+    }
+  }
   if (isUnlocked) startIdleWatcher(); else stopIdleWatcher();
   return true;
 });
@@ -986,6 +1001,135 @@ ipcMain.handle('clear-sync-key', () => {
   return true;
 });
 
+// ── IPC: LAN Sync & Pairing (Hybrid Sync R1, R2, R4) ───────────────
+let _pairingManager = null;
+let _ephemeralLanServer = null;
+let _activeLanEntries = null;
+
+function initLanSync(userDataPath) {
+  if (_pairingManager) return;
+  _pairingManager = new syncLan.PairingManager(userDataPath);
+  _ephemeralLanServer = new syncLan.EphemeralServer({
+    pairingManager: _pairingManager,
+    getVaultEntries: () => _activeLanEntries || [],
+    applyMergedEntries: (mergedEntries, stats) => {
+      if (mainWindow?.webContents) {
+        mainWindow.webContents.send('lan-sync-applied', { entries: mergedEntries, stats });
+      }
+    },
+    onDevicePaired: (device) => {
+      if (mainWindow?.webContents) {
+        mainWindow.webContents.send('lan-device-paired', device);
+      }
+    }
+  });
+
+  _ephemeralLanServer.onClosed((reason) => {
+    _activeLanEntries = null;
+    if (mainWindow?.webContents) {
+      mainWindow.webContents.send('lan-sync-closed', { reason });
+    }
+  });
+}
+
+function getPairingManager() {
+  if (!_pairingManager) {
+    initLanSync(app.getPath('userData'));
+  }
+  return _pairingManager;
+}
+
+function getEphemeralLanServer() {
+  if (!_ephemeralLanServer) {
+    initLanSync(app.getPath('userData'));
+  }
+  return _ephemeralLanServer;
+}
+
+function getSavedSyncMode() {
+  try {
+    const p = path.join(app.getPath('userData'), 'fuin.sync-mode');
+    if (fs.existsSync(p)) {
+      const mode = fs.readFileSync(p, 'utf8').trim();
+      if (mode === 'airgap' || mode === 'lan') return mode;
+    }
+  } catch {}
+  return 'lan'; // Default (R4)
+}
+
+ipcMain.handle('lan-get-sync-mode', () => getSavedSyncMode());
+
+ipcMain.handle('lan-set-sync-mode', (_, mode) => {
+  const targetMode = mode === 'airgap' ? 'airgap' : 'lan';
+  try {
+    const p = path.join(app.getPath('userData'), 'fuin.sync-mode');
+    writeAtomicSync(p, targetMode, { mode: 0o600 });
+  } catch {}
+  if (targetMode === 'airgap' && _ephemeralLanServer) {
+    _ephemeralLanServer.stop('mode-switched-to-airgap');
+  }
+  return targetMode;
+});
+
+ipcMain.handle('lan-generate-pairing-qr', (_, opts) => {
+  if (!isUnlocked) {
+    throw new Error('SYNC_LAN: Vault is locked');
+  }
+  const mode = getSavedSyncMode();
+  if (mode === 'airgap') {
+    throw new Error('SYNC_LAN: Air-Gap mode is active; network transport disabled');
+  }
+  const pm = getPairingManager();
+  const server = getEphemeralLanServer();
+  const effectiveOpts = Object.assign({}, opts);
+  if (!effectiveOpts.port && server && server.isListening() && server.getPort()) {
+    effectiveOpts.port = server.getPort();
+  }
+  return pm.generatePairingData(effectiveOpts);
+});
+
+ipcMain.handle('lan-get-paired-devices', () => {
+  const pm = getPairingManager();
+  return pm.getPairedDevices();
+});
+
+ipcMain.handle('lan-revoke-paired-device', (_, deviceId) => {
+  const pm = getPairingManager();
+  return pm.removePairedDevice(deviceId);
+});
+
+ipcMain.handle('lan-start-sync', async (event, { entries }) => {
+  if (!isUnlocked) {
+    throw new Error('SYNC_LAN: Vault is locked');
+  }
+  const mode = getSavedSyncMode();
+  if (mode === 'airgap') {
+    throw new Error('SYNC_LAN: Air-Gap mode is active; network transport disabled');
+  }
+
+  const server = getEphemeralLanServer();
+  _activeLanEntries = Array.isArray(entries) ? entries : [];
+
+  const res = await server.start();
+  return {
+    port: res.port,
+    addresses: res.addresses,
+    timeoutSec: 120
+  };
+});
+
+ipcMain.handle('lan-stop-sync', async () => {
+  if (_ephemeralLanServer) {
+    await _ephemeralLanServer.stop('user-cancelled');
+  }
+  return true;
+});
+
+ipcMain.handle('lan-status', () => {
+  if (!_ephemeralLanServer) return { active: false, remainingSec: 0 };
+  return _ephemeralLanServer.getStatus();
+});
+
 // ── IPC: Pano ─────────────────────────────────────────────────────
 let clipboardTimer = null;
 ipcMain.handle('copy-secure', (_, text) => {
@@ -1440,6 +1584,10 @@ if (typeof module !== 'undefined' && module.exports) {
     KNOWN_EXTENSION_IDS,
     autoInstallNativeMessagingHosts,
     writeNativeHostManifest,
-    registerWindowsRegistryKey
+    registerWindowsRegistryKey,
+    initLanSync,
+    getPairingManager,
+    getEphemeralLanServer,
+    getSavedSyncMode
   };
 }

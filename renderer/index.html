@@ -238,6 +238,32 @@
               </label>
             </div>
           </div>
+
+          <!-- Hybrid Sync Mode Card (R4) -->
+          <div class="io-card" id="syncModeSettingCard">
+            <div class="io-title" data-i18n="settingSyncModeTitle">Eşitleme Modu</div>
+            <div class="io-sub" data-i18n="settingSyncModeSub">Yerel ağ (Wi-Fi) üzerinden tek tıkla şifreli senkronizasyon veya tam hava boşluklu QR modu.</div>
+            <div style="margin-top:10px;">
+              <select id="syncModeSelect" style="background:var(--surface);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:6px;font-size:13px;width:100%;cursor:pointer;outline:none;">
+                <option value="lan" selected data-i18n="syncModeLan">Yerel Ağ Eşitlemesi (Wi-Fi/LAN — Tek tık, hızlı) [Varsayılan]</option>
+                <option value="airgap" data-i18n="syncModeAirgap">Tam Hava Boşluğu Modu (Air-Gap QR — Ağ kapalı)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Paired Mobile Devices Card (R1) -->
+          <div class="io-card" id="pairedDevicesCard">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div class="io-title" data-i18n="settingPairedDevicesTitle">Eşleşmiş Cihazlar</div>
+                <div class="io-sub" data-i18n="settingPairedDevicesSub">Yerel ağda şifreli eşitleme yapabilecek yetkilendirilmiş mobil cihazlar.</div>
+              </div>
+              <button class="btn-io pri" id="btnOpenPairModal" data-i18n="btnPairPhone" style="white-space:nowrap;margin-left:12px;">Telefon Eşle</button>
+            </div>
+            <div id="pairedDevicesList" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
+              <!-- Paired devices populated by app.js -->
+            </div>
+          </div>
         </div>
 
         <div class="main-title" style="margin-top:32px; margin-bottom:16px;" data-i18n="sysTitle">SİSTEM & GÜNCELLEMELER</div>
@@ -548,6 +574,49 @@
         <span data-i18n="syncErrorLevel"><em>Hata Düzeltme: Level M</em> · Tüm transfer şifreli</span>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- STATIC PAIRING QR MODAL (R1) -->
+<div class="overlay" id="pairOverlay">
+  <div class="modal" style="width:360px;text-align:center;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="modal-title" data-i18n="pairModalTitle">TELEFON EŞLE (STATİK QR)</div>
+      <button class="sync-close" id="btnClosePairModal">✕</button>
+    </div>
+    <div class="io-sub" data-i18n="pairModalSub" style="margin-bottom:16px;">
+      Fuin Mobile uygulamasından bu QR kodunu tarayarak cihazınızı güvenle eşleyin.
+    </div>
+    <div style="background:#fff;padding:12px;border-radius:10px;display:inline-block;margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+      <canvas id="pairQrCanvas" width="240" height="240" style="display:block;"></canvas>
+    </div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--mu);margin-bottom:16px;" id="pairDeviceInfo">
+      Cihaz ID: ...
+    </div>
+    <button class="btn-io" id="btnClosePairModalBtn" style="width:100%;">Kapat</button>
+  </div>
+</div>
+
+<!-- LAN SYNC WAITING MODAL (R2) -->
+<div class="overlay" id="lanSyncOverlay">
+  <div class="modal" style="width:380px;text-align:center;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div class="modal-title" data-i18n="lanSyncModalTitle">YEREL AĞ EŞİTLEMESİ</div>
+      <button class="sync-close" id="btnCloseLanSync">✕</button>
+    </div>
+    <div style="margin:20px 0;display:flex;justify-content:center;">
+      <div class="spin" style="width:40px;height:40px;border-width:3px;"></div>
+    </div>
+    <div id="lanSyncStatusText" data-i18n="lanSyncWaiting" style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:12px;">
+      Yerel ağ dinleyicisi başlatıldı. Telefonunuzdan Eşitle'ye basın...
+    </div>
+    <div id="lanSyncTimer" style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent);margin-bottom:8px;">
+      Kalan süre: 120s
+    </div>
+    <div id="lanSyncAddresses" style="font-family:var(--mono);font-size:11px;color:var(--mu);margin-bottom:20px;">
+      192.168.x.x:8765
+    </div>
+    <button class="btn-ctrl pause" id="btnCancelLanSync" style="width:100%;">İptal Et</button>
   </div>
 </div>
 

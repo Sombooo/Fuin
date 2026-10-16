@@ -25,7 +25,6 @@ async function memDecrypt(encObj) {
 }
 
 const revealT = {};
-if (api.onForceLock) api.onForceLock(() => lock());
 
 // ── Platforma göre pencere kontrolleri (macOS: solda/renkli daire,
 // Windows/Linux: sağda/kare buton) ──────────────────────────────────
@@ -282,11 +281,11 @@ function lock() {
   editId=null;
   document.getElementById('masterInp').value='';
   closeTOTPTimer();
-  api.cancelClipboardClear();
-  api.setUnlockState(false);
+  try { if (api?.cancelClipboardClear) api.cancelClipboardClear(); } catch {}
+  try { if (api?.setUnlockState) api.setUnlockState(false); } catch {}
   initTouchId();
   document.getElementById('autoLockOverlay')?.classList.remove('open');
-  if (pendingExtReveal) { api.extRespond(pendingExtReveal.requestId, { error: 'locked' }); pendingExtReveal = null; }
+  if (pendingExtReveal) { try { api?.extRespond?.(pendingExtReveal.requestId, { error: 'locked' }); } catch {} pendingExtReveal = null; }
   document.getElementById('extRevealOverlay')?.classList.remove('open');
   const banner = document.getElementById('recoveryMigrationBanner');
   if (banner) banner.style.display = 'none';
@@ -1699,6 +1698,7 @@ document.addEventListener('keydown',e=>{
     }
   }
   if((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();if(master)openAddModal();}
+  if((e.ctrlKey||e.metaKey)&&(e.key==='l'||e.key==='L')){e.preventDefault();if(master)lock();}
 });
 
 // ── i18n.js tarafından dil değiştiğinde çağrılır — data-i18n
@@ -1751,7 +1751,8 @@ document.addEventListener('click', (e) => {
   const action = btn.getAttribute('data-action');
   const val = btn.getAttribute('data-val');
 
-  if (action === 'set-view') setView(val, btn);
+  if (action === 'lock') lock();
+  else if (action === 'set-view') setView(val, btn);
   else if (action === 'show-totp') showTOTP(val);
   else if (action === 'copy-pw') copyPw(val);
   else if (action === 'reveal-pw') revealPw(val);
@@ -1763,7 +1764,7 @@ document.addEventListener('click', (e) => {
 });
 
 // ── GÜVENLİK: Inline onclick handler'lar kaldırıldı — addEventListener ile bağla ──
-document.addEventListener('DOMContentLoaded', () => {
+function initAppListeners() {
   initTouchId();
   
   // Auto-Lock Timer Init
@@ -1949,7 +1950,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Extension reveal modal
   document.getElementById('btnDenyExtReveal')?.addEventListener('click', denyExtReveal);
   document.getElementById('btnApproveExtReveal')?.addEventListener('click', approveExtReveal);
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAppListeners);
+} else {
+  initAppListeners();
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // AIR-GAP SYNC MODAL LOGIC
@@ -2160,7 +2167,7 @@ async function closeSyncModal() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+async function initSyncUIListeners() {
   document.getElementById('btnCloseSync')?.addEventListener('click', closeSyncModal);
   document.getElementById('btnFps3')?.addEventListener('click', function() { setSyncFps(3, this); });
   document.getElementById('btnFps6')?.addEventListener('click', function() { setSyncFps(6, this); });
@@ -2168,12 +2175,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('pauseBtn')?.addEventListener('click', toggleSyncPause);
   document.getElementById('btnResetTransfer')?.addEventListener('click', resetSyncTransfer);
   
-  if (api.cryptoInfo) {
-    const info = await api.cryptoInfo();
-    const badge = document.getElementById('syncBadge');
-    if (badge) {
-      badge.textContent = info.argon2 ? 'Argon2id · SyncKey' : 'PBKDF2 · SyncKey';
-      badge.style.color  = info.argon2 ? 'var(--green)' : 'var(--amber)';
-    }
+  if (api?.cryptoInfo) {
+    try {
+      const info = await api.cryptoInfo();
+      const badge = document.getElementById('syncBadge');
+      if (badge && info) {
+        badge.textContent = info.argon2 ? 'Argon2id · SyncKey' : 'PBKDF2 · SyncKey';
+        badge.style.color  = info.argon2 ? 'var(--green)' : 'var(--amber)';
+      }
+    } catch {}
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSyncUIListeners);
+} else {
+  initSyncUIListeners();
+}

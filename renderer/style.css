@@ -229,6 +229,7 @@ body::before {
 .sidebar {
   width: 206px; background: var(--paper); border-right: 1px solid var(--b);
   display: flex; flex-direction: column; flex-shrink: 0; padding: 16px 0;
+  overflow-y: auto; overflow-x: hidden;
 }
 .sidebar-section { padding: 0 10px; margin-bottom: 6px; }
 .sidebar-label {

@@ -5,6 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "lint": "node scripts/check-static.js",
+    "test": "node scripts/check-static.js && node test_remediation_suite.js && node test_challenger_ui_polish.js",
     "package": "electron-builder --dir",
     "build-mac": "electron-builder --mac",
     "build-win": "electron-builder --win --x64",
@@ -37,6 +39,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "main/**/*",
       "services/**/*",
       "sync-v2.js",
       "sync-v2-crypto.js",

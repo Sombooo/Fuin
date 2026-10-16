@@ -77,29 +77,10 @@ init();
 
 // ── TOTP (totpEngine servisi ile) ─────────────────────────────────
 function b32dec(s) {
-  if (typeof TotpEngine !== 'undefined' && TotpEngine.base32Decode) {
-    return TotpEngine.base32Decode(s, { loose: true });
-  }
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  s = s.toUpperCase().replace(/[\s=]/g,'');
-  let bits=0,val=0; const out=[];
-  for(const c of s){const i=chars.indexOf(c);if(i<0)continue;val=(val<<5)|i;bits+=5;if(bits>=8){out.push((val>>>(bits-8))&255);bits-=8;}}
-  return new Uint8Array(out);
+  return TotpEngine.base32Decode(s, { loose: true });
 }
 async function getTOTP(secret) {
-  if (typeof TotpEngine !== 'undefined' && TotpEngine.getTOTP) {
-    return await TotpEngine.getTOTP(secret);
-  }
-  try {
-    const key = b32dec(secret);
-    const t   = Math.floor(Date.now()/1000/30);
-    const tb  = new DataView(new ArrayBuffer(8)); tb.setUint32(4,t);
-    const ck  = await crypto.subtle.importKey('raw',key,{name:'HMAC',hash:'SHA-1'},false,['sign']);
-    const sig = new Uint8Array(await crypto.subtle.sign('HMAC',ck,tb.buffer));
-    const off = sig[sig.length-1]&0xf;
-    const code= ((sig[off]&0x7f)<<24|(sig[off+1]&0xff)<<16|(sig[off+2]&0xff)<<8|(sig[off+3]&0xff))%1000000;
-    return String(code).padStart(6,'0');
-  } catch { return '------'; }
+  return await TotpEngine.getTOTP(secret);
 }
 
 async function sha1hex(str) {
@@ -109,8 +90,7 @@ async function sha1hex(str) {
 
 // ── RECOVERY KEY ──────────────────────────────────────────────────
 function generateRecoveryKey() {
-  const arr = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(arr).map(b=>b.toString(16).padStart(2,'0')).join('').toUpperCase().match(/.{1,8}/g).join('-');
+  return window.FuinRecoveryUI.generateRecoveryKey();
 }
 
 async function saveRecoveryKey(key, masterPw) {
@@ -858,20 +838,13 @@ let recoveryVerified=false;
 
 function openForgot() {
   recoveryVerified=false;
-  const msgEl=document.getElementById('forgotMsg');
-  msgEl.style.display='none'; msgEl.textContent='';
-  document.getElementById('newPwGroup').style.display='none';
-  document.getElementById('forgotBtn').textContent=t('forgotVerifyBtn');
-  document.getElementById('recoveryInp').value='';
-  document.getElementById('newPwInp').value='';
-  document.getElementById('forgotOverlay').classList.add('open');
+  window.FuinRecoveryUI.resetForgotModalUI(t);
 }
 
 function closeForgot() { recoveryVerified=false; closeModal('forgotOverlay'); }
 
 async function handleForgot() {
   const inp=document.getElementById('recoveryInp').value.trim();
-  const msgEl=document.getElementById('forgotMsg');
   const recoveryEnc=await api.loadRecovery();
 
   // Kurtarma anahtarı yok → SIFIRLA seçeneği
@@ -926,14 +899,7 @@ async function handleForgot() {
 }
 
 function showForgotMsg(text, type) {
-  const el=document.getElementById('forgotMsg');
-  const colors={ green:'rgba(61,107,79,.08)', red:'rgba(160,52,42,.08)', amber:'rgba(176,112,32,.08)' };
-  const borders={ green:'rgba(61,107,79,.2)', red:'rgba(160,52,42,.2)', amber:'rgba(176,112,32,.2)' };
-  el.style.display='block';
-  el.style.color=`var(--${type})`;
-  el.style.background=colors[type];
-  el.style.border=`1px solid ${borders[type]}`;
-  el.textContent=text;
+  window.FuinRecoveryUI.showForgotMsg(text, type);
 }
 
 function copyRecoveryKey() {
@@ -1240,19 +1206,7 @@ async function startLanSyncFlow() {
 }
 
 function updateSyncModeUI() {
-  const pairedCard = document.getElementById('pairedDevicesCard');
-  if (pairedCard) {
-    pairedCard.style.display = '';
-  }
-
-  // Update Sidebar Nav Sync Button Icon & Text
-  const navSyncIcon = document.getElementById('navSyncIcon');
-  const navSyncText = document.getElementById('navSyncText');
-  if (navSyncIcon && navSyncText) {
-    navSyncIcon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`;
-    navSyncText.textContent = t('navSync') || 'Eşitle';
-    navSyncText.setAttribute('data-i18n', 'navSync');
-  }
+  window.FuinLanSyncUI.updateSyncModeUI(t);
 }
 
 async function setSyncMode() {
@@ -1277,65 +1231,11 @@ async function loadSyncSettings() {
 }
 
 async function refreshPairedDevicesList() {
-  if (!api.getPairedDevices) return;
-  const listEl = document.getElementById('pairedDevicesList');
-  if (!listEl) return;
-
-  const devices = await api.getPairedDevices();
-  if (!devices || devices.length === 0) {
-    listEl.innerHTML = `
-      <div class="paired-empty-card">
-        <svg class="paired-empty-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-          <line x1="12" y1="18" x2="12.01" y2="18"/>
-        </svg>
-        <div class="paired-empty-title" data-i18n="noPairedDevices">${t('noPairedDevices') || 'Henüz eşleşmiş mobil cihaz yok.'}</div>
-        <div class="paired-empty-desc" data-i18n="noPairedDevicesSub">${t('noPairedDevicesSub') || 'Yukarıdaki "Telefon Eşle" butonuna tıklayarak Fuin Mobile ile eşleştirin.'}</div>
-      </div>
-    `;
-    return;
-  }
-
-  listEl.innerHTML = devices.map(d => `
-    <div class="device-card">
-      <div class="device-left">
-        <div class="device-icon-wrap">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-            <line x1="12" y1="18" x2="12.01" y2="18"/>
-          </svg>
-        </div>
-        <div class="device-info">
-          <div class="device-title-row">
-            <span class="device-name">${esc(d.deviceName || (t('deviceMobileDefault') || 'Mobil Cihaz'))}</span>
-            <span class="device-status-badge">
-              <span class="badge-dot"></span>
-              <span data-i18n="deviceStatusReady">${t('deviceStatusReady') || 'Eşleşti / Hazır'}</span>
-            </span>
-          </div>
-          <div class="device-meta">
-            <span>ID: ${esc(d.deviceId)}</span>
-            ${d.keyPreview ? `<span class="device-meta-sep">·</span><span class="device-key-pill">${esc(d.keyPreview)}</span>` : ''}
-            <span class="device-meta-sep">·</span>
-            <span>${t('deviceLastSync') || 'Son eşitleme'}: ${d.lastSyncAt ? new Date(d.lastSyncAt).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'tr-TR') : (t('deviceNeverSynced') || 'Henüz eşitlenmedi')}</span>
-          </div>
-        </div>
-      </div>
-      <button class="btn-unlink-device" data-device-id="${esc(d.deviceId)}" title="${t('btnRevokePair') || 'Eşleşmeyi Kaldır'}">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-        </svg>
-        <span data-i18n="btnRevokePair">${t('btnRevokePair') || 'Eşleşmeyi Kaldır'}</span>
-      </button>
-    </div>
-  `).join('');
-
-  listEl.querySelectorAll('.btn-unlink-device').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const devId = btn.getAttribute('data-device-id');
-      if (devId) window.revokePairedDevice(devId);
-    });
+  await window.FuinLanSyncUI.renderPairedDevicesList({
+    api,
+    t,
+    esc,
+    onRevoke: (devId) => window.revokePairedDevice(devId),
   });
 }
 
@@ -1369,33 +1269,7 @@ async function openPairingModal() {
 
     const res = await api.startLanSync(exportSyncList);
     const payload = await api.generatePairingQR({ port: res.port });
-    const qrString = JSON.stringify(payload);
-
-    const canvas = document.getElementById('pairQrCanvas');
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      const div = document.createElement('div');
-      div.style.display = 'none';
-      document.body.appendChild(div);
-
-      try {
-        new QRCode(div, {
-          text: qrString,
-          width: 240,
-          height: 240,
-          colorDark: '#2a2520',
-          colorLight: '#ffffff',
-          correctLevel: QRCode.CorrectLevel.L,
-        });
-        const qrCanvasEl = div.querySelector('canvas');
-        if (qrCanvasEl) {
-          ctx.clearRect(0, 0, 240, 240);
-          ctx.drawImage(qrCanvasEl, 0, 0, 240, 240);
-        }
-      } finally {
-        div.remove();
-      }
-    }
+    window.FuinLanSyncUI.renderPairingQRToCanvas(JSON.stringify(payload));
 
     const infoEl = document.getElementById('pairDeviceInfo');
     if (infoEl) {
@@ -1427,79 +1301,6 @@ async function exportCSV() {
   toast(t('toastCsvExported'));
 }
 // ── İçe Aktarım İşleyicileri (FuinImporters Servisi ile) ───────────
-function parseCSVLine(line) {
-  if (typeof FuinImporters !== 'undefined' && FuinImporters.parseCSV) {
-    const rows = FuinImporters.parseCSV(line);
-    return rows.length > 0 ? rows[0] : [];
-  }
-  const result = [];
-  let cur = '', inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
-      else inQuote = !inQuote;
-    } else if (c === ',' && !inQuote) {
-      result.push(cur.trim()); cur = '';
-    } else cur += c;
-  }
-  result.push(cur.trim());
-  return result;
-}
-
-function detectCSVFormat(header) {
-  if (typeof FuinImporters !== 'undefined' && FuinImporters.detectFormat) {
-    return FuinImporters.detectFormat(header);
-  }
-  const h = header.toLowerCase();
-  if (h.includes('login_username') || h.includes('login_password')) return 'bitwarden';
-  if (h.includes('grouping') || h.includes('extra')) return 'lastpass';
-  if (h.includes('otpauth') || (h.includes('title') && h.includes('username'))) return '1password';
-  if (h.includes('name') && h.includes('url') && h.includes('username') && h.includes('password')) return 'chrome';
-  return 'fuin';
-}
-
-function csvRowToEntry(cols, colMap) {
-  if (typeof FuinImporters !== 'undefined' && FuinImporters.csvRowToEntry) {
-    return FuinImporters.csvRowToEntry(cols, colMap);
-  }
-  const get = (key) => (cols[colMap[key]] || '').trim();
-  const site = get('site') || get('url') || '';
-  const password = get('password');
-  if (!site || !password) return null;
-  const now = Date.now();
-  return {
-    id: crypto.randomUUID(),
-    site,
-    category: get('category') || 'Diğer',
-    username: get('username') || '',
-    password,
-    url: get('url') || '',
-    note: get('note') || '',
-    totp: get('totp') || '',
-    fav: false,
-    isDeleted: false,
-    deletedAt: null,
-    created: now,
-    createdAt: now,
-    updated: now,
-    updatedAt: now,
-  };
-}
-
-function buildColMap(headers, format) {
-  if (typeof FuinImporters !== 'undefined' && FuinImporters.buildColMap) {
-    return FuinImporters.buildColMap(headers, format);
-  }
-  const h = headers.map(x => x.toLowerCase().trim());
-  const idx = (k) => h.indexOf(k);
-  if (format === 'bitwarden') return { site: idx('name'), url: idx('login_uri'), username: idx('login_username'), password: idx('login_password'), note: idx('notes') > -1 ? idx('notes') : idx('extra'), totp: idx('login_totp') };
-  if (format === 'lastpass') return { site: idx('name') > -1 ? idx('name') : idx('url'), url: idx('url'), username: idx('username'), password: idx('password'), note: idx('extra'), totp: -1 };
-  if (format === '1password') return { site: idx('title'), url: idx('url'), username: idx('username'), password: idx('password'), note: idx('notes') > -1 ? idx('notes') : idx('note'), totp: idx('otpauth') };
-  if (format === 'chrome') return { site: idx('name'), url: idx('url'), username: idx('username'), password: idx('password'), note: -1, totp: -1 };
-  return { site: idx('site'), url: idx('url'), username: idx('username'), password: idx('password'), note: idx('note'), category: idx('category'), totp: idx('totp') > -1 ? idx('totp') : -1 };
-}
-
 async function processImportedEntries(imported, label) {
   if (!Array.isArray(imported) || imported.length === 0) {
     toast(t('toastEmptyFile'));
@@ -1529,21 +1330,8 @@ async function importJSON() {
   if (!raw) return;
   try {
     const importers = window.FuinImporters || (typeof FuinImporters !== 'undefined' ? FuinImporters : null);
-    if (importers && importers.importJSON) {
-      const res = importers.importJSON(raw);
-      await processImportedEntries(res.entries, res.format === 'bitwarden' ? 'Bitwarden' : 'Fuin');
-    } else {
-      let imp = JSON.parse(raw);
-      if (imp && imp.type === 'fuin/vault') imp = imp.entries || [];
-      else if (imp && imp.items) imp = imp.items;
-      if (!Array.isArray(imp)) throw new Error('Geçersiz JSON formatı');
-      const now = Date.now();
-      const normalized = imp.filter(e => e && typeof e === 'object').map(e => {
-        if (e.login) return { id: crypto.randomUUID(), site: String(e.name || ''), category: 'Diğer', username: String(e.login.username || ''), password: String(e.login.password || ''), url: String((e.login.uris?.[0]?.uri) || ''), note: String(e.notes || ''), totp: String(e.login.totp || ''), fav: !!e.favorite, isDeleted: false, deletedAt: null, created: now, createdAt: now, updated: now, updatedAt: now };
-        return { id: crypto.randomUUID(), site: String(e.site || ''), category: String(e.category || 'Diğer'), username: String(e.username || ''), password: String(e.password || ''), url: String(e.url || ''), note: String(e.note || ''), totp: String(e.totp || ''), fav: !!e.fav, isDeleted: !!e.isDeleted, deletedAt: e.deletedAt || null, created: Number(e.created) || now, createdAt: Number(e.createdAt || e.created) || now, updated: Number(e.updatedAt || e.updated) || now, updatedAt: Number(e.updatedAt || e.updated) || now };
-      });
-      await processImportedEntries(normalized, 'JSON');
-    }
+    const res = importers.importJSON(raw);
+    await processImportedEntries(res.entries, res.format === 'bitwarden' ? 'Bitwarden' : 'Fuin');
   } catch (err) {
     toast(t('toastInvalidFile') + err.message);
   }
@@ -1554,24 +1342,9 @@ async function importCSV() {
   if (!raw) return;
   try {
     const importers = window.FuinImporters || (typeof FuinImporters !== 'undefined' ? FuinImporters : null);
-    if (importers && importers.importCSV) {
-      const res = importers.importCSV(raw);
-      const formatNames = { bitwarden: 'Bitwarden', lastpass: 'LastPass', '1password': '1Password', chrome: 'Chrome/Edge', fuin: 'Fuin' };
-      await processImportedEntries(res.entries, formatNames[res.format] || 'CSV');
-    } else {
-      const lines = raw.split('\n').filter(Boolean);
-      if (lines.length < 2) { toast(t('toastEmptyFile')); return; }
-      const headers = parseCSVLine(lines[0]);
-      const format = detectCSVFormat(lines[0]);
-      const colMap = buildColMap(headers, format);
-      const rows = [];
-      for (const line of lines.slice(1)) {
-        if (!line.trim()) continue;
-        const entry = csvRowToEntry(parseCSVLine(line), colMap);
-        if (entry) rows.push(entry);
-      }
-      await processImportedEntries(rows, format);
-    }
+    const res = importers.importCSV(raw);
+    const formatNames = { bitwarden: 'Bitwarden', lastpass: 'LastPass', '1password': '1Password', chrome: 'Chrome/Edge', fuin: 'Fuin' };
+    await processImportedEntries(res.entries, formatNames[res.format] || 'CSV');
   } catch (err) {
     toast(t('toastCsvUnreadable') + err.message);
   }
@@ -1593,61 +1366,16 @@ function generateAdvancedPw() {
   const useSym = document.getElementById('genSym').checked;
   const exc = document.getElementById('genExc').checked;
 
-  let pw = '';
-  let score = 0;
-
-  if (typeof PasswordGenerator !== 'undefined' && PasswordGenerator.generatePassword) {
-    const res = PasswordGenerator.generatePassword({
-      length: len,
-      includeUpper: useUpper,
-      includeLower: useLower,
-      includeDigits: useNum,
-      includeSymbols: useSym,
-      excludeSimilar: exc
-    });
-    pw = res.password;
-    score = res.score;
-  } else {
-    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const lower = 'abcdefghijklmnopqrstuvwxyz';
-    const nums = '0123456789';
-    const syms = '!@#$%^&*()_+~`|}{[]:;?><,./-=';
-    const similar = 'il1Lo0O';
-
-    let charset = '';
-    if (useUpper) charset += upper;
-    if (useLower) charset += lower;
-    if (useNum) charset += nums;
-    if (useSym) charset += syms;
-
-    if (exc) {
-      charset = charset.split('').filter(c => !similar.includes(c)).join('');
-    }
-
-    if (!charset) {
-      document.getElementById('genPwResult').value = '';
-      return;
-    }
-
-    const maxValid = 4294967295 - (4294967295 % charset.length);
-    const rnd = new Uint32Array(1);
-    for (let i = 0; i < len; i++) {
-      let r;
-      do {
-        crypto.getRandomValues(rnd);
-        r = rnd[0];
-      } while (r >= maxValid);
-      pw += charset[r % charset.length];
-    }
-
-    if (len >= 12) score++;
-    if (len >= 16) score++;
-    if (useUpper) score++;
-    if (useNum) score++;
-    if (useSym) score++;
-    if (score > 4) score = 4;
-    if (len < 8) score = 0;
-  }
+  const res = PasswordGenerator.generatePassword({
+    length: len,
+    includeUpper: useUpper,
+    includeLower: useLower,
+    includeDigits: useNum,
+    includeSymbols: useSym,
+    excludeSimilar: exc
+  });
+  const pw = res.password;
+  const score = res.score;
 
   document.getElementById('genPwResult').value = pw;
 
@@ -2052,42 +1780,7 @@ if (api.onLanDevicePaired) {
 }
 
 function renderSyncChunkToCanvas(chunk) {
-  if (window.FuinSyncAnimation && typeof window.FuinSyncAnimation.renderSyncChunkToCanvas === 'function') {
-    return window.FuinSyncAnimation.renderSyncChunkToCanvas(chunk);
-  }
-  const qrText = chunk.qrString;
-
-  const canvas = document.getElementById('qrCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-
-  const div = document.createElement('div');
-  div.style.display = 'none';
-  document.body.appendChild(div);
-
-  try {
-    new QRCode(div, {
-      text:           qrText,
-      width:          260,
-      height:         260,
-      colorDark:      '#2a2520',
-      colorLight:     '#ffffff',
-      correctLevel:   QRCode.CorrectLevel.M,
-    });
-    const qrCanvasEl = div.querySelector('canvas');
-    if (qrCanvasEl) {
-      ctx.clearRect(0, 0, 260, 260);
-      ctx.drawImage(qrCanvasEl, 0, 0, 260, 260);
-    }
-  } catch(e) {
-    ctx.fillStyle = '#f5f0e8';
-    ctx.fillRect(0,0,260,260);
-    ctx.fillStyle = '#a0342a';
-    ctx.font = '12px monospace';
-    ctx.fillText('Chunk çok büyük', 20, 130);
-  } finally {
-    document.body.removeChild(div);
-  }
+  return window.FuinSyncAnimation.renderSyncChunkToCanvas(chunk);
 }
 
 function animateSync(timestamp) {

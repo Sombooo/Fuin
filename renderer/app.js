@@ -24,7 +24,7 @@ async function memDecrypt(encObj) {
   } catch { return ''; }
 }
 
-const revealT = {};
+let revealT = {};
 
 // ── Platforma göre pencere kontrolleri (macOS: solda/renkli daire,
 // Windows/Linux: sağda/kare buton) ──────────────────────────────────
@@ -253,7 +253,7 @@ function lock() {
   sessionKey = null;
   entries = [];
   if (typeof revealT === 'object' && revealT) {
-    Object.keys(revealT).forEach(k => clearTimeout(revealT[k]));
+    Object.keys(revealT).forEach(k => { clearTimeout(revealT[k]); delete revealT[k]; });
     revealT = {};
   }
   if (lanSyncCountdownTimer) {
@@ -264,6 +264,8 @@ function lock() {
   if (pwListEl) pwListEl.innerHTML = '';
   const catNavEl = document.getElementById('categoryNav');
   if (catNavEl) catNavEl.innerHTML = '';
+  const catSecEl = document.getElementById('categoryNavSection');
+  if (catSecEl) catSecEl.style.display = 'none';
   ['f-site','f-user','f-pw','f-note','f-url','f-totp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';

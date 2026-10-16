@@ -1794,15 +1794,7 @@ function animateSync(timestamp) {
 }
 
 function renderSyncFrame() {
-  const chunk = syncChunks[syncCurrentIdx];
-  renderSyncChunkToCanvas(chunk);
-  document.getElementById('stChunk').textContent  = `${chunk.index} / ${chunk.total}`;
-  document.getElementById('stStatus').textContent = t('syncTransferring');
-  document.getElementById('stStatus').style.color = 'var(--green)';
-  document.getElementById('stFps').textContent    = `${syncFps} FPS`;
-  const sessionDisplay = chunk.sessionId || '';
-  document.getElementById('transferIdVal').textContent = sessionDisplay;
-  document.getElementById('chunkBar').style.width = (chunk.index / chunk.total * 100) + '%';
+  window.FuinSyncAnimation.renderSyncFrame({ chunk: syncChunks[syncCurrentIdx], syncFps, t });
   syncCurrentIdx = (syncCurrentIdx + 1) % syncChunks.length;
 }
 
@@ -1819,25 +1811,12 @@ function stopSyncAnimation() {
 
 function toggleSyncPause() {
   syncPaused = !syncPaused;
-  const btn = document.getElementById('pauseBtn');
-  if (syncPaused) {
-    btn.textContent = t('syncResume');
-    btn.classList.remove('pause');
-    document.getElementById('stStatus').textContent = t('syncPaused');
-    document.getElementById('stStatus').style.color = 'var(--amber)';
-  } else {
-    btn.textContent = t('syncPause');
-    btn.classList.add('pause');
-  }
+  window.FuinSyncAnimation.updatePauseUI({ syncPaused, t });
 }
 
 function setSyncFps(newFps, btn) {
   syncFps = newFps;
-  document.getElementById('btnFps3').classList.remove('active');
-  document.getElementById('btnFps6').classList.remove('active');
-  document.getElementById('btnFps10').classList.remove('active');
-  btn.classList.add('active');
-  document.getElementById('stFps').textContent = `${syncFps} FPS`;
+  window.FuinSyncAnimation.updateFpsUI(newFps, btn);
 }
 
 function resetSyncTransfer() {
@@ -1849,17 +1828,7 @@ function resetSyncTransfer() {
 async function closeSyncModal() {
   stopSyncAnimation();
   await api.clearSyncKey();
-  document.getElementById('syncOverlay').classList.remove('open');
-  document.getElementById('expiredOverlay').classList.remove('show');
-  const prep = document.getElementById('preparingOverlay');
-  if (prep) prep.style.display = 'flex';
-  const spin = document.querySelector('.qr-preparing .spin');
-  if (spin) spin.style.display = 'block';
-  const prepText = document.getElementById('preparingText');
-  if (prepText) {
-    prepText.textContent = t('syncPreparing') || 'PAKET HAZIRLANIYOR...';
-    prepText.style.color = '';
-  }
+  window.FuinSyncAnimation.resetSyncModalDOM(t);
 }
 
 async function initSyncUIListeners() {

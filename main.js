@@ -72,7 +72,7 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   
   mainWindow.on('minimize', () => {
-    if (IDLE_LOCK_SECONDS > 0) {
+    if (powerMonitorManager.getIdleLockSeconds() > 0) {
       triggerForceLock('minimized');
     }
   });
@@ -106,7 +106,12 @@ app.whenReady().then(() => {
     if (!mainWindow) createWindow();
     else mainWindow.show();
   });
-  startPowerMonitorWatchers();
+  powerMonitorManager.initPowerMonitor({
+    getIsUnlocked: () => isUnlocked,
+    onForceLock: (reason) => triggerForceLock(reason),
+    onWarning: (remaining) => mainWindow?.webContents?.send('auto-lock-warning', remaining),
+    onWarningCancel: () => mainWindow?.webContents?.send('auto-lock-warning-cancel')
+  });
   startExtensionBridge();
   autoInstallNativeMessagingHosts();
 
@@ -134,50 +139,25 @@ app.on('before-quit', () => {
   }
 });
 
+const trayManager = require('./main/trayManager');
+const powerMonitorManager = require('./main/powerMonitor');
+
 function createTray() {
-  if (tray) return;
-  const iconPath = path.join(__dirname, 'assets', 'icon.png');
-  let icon = nativeImage.createFromPath(iconPath);
-  if (process.platform === 'darwin') {
-    icon = icon.resize({ width: 16, height: 16 });
-  }
-  tray = new Tray(icon);
-  tray.setToolTip('Fuin');
-  
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Göster', click: () => { if (mainWindow) mainWindow.show(); } },
-    { label: 'Kilitle', click: () => { triggerForceLock('tray'); } },
-    { type: 'separator' },
-    { label: 'Çıkış', click: () => { isQuitting = true; app.quit(); } }
-  ]);
-  
-  if (process.platform === 'darwin') {
-    tray.on('right-click', () => { tray.popUpContextMenu(contextMenu); });
-  } else {
-    tray.setContextMenu(contextMenu);
-  }
-  
-  tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) mainWindow.hide();
-      else mainWindow.show();
+  tray = trayManager.initTray({
+    Menu,
+    Tray,
+    nativeImage,
+    baseDir: __dirname,
+    getMainWindow: () => mainWindow,
+    onLock: () => triggerForceLock('tray'),
+    onQuit: () => {
+      isQuitting = true;
+      app.quit();
     }
   });
 }
-// ═══════════════════════════════════════════════════════════════════
-// FAZ 2 — AUTO-LOCK
-// Vault kilidi açıkken sistem genelinde boşta kalma süresi izlenir
-// (powerMonitor.getSystemIdleTime — pencere odakta olmasa bile çalışır).
-// Süre dolmadan IDLE_WARNING_SECONDS kala renderer'a uyarı gönderilir.
-// Sistem uykuya geçtiğinde veya ekran kilitlendiğinde uyarı beklemeden
-// anında kilitlenir.
-// ═══════════════════════════════════════════════════════════════════
-let IDLE_LOCK_SECONDS    = 5 * 60; // 5 dakika hareketsizlik → kilit
-const IDLE_WARNING_SECONDS = 30;     // kilitlenmeden 30sn önce uyar
 
-let isUnlocked      = false;
-let idlePollTimer   = null;
-let warningActive   = false;
+let isUnlocked = false;
 
 // ── ADV-01: Authoritative Vault Snapshot Binding ─────────────────────────────
 // Cryptographic binding tracking the active authoritative vault snapshot.
@@ -213,47 +193,14 @@ function clearAuthoritativeVaultSession() {
   _authoritativeVaultSession = null;
 }
 
-function startIdleWatcher() {
-  if (idlePollTimer) return;
-  idlePollTimer = setInterval(() => {
-    if (!isUnlocked || !mainWindow) return;
-    const idleSec   = powerMonitor.getSystemIdleTime();
-    const remaining = IDLE_LOCK_SECONDS - idleSec;
-
-    if (IDLE_LOCK_SECONDS === 0) return; // Asla kilitlenmesin seçeneği
-
-    if (remaining <= 0) {
-      triggerForceLock('idle');
-    } else if (remaining <= IDLE_WARNING_SECONDS) {
-      warningActive = true;
-      mainWindow.webContents.send('auto-lock-warning', Math.ceil(remaining));
-    } else if (warningActive) {
-      warningActive = false;
-      mainWindow.webContents.send('auto-lock-warning-cancel');
-    }
-  }, 1000);
-}
-
-function stopIdleWatcher() {
-  if (idlePollTimer) { clearInterval(idlePollTimer); idlePollTimer = null; }
-  warningActive = false;
-}
-
 function triggerForceLock(reason) {
-  stopIdleWatcher();
+  powerMonitorManager.stopIdleWatcher();
   isUnlocked = false;
   clearAuthoritativeVaultSession();
   if (_ephemeralLanServer) {
     try { _ephemeralLanServer.stop('vault-locked'); } catch {}
   }
-  mainWindow?.webContents.send('force-lock', reason);
-}
-
-function startPowerMonitorWatchers() {
-  // Ekran kilitlendiğinde (Windows/macOS) anında kilitle
-  powerMonitor.on('lock-screen', () => { if (isUnlocked) triggerForceLock('lock-screen'); });
-  // Sistem uykuya/beklemeye geçtiğinde anında kilitle
-  powerMonitor.on('suspend',     () => { if (isUnlocked) triggerForceLock('suspend'); });
+  mainWindow?.webContents?.send('force-lock', reason);
 }
 
 // Renderer, unlock()/lock() olduğunda bu state'i main process'e bildirir
@@ -265,14 +212,12 @@ ipcMain.handle('set-unlock-state', (_, unlocked) => {
       try { _ephemeralLanServer.stop('vault-locked'); } catch {}
     }
   }
-  if (isUnlocked) startIdleWatcher(); else stopIdleWatcher();
+  if (isUnlocked) powerMonitorManager.startIdleWatcher(); else powerMonitorManager.stopIdleWatcher();
   return true;
 });
 
 ipcMain.handle('set-idle-lock', (_, seconds) => {
-  const val = parseInt(seconds, 10);
-  if (isNaN(val) || val < 0) return;
-  IDLE_LOCK_SECONDS = Math.min(Math.max(val, 0), 86400); // Max 24 hours
+  powerMonitorManager.setIdleLockSeconds(seconds);
 });
 
 // ===================================================================
@@ -1346,21 +1291,11 @@ ipcMain.handle('import-file', async (_, { filters }) => {
 // - `reveal` (gerçek şifreyi açığa çıkarma) her zaman kullanıcıya
 //   renderer'da bir onay modalı gösterir — sessizce asla şifre sızdırılmaz.
 // ═══════════════════════════════════════════════════════════════════
-const net = require('net');
+// FAZ 4 — BROWSER EXTENSION BRIDGE & NATIVE MESSAGING
+// Delegated to main/extensionBridge.js
+// ═══════════════════════════════════════════════════════════════════
+const extensionBridge = require('./main/extensionBridge');
 
-const EXT_TOKEN_FILE = path.join(app.getPath('userData'), 'fuin.ext-token');
-const EXT_SOCKET_PATH = process.platform === 'win32'
-  ? '\\\\.\\pipe\\fuin-ext-bridge'
-  : path.join(app.getPath('userData'), 'fuin-ext.sock');
-
-const NATIVE_HOST_NAME = 'com.fuin.nativehost';
-
-// Chrome Web Store / Firefox AMO'ya yayınlandıktan sonra buraya gerçek,
-// kalıcı mağaza ID'lerini ekle. Firefox tarafı zaten sabit (manifest.json'da
-// browser_specific_settings.gecko.id ile pinlenmiş), Chrome/Edge/Brave
-// mağaza ID'si yayınlanınca netleşir. Geliştirme sırasında eklenen ID'ler
-// (paketlenmemiş yükleme) kalıcı değildir, her yükleyişte değişebilir —
-// bu yüzden yayına çıkmadan önce bu listeyi güncel tutmak gerekir.
 const PUBLISHED_CHROME_EXTENSION_ID = process.env.FUIN_CHROME_EXTENSION_ID || '';
 const EXTRA_CHROME_ORIGINS = process.env.FUIN_CHROME_ORIGINS
   ? process.env.FUIN_CHROME_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
@@ -1374,238 +1309,42 @@ const KNOWN_EXTENSION_IDS = {
   firefoxIds: ['fuin-app@sombo.dev', 'fuin@sombo.dev'],
 };
 
-function getNativeHostJsPath() {
-  // Paketlenmiş uygulamada extraResources ile kopyalanan host.js (asar
-  // dışında, gerçek bir dosya olarak — tarayıcı işlemleri asar sanal
-  // dosya sistemine erişemez, gerçek bir yol gerekir). Geliştirme
-  // modunda (npm start) doğrudan proje içindeki native-host/host.js.
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'native-host', 'host.js')
-    : path.join(__dirname, 'native-host', 'host.js');
-}
-
-// Sistemde Node.js kurulu olmasına hiç bağımlı değiliz: Electron'un
-// kendi binary'si, ELECTRON_RUN_AS_NODE=1 ortam değişkeniyle çalıştırılırsa
-// sıradan bir Node.js yorumlayıcısı gibi davranır. Böylece native host'u
-// çalıştırmak için ayrı bir binary derlemeye (pkg/nexe) veya kullanıcının
-// PATH'inde node bulunmasına gerek kalmıyor.
-function ensureNativeHostWrapper() {
-  const hostJs = getNativeHostJsPath().replace(/"/g, '');
-  const wrapperDir = app.getPath('userData');
-  const electronPath = process.execPath.replace(/"/g, '');
-
-  if (process.platform === 'win32') {
-    const batPath = path.join(wrapperDir, 'fuin-host.bat');
-    fs.writeFileSync(batPath, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${electronPath}" "${hostJs}" %*\r\n`);
-    return batPath;
-  }
-  const shPath = path.join(wrapperDir, 'fuin-host.sh');
-  fs.writeFileSync(shPath, `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec "${electronPath}" "${hostJs}" "$@"\n`);
-  fs.chmodSync(shPath, 0o700);
-  return shPath;
-}
-
 function writeNativeHostManifest(targetPath, key, values) {
-  try {
-    const manifest = {
-      name: NATIVE_HOST_NAME,
-      description: 'Fuin Şifre Yöneticisi — Native Messaging Köprüsü',
-      path: ensureNativeHostWrapper(),
-      type: 'stdio',
-      [key]: values,
-    };
-    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-    fs.writeFileSync(targetPath, JSON.stringify(manifest, null, 2));
-    return true;
-  } catch (e) {
-    console.error('[native-host-install] yazılamadı:', targetPath, e.message);
-    return false;
-  }
+  return extensionBridge.writeNativeHostManifest(targetPath, key, values, app);
 }
 
 function registerWindowsRegistryKey(subKey, manifestPath) {
-  if (process.platform !== 'win32') return;
-  try {
-    const { spawnSync } = require('child_process');
-    spawnSync('reg.exe', ['add', `HKCU\\Software\\${subKey}\\NativeMessagingHosts\\${NATIVE_HOST_NAME}`, '/ve', '/t', 'REG_SZ', '/d', manifestPath, '/f'], { stdio: 'ignore' });
-  } catch (e) {
-    console.error('[native-host-registry] Windows registry kaydı başarısız:', subKey, e.message);
-  }
+  return extensionBridge.registerWindowsRegistryKey(subKey, manifestPath);
 }
 
-// Fuin her açıldığında sessizce çalışır — ucuz bir dosya yazma işlemi
-// olduğu için kilit gerekmez, uygulama taşınsa/güncellense bile kayıt
-// kendi kendine güncel kalır (self-healing).
 function autoInstallNativeMessagingHosts() {
-  const home = app.getPath('home');
-  const userData = app.getPath('userData');
-  const results = [];
-
-  if (KNOWN_EXTENSION_IDS.chromeOrigins.length) {
-    if (process.platform === 'win32') {
-      const winChromeManifest = path.join(userData, `${NATIVE_HOST_NAME}-chrome.json`);
-      if (writeNativeHostManifest(winChromeManifest, 'allowed_origins', KNOWN_EXTENSION_IDS.chromeOrigins)) {
-        registerWindowsRegistryKey('Google\\Chrome', winChromeManifest);
-        registerWindowsRegistryKey('Microsoft\\Edge', winChromeManifest);
-        results.push(true);
-      }
-    } else {
-      const chromeTargets = process.platform === 'darwin' ? [
-        path.join(home, 'Library/Application Support/Google/Chrome/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
-        path.join(home, 'Library/Application Support/Microsoft Edge/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
-        path.join(home, 'Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
-      ] : [
-        path.join(home, '.config/google-chrome/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
-        path.join(home, '.config/microsoft-edge/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
-        path.join(home, '.config/BraveSoftware/Brave-Browser/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
-      ];
-      for (const t of chromeTargets) results.push(writeNativeHostManifest(t, 'allowed_origins', KNOWN_EXTENSION_IDS.chromeOrigins));
-    }
-  }
-
-  if (KNOWN_EXTENSION_IDS.firefoxIds.length) {
-    if (process.platform === 'win32') {
-      const winFirefoxManifest = path.join(userData, `${NATIVE_HOST_NAME}-firefox.json`);
-      if (writeNativeHostManifest(winFirefoxManifest, 'allowed_extensions', KNOWN_EXTENSION_IDS.firefoxIds)) {
-        registerWindowsRegistryKey('Mozilla', winFirefoxManifest);
-        results.push(true);
-      }
-    } else {
-      const firefoxTargets = process.platform === 'darwin' ? [
-        path.join(home, 'Library/Application Support/zen/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
-        path.join(home, 'Library/Application Support/Mozilla/NativeMessagingHosts', `${NATIVE_HOST_NAME}.json`),
-      ] : [
-        path.join(home, '.zen/native-messaging-hosts', `${NATIVE_HOST_NAME}.json`),
-        path.join(home, '.mozilla/native-messaging-hosts', `${NATIVE_HOST_NAME}.json`),
-      ];
-      for (const t of firefoxTargets) results.push(writeNativeHostManifest(t, 'allowed_extensions', KNOWN_EXTENSION_IDS.firefoxIds));
-    }
-  }
-
-  console.log(`[native-host-install] ${results.filter(Boolean).length}/${results.length} manifest/kayıt işlendi`);
+  return extensionBridge.autoInstallNativeMessagingHosts(app, KNOWN_EXTENSION_IDS);
 }
-
-function getOrCreateExtToken() {
-  if (fs.existsSync(EXT_TOKEN_FILE)) {
-    try {
-      const raw = fs.readFileSync(EXT_TOKEN_FILE, 'utf8').trim();
-      if (/^[0-9a-f]{64}$/i.test(raw)) {
-        if (process.platform !== 'win32') {
-          try { fs.chmodSync(EXT_TOKEN_FILE, 0o600); } catch {}
-        }
-        return raw;
-      }
-    } catch {}
-  }
-  const token = crypto.randomBytes(32).toString('hex');
-  fs.writeFileSync(EXT_TOKEN_FILE, token, { mode: 0o600, encoding: 'utf8' });
-  if (process.platform !== 'win32') {
-    try { fs.chmodSync(EXT_TOKEN_FILE, 0o600); } catch {}
-  }
-  return token;
-}
-
-let pendingExtRequests = new Map(); // requestId -> { resolve, reject, timer }
-let extRequestCounter = 0;
-
-function relayToRenderer(channel, payload, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    if (!mainWindow) return reject(new Error('no-window'));
-    const requestId = `ext-${++extRequestCounter}-${Date.now()}`;
-    const timer = setTimeout(() => {
-      pendingExtRequests.delete(requestId);
-      reject(new Error('timeout'));
-    }, timeoutMs);
-    pendingExtRequests.set(requestId, { resolve, reject, timer });
-    mainWindow.webContents.send(channel, { requestId, ...payload });
-  });
-}
-
-// Renderer, kullanıcı işlemini (arama sonucu / onay-red) tamamlayınca burayı çağırır
-ipcMain.handle('ext-response', (_, { requestId, payload }) => {
-  const pending = pendingExtRequests.get(requestId);
-  if (!pending) return false;
-  clearTimeout(pending.timer);
-  pendingExtRequests.delete(requestId);
-  pending.resolve(payload);
-  return true;
-});
-
-ipcMain.handle('get-ext-token-masked', () => {
-  const token = getOrCreateExtToken();
-  return token.slice(0, 8) + '••••••••';
-});
-ipcMain.handle('ext-bridge-status', () => ({ running: !!extServer, socketPath: EXT_SOCKET_PATH }));
-
-let extServer = null;
 
 function startExtensionBridge() {
-  if (extServer) return;
-  const token = getOrCreateExtToken();
-
-  // Unix socket dosyası önceki çalıştırmadan kalmışsa temizle
-  if (process.platform !== 'win32' && fs.existsSync(EXT_SOCKET_PATH)) {
-    try { fs.unlinkSync(EXT_SOCKET_PATH); } catch {}
-  }
-
-  extServer = net.createServer((socket) => {
-    let buf = '';
-    socket.on('data', async (chunk) => {
-      buf += chunk.toString('utf8');
-      if (buf.length > 65536) {
-        socket.destroy();
-        return;
-      }
-      let nl;
-      while ((nl = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 1);
-        if (!line.trim()) continue;
-        await handleExtMessage(socket, line);
-      }
-    });
-    socket.on('error', () => {});
+  return extensionBridge.startExtensionBridge({
+    app,
+    getMainWindow: () => mainWindow,
+    getIsUnlocked: () => isUnlocked,
   });
-
-  extServer.on('error', (e) => console.error('[fuin-ext-bridge] socket hatası:', e.message));
-  extServer.listen(EXT_SOCKET_PATH, () => {
-    if (process.platform !== 'win32') {
-      try { fs.chmodSync(EXT_SOCKET_PATH, 0o600); } catch {}
-    }
-    console.log('[fuin-ext-bridge] dinliyor:', EXT_SOCKET_PATH);
-  });
-
-  async function handleExtMessage(socket, line) {
-    let msg;
-    try { msg = JSON.parse(line); } catch { return; }
-    const reply = (obj) => { try { socket.write(JSON.stringify(obj) + '\n'); } catch {} };
-
-    if (!msg.token || typeof msg.token !== 'string' || !safeCompare(msg.token, token)) {
-      return reply({ id: msg.id, error: 'unauthorized' });
-    }
-    if (!isUnlocked) {
-      return reply({ id: msg.id, error: 'locked' });
-    }
-
-    try {
-      if (msg.type === 'lookup') {
-        const matches = await relayToRenderer('ext-lookup-request', { domain: msg.domain });
-        reply({ id: msg.id, matches });
-      } else if (msg.type === 'reveal') {
-        const result = await relayToRenderer('ext-reveal-request', { entryId: msg.entryId, domain: msg.domain });
-        reply({ id: msg.id, ...result });
-      } else {
-        reply({ id: msg.id, error: 'unknown-type' });
-      }
-    } catch (e) {
-      reply({ id: msg.id, error: e.message === 'timeout' ? 'timeout' : 'internal-error' });
-    }
-  }
 }
 
 function stopExtensionBridge() {
-  if (extServer) { try { extServer.close(); } catch {} extServer = null; }
+  return extensionBridge.stopExtensionBridge();
 }
+
+ipcMain.handle('ext-response', (_, { requestId, payload }) => {
+  return extensionBridge.handleExtResponse(requestId, payload);
+});
+
+ipcMain.handle('get-ext-token-masked', () => {
+  return extensionBridge.getMaskedToken(app);
+});
+
+ipcMain.handle('ext-bridge-status', () => {
+  return extensionBridge.getExtBridgeStatus(app);
+});
+
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {

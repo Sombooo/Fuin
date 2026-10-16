@@ -1,6 +1,22 @@
 'use strict';
 const cbor = require('cbor');
 
+// Node v26+ stream compatibility patch:
+// Readable.prototype.pipe is asynchronous in modern Node, which truncates cbor.Encoder.prototype._encodeAll
+// when using pipe(NoFilter) synchronously. We ensure synchronous delivery via direct 'data' events.
+if (cbor.Encoder && cbor.Encoder.prototype && !cbor.Encoder.prototype._node26Patched) {
+  cbor.Encoder.prototype._encodeAll = function(objs) {
+    const bufs = [];
+    this.on('data', b => bufs.push(b));
+    for (const o of objs) {
+      this.pushAny(o);
+    }
+    this.end();
+    return Buffer.concat(bufs);
+  };
+  cbor.Encoder.prototype._node26Patched = true;
+}
+
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');

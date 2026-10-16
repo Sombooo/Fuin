@@ -37,6 +37,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "services/**/*",
       "sync-v2.js",
       "sync-v2-crypto.js",
       "sync-v2-payload.js",

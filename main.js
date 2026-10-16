@@ -67,19 +67,20 @@ function createWindow() {
     },
   });
   mainWindow.setContentProtection(true); // Ekran görüntüsü ve ekran kaydı alınmasını engeller (Siyah ekran verir)
+  mainWindow.webContents?.on?.('will-navigate', (e) => e.preventDefault());
+  mainWindow.webContents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   
   mainWindow.on('minimize', () => {
     if (IDLE_LOCK_SECONDS > 0) {
-      mainWindow.webContents.send('force-lock', 'minimized');
-      isUnlocked = false;
+      triggerForceLock('minimized');
     }
   });
 
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
-      mainWindow.webContents.send('force-lock');
+      triggerForceLock('closed');
       mainWindow.hide();
     }
   });
@@ -145,7 +146,7 @@ function createTray() {
   
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Göster', click: () => { if (mainWindow) mainWindow.show(); } },
-    { label: 'Kilitle', click: () => { if (mainWindow) mainWindow.webContents.send('force-lock'); } },
+    { label: 'Kilitle', click: () => { triggerForceLock('tray'); } },
     { type: 'separator' },
     { label: 'Çıkış', click: () => { isQuitting = true; app.quit(); } }
   ]);
@@ -928,7 +929,16 @@ ipcMain.handle('open-sync-window', async (event, { syncPassword, entries }) => {
     sendToWindow('sync-error', 'SYNC_V2: Vault is locked or no authoritative vault session active');
     return false;
   }
-  if (!syncPassword || typeof syncPassword !== 'string' || syncPassword.trim().length === 0) {
+  let effectivePassword = syncPassword;
+  if (!effectivePassword || effectivePassword === '__PAIRED_DEVICE__' || effectivePassword === 'paired') {
+    try {
+      const pm = getPairingManager();
+      if (pm && Array.isArray(pm.pairedDevices) && pm.pairedDevices.length > 0 && pm.pairedDevices[0].pairKeyHex) {
+        effectivePassword = pm.pairedDevices[0].pairKeyHex;
+      }
+    } catch {}
+  }
+  if (!effectivePassword || typeof effectivePassword !== 'string' || effectivePassword.trim().length === 0) {
     sendToWindow('sync-error', 'SYNC_V2: syncPassword is required and must be non-empty');
     return false;
   }
@@ -971,7 +981,7 @@ ipcMain.handle('open-sync-window', async (event, { syncPassword, entries }) => {
       throw new Error('SYNC_V2: Integrity violation — submitted entries do not match authoritative vault snapshot');
     }
 
-    const result = await syncV2.buildV2QRChunks(entryArray, syncPassword);
+    const result = await syncV2.buildV2QRChunks(entryArray, effectivePassword);
     sendToWindow('sync-chunks-ready', {
       // Send V2 QR strings. The renderer renders each string directly as QR.
       chunks: result.qrChunks.map((qr, i) => ({
@@ -1268,10 +1278,29 @@ ipcMain.handle('load-master-enc', () => {
 ipcMain.handle('full-reset', () => {
   syncV2.cancelSyncSession();
   clearAuthoritativeVaultSession();
+  if (_ephemeralLanServer) {
+    try { _ephemeralLanServer.stop('full-reset'); } catch {}
+  }
+  if (_pairingManager && typeof _pairingManager.clearAll === 'function') {
+    try { _pairingManager.clearAll(); } catch {}
+  }
+  const userDataDir = app.getPath('userData');
   try { if (fs.existsSync(DATA_FILE))       fs.unlinkSync(DATA_FILE);       } catch {}
   try { if (fs.existsSync(RECOVERY_FILE))   fs.unlinkSync(RECOVERY_FILE);   } catch {}
   try { if (fs.existsSync(MASTER_ENC_FILE)) fs.unlinkSync(MASTER_ENC_FILE); } catch {}
   try { if (fs.existsSync(RECOVERY_STATUS_FILE)) fs.unlinkSync(RECOVERY_STATUS_FILE); } catch {}
+  try {
+    const touchIdFile = path.join(userDataDir, 'fuin.touchid.enc');
+    if (fs.existsSync(touchIdFile)) fs.unlinkSync(touchIdFile);
+  } catch {}
+  try {
+    const lockoutFile = path.join(userDataDir, 'fuin.lockout');
+    if (fs.existsSync(lockoutFile)) fs.unlinkSync(lockoutFile);
+  } catch {}
+  try {
+    const backupDir = path.join(userDataDir, 'backups');
+    if (fs.existsSync(backupDir)) fs.rmSync(backupDir, { recursive: true, force: true });
+  } catch {}
   return true;
 });
 
@@ -1523,6 +1552,10 @@ function startExtensionBridge() {
     let buf = '';
     socket.on('data', async (chunk) => {
       buf += chunk.toString('utf8');
+      if (buf.length > 65536) {
+        socket.destroy();
+        return;
+      }
       let nl;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl);

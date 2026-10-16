@@ -245,8 +245,15 @@ function normalizeEntry(entry) {
 
   const isDeleted = deletedAt !== null;
 
-  return {
-    ...entry,
+  const safeBase = {};
+  for (const [k, v] of Object.entries(entry)) {
+    if (k !== '__proto__' && k !== 'constructor' && k !== 'prototype') {
+      safeBase[k] = v;
+    }
+  }
+
+  const sanitized = {
+    ...safeBase,
     id,
     updatedAt,
     updated: updatedAt,
@@ -254,6 +261,7 @@ function normalizeEntry(entry) {
     isDeleted,
     history: Array.isArray(entry.history) ? [...entry.history] : []
   };
+  return sanitized;
 }
 
 /**
@@ -494,11 +502,48 @@ class PairingManager {
     return newId;
   }
 
+  _getSafeStorage() {
+    try {
+      const electron = require('electron');
+      if (electron && electron.safeStorage && typeof electron.safeStorage.isEncryptionAvailable === 'function') {
+        if (electron.safeStorage.isEncryptionAvailable()) {
+          return electron.safeStorage;
+        }
+      }
+    } catch {}
+    return null;
+  }
+
+  _serializeProtected(data) {
+    const jsonStr = JSON.stringify(data, null, 2);
+    const ss = this._getSafeStorage();
+    if (ss) {
+      try {
+        const encBuf = ss.encryptString(jsonStr);
+        return JSON.stringify({ safeStorage: true, payload: encBuf.toString('base64') });
+      } catch {}
+    }
+    return jsonStr;
+  }
+
+  _deserializeProtected(raw) {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.safeStorage === true && typeof parsed.payload === 'string') {
+      const ss = this._getSafeStorage();
+      if (ss) {
+        const decStr = ss.decryptString(Buffer.from(parsed.payload, 'base64'));
+        return JSON.parse(decStr);
+      }
+      return null;
+    }
+    return parsed;
+  }
+
   _loadDevices() {
     try {
       if (fs.existsSync(this.devicesFilePath)) {
         const raw = fs.readFileSync(this.devicesFilePath, 'utf8');
-        const parsed = JSON.parse(raw);
+        const parsed = this._deserializeProtected(raw);
         if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
@@ -506,7 +551,7 @@ class PairingManager {
   }
 
   _saveDevices() {
-    writeAtomicSync(this.devicesFilePath, JSON.stringify(this.pairedDevices, null, 2), { mode: 0o600 });
+    writeAtomicSync(this.devicesFilePath, this._serializeProtected(this.pairedDevices), { mode: 0o600 });
   }
 
   _loadPendingPairings() {
@@ -514,7 +559,7 @@ class PairingManager {
     try {
       if (fs.existsSync(this.pendingFilePath)) {
         const raw = fs.readFileSync(this.pendingFilePath, 'utf8');
-        const parsed = JSON.parse(raw);
+        const parsed = this._deserializeProtected(raw);
         if (Array.isArray(parsed)) {
           const now = Date.now();
           for (const item of parsed) {
@@ -531,8 +576,16 @@ class PairingManager {
   _savePendingPairings() {
     try {
       const arr = Array.from(this.pendingPairings.values());
-      writeAtomicSync(this.pendingFilePath, JSON.stringify(arr, null, 2), { mode: 0o600 });
+      writeAtomicSync(this.pendingFilePath, this._serializeProtected(arr), { mode: 0o600 });
     } catch {}
+  }
+
+  clearAll() {
+    this.pairedDevices = [];
+    this.pendingPairings.clear();
+    try { if (fs.existsSync(this.devicesFilePath)) fs.unlinkSync(this.devicesFilePath); } catch {}
+    try { if (fs.existsSync(this.pendingFilePath)) fs.unlinkSync(this.pendingFilePath); } catch {}
+    try { if (fs.existsSync(this.deviceIdFilePath)) fs.unlinkSync(this.deviceIdFilePath); } catch {}
   }
 
   getDesktopDeviceId() {
@@ -732,6 +785,7 @@ class EphemeralServer {
     this.port = null;
     this.timeoutTimer = null;
     this.activeSockets = new Set();
+    this.usedNonces = new Set();
     this.isRunning = false;
     this.startedAt = null;
     this.onCloseCallbacks = new Set();
@@ -839,6 +893,7 @@ class EphemeralServer {
       try { socket.destroy(); } catch {}
     }
     this.activeSockets.clear();
+    this.usedNonces.clear();
 
     if (this.server) {
       await new Promise(resolve => {
@@ -911,9 +966,82 @@ class EphemeralServer {
   }
 
   async _handlePairRequest(body, res) {
-    const { deviceId, deviceName, pairKeyHex } = body;
+    const { deviceId, deviceName, pairKeyHex, nonce, ciphertext } = body;
+
+    // Path A: AEAD-encrypted pairing proof (Zero-knowledge key confirmation over HTTP)
+    if (nonce && ciphertext) {
+      if (!deviceId || typeof nonce !== 'string' || typeof ciphertext !== 'string') {
+        this._sendJson(res, 400, { error: 'Malformed encrypted pair request' });
+        return;
+      }
+      if (this.usedNonces.has(nonce)) {
+        this._sendJson(res, 400, { error: 'Pair request replay detected (nonce already used)' });
+        return;
+      }
+
+      let matchedKeyHex = null;
+      let decryptedProof = null;
+
+      // 1. Check pending pairings
+      for (const [keyHex] of this.pairingManager.pendingPairings.entries()) {
+        try {
+          decryptedProof = decryptLanPayload({ nonce, ciphertext }, Buffer.from(keyHex, 'hex'));
+          matchedKeyHex = keyHex;
+          break;
+        } catch {}
+      }
+
+      // 2. Check existing paired devices if not in pending
+      if (!matchedKeyHex) {
+        for (const d of this.pairingManager.pairedDevices) {
+          try {
+            decryptedProof = decryptLanPayload({ nonce, ciphertext }, Buffer.from(d.pairKeyHex, 'hex'));
+            matchedKeyHex = d.pairKeyHex;
+            break;
+          } catch {}
+        }
+      }
+
+      if (!matchedKeyHex || !decryptedProof) {
+        this._sendJson(res, 401, { error: 'Unauthorized pairing proof' });
+        return;
+      }
+
+      if (typeof decryptedProof.timestamp === 'number') {
+        if (Math.abs(Date.now() - decryptedProof.timestamp) > 120000) {
+          this._sendJson(res, 400, { error: 'Pair request timestamp expired' });
+          return;
+        }
+      }
+
+      this.usedNonces.add(nonce);
+      const finalDeviceId = decryptedProof.deviceId || deviceId;
+      const finalDeviceName = decryptedProof.deviceName || deviceName || 'Mobil Cihaz';
+      const savedRecord = this.pairingManager.addPairedDevice({
+        deviceId: finalDeviceId,
+        deviceName: finalDeviceName,
+        pairKeyHex: matchedKeyHex
+      });
+
+      this._sendJson(res, 200, {
+        success: true,
+        desktopDeviceId: this.pairingManager.getDesktopDeviceId()
+      });
+
+      if (this.onDevicePaired) {
+        try {
+          this.onDevicePaired({
+            deviceId: savedRecord.deviceId,
+            deviceName: savedRecord.deviceName
+          });
+        } catch {}
+      }
+      return;
+    }
+
+    // Path B: Legacy / direct pairKeyHex fallback
     if (!deviceId || !pairKeyHex) {
-      this._sendJson(res, 400, { error: 'deviceId and pairKeyHex required' });
+      this._sendJson(res, 400, { error: 'deviceId and pairKeyHex (or encrypted proof) required' });
       return;
     }
 
@@ -955,6 +1083,11 @@ class EphemeralServer {
     const { deviceId, nonce, ciphertext, pendingPairKey } = body;
     if (!deviceId || !nonce || !ciphertext) {
       this._sendJson(res, 400, { error: 'Malformed sync packet' });
+      return;
+    }
+
+    if (this.usedNonces.has(nonce)) {
+      this._sendJson(res, 400, { error: 'Sync request replay detected (nonce already used)' });
       return;
     }
 
@@ -1043,6 +1176,17 @@ class EphemeralServer {
       return;
     }
 
+    // Replay attack guard: Validate timestamp freshness (max 120s window)
+    if (decryptedPayload && typeof decryptedPayload.timestamp === 'number') {
+      const timeDelta = Math.abs(Date.now() - decryptedPayload.timestamp);
+      if (timeDelta > 120000) {
+        this._sendJson(res, 400, { error: 'Sync request timestamp expired (replay protection)' });
+        return;
+      }
+    }
+
+    this.usedNonces.add(nonce);
+
     // Determine the unique mobile device identifier:
     // 1. Prefer explicit mobileDeviceId from client
     // 2. If client passed a deviceId distinct from this desktop's own ID, use that
@@ -1055,12 +1199,20 @@ class EphemeralServer {
 
     // If this was a pending pairing, officially finalize it now that authentication succeeded
     if (pendingKeyHexToFinalize) {
-      this.pairingManager.addPairedDevice({
+      const savedRecord = this.pairingManager.addPairedDevice({
         deviceId: mobileId,
         deviceName: body.deviceName || 'Mobil Cihaz',
         pairKeyHex: pendingKeyHexToFinalize
       });
       matchedDeviceId = mobileId;
+      if (this.onDevicePaired) {
+        try {
+          this.onDevicePaired({
+            deviceId: savedRecord.deviceId,
+            deviceName: savedRecord.deviceName
+          });
+        } catch {}
+      }
     }
 
     if (!decryptedPayload || !Array.isArray(decryptedPayload.entries)) {

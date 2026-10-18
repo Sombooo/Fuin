@@ -241,6 +241,12 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked }) {
         const matches = await relayToRenderer(getMainWindow, 'ext-lookup-request', { domain: msg.domain });
         reply({ id: msg.id, matches });
       } else if (msg.type === 'reveal') {
+        const win = getMainWindow();
+        if (win && !win.isDestroyed()) {
+          if (win.isMinimized()) win.restore();
+          win.show();
+          win.focus();
+        }
         const result = await relayToRenderer(getMainWindow, 'ext-reveal-request', { entryId: msg.entryId, domain: msg.domain });
         reply({ id: msg.id, ...result });
       } else {

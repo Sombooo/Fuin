@@ -57,6 +57,11 @@ const JS_TARGETS = [
   'renderer/modules/syncAnimation.js',
   'renderer/modules/lanSyncController.js',
   'renderer/modules/recoveryController.js',
+  'browser-extension/background.js',
+  'browser-extension/content.js',
+  'browser-extension/popup.js',
+  'native-host/host.js',
+  'native-host/install-host.js',
 ];
 
 console.log('[1. JavaScript Syntax & VM Compilation]');
@@ -70,7 +75,16 @@ for (const relPath of JS_TARGETS) {
 }
 
 console.log('\n[2. Top-Level Const Reassignment Guard (no-const-assign)]');
-for (const relPath of ['main.js', 'preload.js', 'renderer/app.js', 'sync-lan.js']) {
+for (const relPath of [
+  'main.js',
+  'preload.js',
+  'renderer/app.js',
+  'sync-lan.js',
+  'browser-extension/background.js',
+  'browser-extension/content.js',
+  'browser-extension/popup.js',
+  'native-host/host.js',
+]) {
   check(`No top-level const reassignment in ${relPath}`, () => {
     const fullPath = path.join(ROOT, relPath);
     const lines = fs.readFileSync(fullPath, 'utf8').split('\n');

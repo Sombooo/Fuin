@@ -98,7 +98,7 @@ function forwardToFuin(request, cb) {
   });
   socket.on('error', () => cb({ error: 'fuin-not-running' }));
   socket.on('timeout', () => { socket.destroy(); cb({ error: 'timeout' }); });
-  socket.setTimeout(10000);
+  socket.setTimeout(32000);
 }
 
 readMessages((msg) => {

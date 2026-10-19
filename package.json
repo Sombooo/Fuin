@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "lint": "node scripts/check-static.js",
-    "test": "node scripts/check-static.js && node test_remediation_suite.js && node test_challenger_ui_polish.js",
+    "test": "node scripts/check-static.js && node test_remediation_suite.js && node test_challenger_ui_polish.js && node test_browser_extension_security_deep.js",
     "package": "electron-builder --dir",
     "build-mac": "electron-builder --mac",
     "build-win": "electron-builder --win --x64",

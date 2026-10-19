@@ -12,14 +12,30 @@ const HOST_NAME = 'com.fuin.nativehost';
 
 function askFuin(payload) {
   return new Promise((resolve) => {
-    chrome.runtime.sendNativeMessage(HOST_NAME, payload, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error('[Fuin] Native messaging hatası:', chrome.runtime.lastError.message);
-        resolve({ error: 'native-host-unreachable', detail: chrome.runtime.lastError.message });
-        return;
+    const api = typeof browser !== 'undefined' && browser.runtime?.sendNativeMessage ? browser : chrome;
+    let resolved = false;
+    const safeResolve = (val) => {
+      if (!resolved) {
+        resolved = true;
+        resolve(val);
       }
-      resolve(response || { error: 'empty-response' });
-    });
+    };
+    try {
+      const p = api.runtime.sendNativeMessage(HOST_NAME, payload, (response) => {
+        if (chrome.runtime?.lastError) {
+          console.error('[Fuin] Native messaging hatası:', chrome.runtime.lastError.message);
+          safeResolve({ error: 'native-host-unreachable', detail: chrome.runtime.lastError.message });
+          return;
+        }
+        safeResolve(response || { error: 'empty-response' });
+      });
+      if (p && typeof p.then === 'function') {
+        p.then(res => safeResolve(res || { error: 'empty-response' }))
+         .catch(err => safeResolve({ error: 'native-host-unreachable', detail: err?.message || String(err) }));
+      }
+    } catch (err) {
+      safeResolve({ error: 'native-host-unreachable', detail: err?.message || String(err) });
+    }
   });
 }
 
@@ -30,7 +46,7 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (pendingReveal && pendingReveal.tabId === tabId) {
         const urlChanged = changeInfo.url && changeInfo.url !== pendingReveal.url;
-        const loadingNew = changeInfo.status === 'loading' && tab?.url && tab.url !== pendingReveal.url;
+        const loadingNew = changeInfo.status === 'loading' && (!tab?.url || tab.url !== pendingReveal.url);
         if (urlChanged || loadingNew) {
           pendingReveal.cancelled = true;
           try { pendingReveal.sendResponse({ error: 'navigation-cancelled' }); } catch {}
@@ -64,8 +80,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Content script'lerden gelen mesajlar
   if (!sender.tab?.url) return;
+
+  // Güvenlik: Yalnızca en üst pencereden (top frame) gelen mesajları kabul et.
+  // Alt iframelerden (subframe) gelen istekler domain taklidi riskine karşı engellenir.
+  if (sender.frameId !== undefined && sender.frameId !== 0) return;
+
   let actualDomain;
-  try { actualDomain = new URL(sender.tab.url).hostname; } catch { return; }
+  try {
+    const parsedTabUrl = new URL(sender.tab.url);
+    if (sender.url) {
+      const parsedSenderUrl = new URL(sender.url);
+      if (parsedSenderUrl.origin !== parsedTabUrl.origin) return;
+    }
+    actualDomain = parsedTabUrl.hostname;
+  } catch { return; }
 
   if (msg.type === 'fuin-lookup') {
     askFuin({ type: 'lookup', domain: actualDomain }).then(sendResponse);

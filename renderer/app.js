@@ -970,7 +970,10 @@ async function checkPwned(pw) {
   const h=await sha1hex(pw);
   const pre=h.slice(0,5),suf=h.slice(5);
   try {
-    const r=await fetch(`https://api.pwnedpasswords.com/range/${pre}`,{headers:{'Add-Padding':'true'}});
+    const r = await fetch(`https://api.pwnedpasswords.com/range/${pre}`, {
+      cache: 'no-store',
+      headers: { 'Add-Padding': 'true' }
+    });
     if(!r.ok)return -1;
     for(const line of (await r.text()).split('\n')){
       const [hh,c]=line.trim().split(':');

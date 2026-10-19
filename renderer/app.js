@@ -1743,8 +1743,19 @@ if (api.onLanSyncApplied) {
     document.getElementById('pairOverlay')?.classList.remove('open');
 
     try {
+      const seenCreds = new Set();
+      const dedupedMerged = [];
+      for (const e of (Array.isArray(merged) ? merged : [])) {
+        const site = (e.site || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+        const user = (e.username || '').trim().toLowerCase();
+        const key = site ? `${site}||${user}` : (e.id || '');
+        if (key && seenCreds.has(key)) continue;
+        if (key) seenCreds.add(key);
+        dedupedMerged.push(e);
+      }
+
       entries = await Promise.all(
-        merged.map(async e => ({
+        dedupedMerged.map(async e => ({
           ...e,
           password: await memEncrypt(e.password),
           totp: await memEncrypt(e.totp)

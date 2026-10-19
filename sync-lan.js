@@ -353,27 +353,75 @@ function areCoreFieldsEqual(a, b) {
  * @param {Array<object>} remoteEntries
  * @returns {{ mergedEntries: Array<object>, stats: object }}
  */
+function normalizeSite(s) {
+  return (s || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+}
+
+function getCredentialKey(e) {
+  if (!e) return '';
+  const site = normalizeSite(e.site);
+  const user = (e.username || '').trim().toLowerCase();
+  return site ? `${site}||${user}` : '';
+}
+
 function mergeVaultEntries(localEntries, remoteEntries) {
   const normLocal = (Array.isArray(localEntries) ? localEntries : []).map(normalizeEntry).filter(Boolean);
   const normRemote = (Array.isArray(remoteEntries) ? remoteEntries : []).map(normalizeEntry).filter(Boolean);
 
   const localMap = new Map();
+  const localKeyMap = new Map();
   for (const e of normLocal) {
+    const credKey = getCredentialKey(e);
+    if (credKey && localKeyMap.has(credKey)) {
+      const existingId = localKeyMap.get(credKey);
+      const existing = localMap.get(existingId);
+      if (existing && e.updatedAt > existing.updatedAt) {
+        localMap.delete(existingId);
+        localMap.set(e.id, e);
+        localKeyMap.set(credKey, e.id);
+      }
+      continue;
+    }
+
     if (localMap.has(e.id)) {
       const prev = localMap.get(e.id);
       if (e.updatedAt > prev.updatedAt) localMap.set(e.id, e);
     } else {
       localMap.set(e.id, e);
+      if (credKey) localKeyMap.set(credKey, e.id);
     }
   }
 
   const remoteMap = new Map();
+  const remoteKeyMap = new Map();
   for (const e of normRemote) {
+    const credKey = getCredentialKey(e);
+    if (credKey && remoteKeyMap.has(credKey)) {
+      const existingId = remoteKeyMap.get(credKey);
+      const existing = remoteMap.get(existingId);
+      if (existing && e.updatedAt > existing.updatedAt) {
+        remoteMap.delete(existingId);
+        remoteMap.set(e.id, e);
+        remoteKeyMap.set(credKey, e.id);
+      }
+      continue;
+    }
+
+    // Semantic match: if remote entry matches a local credential by site+username with different ID, unify ID!
+    if (credKey && localKeyMap.has(credKey) && !localMap.has(e.id)) {
+      const matchedLocalId = localKeyMap.get(credKey);
+      const unifiedEntry = { ...e, id: matchedLocalId };
+      remoteMap.set(matchedLocalId, unifiedEntry);
+      remoteKeyMap.set(credKey, matchedLocalId);
+      continue;
+    }
+
     if (remoteMap.has(e.id)) {
       const prev = remoteMap.get(e.id);
       if (e.updatedAt > prev.updatedAt) remoteMap.set(e.id, e);
     } else {
       remoteMap.set(e.id, e);
+      if (credKey) remoteKeyMap.set(credKey, e.id);
     }
   }
 

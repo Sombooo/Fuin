@@ -920,6 +920,9 @@ class EphemeralServer {
       res.writeHead(statusCode, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
         'Connection': 'close'
       });
       res.end(payload);
@@ -928,6 +931,18 @@ class EphemeralServer {
 
   _handleRequest(req, res) {
     req.on('error', () => {});
+
+    // Handle OPTIONS preflight
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Connection': 'close'
+      });
+      res.end();
+      return;
+    }
 
     // Only accept POST requests
     if (req.method !== 'POST') {

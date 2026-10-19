@@ -128,7 +128,7 @@
       msg.textContent = 'Kontrol edilemedi. İnternet bağlantısını kontrol edin veya depo adresini ayarlayın.';
     } finally {
       btn.disabled = false;
-      btn.textContent = t('sysUpdateCheckBtn') || 'Güncellemeleri Denetle';
+      btn.textContent = t('sysUpdateBtn') || 'Şimdi Denetle';
     }
   }
 

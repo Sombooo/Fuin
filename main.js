@@ -66,7 +66,13 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
-  mainWindow.setContentProtection(true); // Ekran görüntüsü ve ekran kaydı alınmasını engeller (Siyah ekran verir)
+  // Ekran koruması: Casus yazılımlara ve ekran kaydına karşı koruma (Siyah ekran verir).
+  const DEV_ALLOW_SCREENSHOTS = false;
+  if (app.isPackaged && !DEV_ALLOW_SCREENSHOTS) {
+    mainWindow.setContentProtection(true);
+  } else {
+    mainWindow.setContentProtection(false);
+  }
   mainWindow.webContents?.on?.('will-navigate', (e) => e.preventDefault());
   mainWindow.webContents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -605,27 +611,25 @@ async function deriveVaultKey(passwordStr, vaultSalt, bindHardware = false) {
 
   let key;
 
-  if (argon2) {
-    try {
-      const raw = await argon2.hash(pwBuf, {
-        type: argon2.argon2id, salt: actualSalt,
-        memoryCost: 131072, timeCost: 4, parallelism: 1,
-        hashLength: 32, raw: true,
-      });
-      key = Buffer.from(raw);
-      secureBuffer(key);
-      raw.fill(0);
-    } catch { key = null; }
+  if (!argon2) {
+    unsecureBuffer(pwBuf);
+    pwBuf.fill(0);
+    throw new Error('CRITICAL: Argon2 native module is unavailable; refusing insecure KDF downgrade.');
   }
 
-  if (!key) {
-    key = await new Promise((res, rej) =>
-      crypto.pbkdf2(pwBuf, actualSalt, 310000, 32, 'sha512', (e, k) => {
-        if (e) return rej(e);
-        secureBuffer(k);
-        res(k);
-      })
-    );
+  try {
+    const raw = await argon2.hash(pwBuf, {
+      type: argon2.argon2id, salt: actualSalt,
+      memoryCost: 131072, timeCost: 4, parallelism: 1,
+      hashLength: 32, raw: true,
+    });
+    key = Buffer.from(raw);
+    secureBuffer(key);
+    raw.fill(0);
+  } catch (err) {
+    unsecureBuffer(pwBuf);
+    pwBuf.fill(0);
+    throw new Error(`Argon2id key derivation failed: ${err.message}`);
   }
 
   unsecureBuffer(pwBuf);
@@ -666,7 +670,9 @@ function loadLockoutState() {
     const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
     if (!raw.data || !raw.hmac) return { count: 0, until: 0 }; // If corrupted or old format, just reset. Penalizing here causes legitimate users to be locked out if they update from old version!
     const hmac = crypto.createHmac('sha256', machineId || 'fallback').update(raw.data).digest('hex');
-    if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(raw.hmac))) return { count: 0, until: 0 };
+    const hmacBuf = Buffer.from(hmac, 'utf8');
+    const rawHmacBuf = Buffer.from(String(raw.hmac), 'utf8');
+    if (hmacBuf.length !== rawHmacBuf.length || !crypto.timingSafeEqual(hmacBuf, rawHmacBuf)) return { count: 0, until: 0 };
     const data = JSON.parse(raw.data);
     return { count: data.count || 0, until: data.until || 0 };
   } catch { return { count: 0, until: 0 }; }
@@ -908,7 +914,7 @@ ipcMain.handle('open-sync-window', async (event, { syncPassword, entries }) => {
     if (_authoritativeVaultSession.dataFileHash && fs.existsSync(DATA_FILE)) {
       try {
         const currentDiskHash = crypto.createHash('sha256').update(fs.readFileSync(DATA_FILE)).digest('hex');
-        if (currentDiskHash !== _authoritativeVaultSession.dataFileHash) {
+        if (!safeCompare(currentDiskHash, _authoritativeVaultSession.dataFileHash)) {
           throw new Error('SYNC_V2: Authoritative vault file on disk does not match active session state');
         }
       } catch (diskErr) {
@@ -980,6 +986,9 @@ function initLanSync(userDataPath) {
   });
 
   _ephemeralLanServer.onClosed((reason) => {
+    if (Array.isArray(_activeLanEntries)) {
+      _activeLanEntries.length = 0;
+    }
     _activeLanEntries = null;
     if (mainWindow?.webContents) {
       mainWindow.webContents.send('lan-sync-closed', { reason });

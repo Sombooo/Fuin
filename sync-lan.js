@@ -225,15 +225,18 @@ function normalizeEntry(entry) {
   if (!entry || typeof entry !== 'object') return null;
 
   const now = Date.now();
+  const maxAllowedTs = now + 300000; // +5 min clock-skew ceiling (blocks future timestamp poisoning)
   const id = entry.id || (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex'));
 
-  let updatedAt = parseTimestamp(entry.updatedAt) ??
-                  parseTimestamp(entry.updated) ??
-                  parseTimestamp(entry.createdAt) ??
-                  parseTimestamp(entry.created) ??
-                  now;
+  let rawUpdatedAt = parseTimestamp(entry.updatedAt) ??
+                     parseTimestamp(entry.updated) ??
+                     parseTimestamp(entry.createdAt) ??
+                     parseTimestamp(entry.created) ??
+                     now;
+  let updatedAt = Math.min(rawUpdatedAt, maxAllowedTs);
 
-  let deletedAt = parseTimestamp(entry.deletedAt);
+  let rawDeletedAt = parseTimestamp(entry.deletedAt);
+  let deletedAt = rawDeletedAt !== null ? Math.min(rawDeletedAt, maxAllowedTs) : null;
   if (deletedAt === null && entry.isDeleted) {
     deletedAt = updatedAt;
   }
@@ -358,10 +361,10 @@ function normalizeSite(s) {
 }
 
 function getCredentialKey(e) {
-  if (!e) return '';
+  if (!e || e.isDeleted || e.deletedAt) return '';
   const site = normalizeSite(e.site);
   const user = (e.username || '').trim().toLowerCase();
-  return site ? `${site}||${user}` : '';
+  return (site && user) ? `${site}||${user}` : '';
 }
 
 function mergeVaultEntries(localEntries, remoteEntries) {
@@ -530,9 +533,9 @@ class PairingManager {
     this.devicesFilePath = path.join(userDataPath, 'fuin.paired-devices.json');
     this.pendingFilePath = path.join(userDataPath, 'fuin.pending-pairings.json');
     this.deviceIdFilePath = path.join(userDataPath, 'fuin.device-id');
+    this.desktopDeviceId = this._loadOrGenerateDeviceId();
     this.pairedDevices = this._loadDevices();
     this.pendingPairings = this._loadPendingPairings();
-    this.desktopDeviceId = this._loadOrGenerateDeviceId();
   }
 
   _loadOrGenerateDeviceId() {
@@ -562,6 +565,11 @@ class PairingManager {
     return null;
   }
 
+  _deriveLocalFallbackKey() {
+    const devId = this.getDesktopDeviceId() || 'fuin-desktop-default';
+    return crypto.scryptSync(devId, 'FUIN_LOCAL_PAIRING_STORE_V1', 32);
+  }
+
   _serializeProtected(data) {
     const jsonStr = JSON.stringify(data, null, 2);
     const ss = this._getSafeStorage();
@@ -571,7 +579,19 @@ class PairingManager {
         return JSON.stringify({ safeStorage: true, payload: encBuf.toString('base64') });
       } catch {}
     }
-    return jsonStr;
+    // Fallback encryption (AES-256-GCM) when OS keyring / safeStorage is unavailable
+    const key = this._deriveLocalFallbackKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const enc = Buffer.concat([cipher.update(Buffer.from(jsonStr, 'utf8')), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    key.fill(0);
+    return JSON.stringify({
+      localEncrypted: true,
+      iv: iv.toString('base64'),
+      tag: tag.toString('base64'),
+      payload: enc.toString('base64')
+    });
   }
 
   _deserializeProtected(raw) {
@@ -583,6 +603,26 @@ class PairingManager {
         return JSON.parse(decStr);
       }
       return null;
+    }
+    if (
+      parsed &&
+      parsed.localEncrypted === true &&
+      typeof parsed.iv === 'string' &&
+      typeof parsed.tag === 'string' &&
+      typeof parsed.payload === 'string'
+    ) {
+      const key = this._deriveLocalFallbackKey();
+      try {
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(parsed.iv, 'base64'));
+        decipher.setAuthTag(Buffer.from(parsed.tag, 'base64'));
+        const dec = Buffer.concat([
+          decipher.update(Buffer.from(parsed.payload, 'base64')),
+          decipher.final()
+        ]);
+        return JSON.parse(dec.toString('utf8'));
+      } finally {
+        key.fill(0);
+      }
     }
     return parsed;
   }
@@ -816,6 +856,24 @@ class PairingManager {
 }
 
 // ── EPHEMERAL LOCAL TRANSPORT SERVER (R2) ─────────────────────────────────────
+// Cross-session nonce replay cache (persists across EphemeralServer restarts for 5 minutes)
+const _globalUsedNonces = new Map();
+const NONCE_REPLAY_TTL_MS = 5 * 60 * 1000;
+
+function _hasUsedNonce(nonce) {
+  const now = Date.now();
+  for (const [k, ts] of _globalUsedNonces.entries()) {
+    if (now - ts > NONCE_REPLAY_TTL_MS) {
+      _globalUsedNonces.delete(k);
+    }
+  }
+  return _globalUsedNonces.has(nonce);
+}
+
+function _recordUsedNonce(nonce) {
+  _globalUsedNonces.set(nonce, Date.now());
+}
+
 class EphemeralServer {
   /**
    * @param {object} options
@@ -833,7 +891,11 @@ class EphemeralServer {
     this.port = null;
     this.timeoutTimer = null;
     this.activeSockets = new Set();
-    this.usedNonces = new Set();
+    this.usedNonces = {
+      has: (n) => _hasUsedNonce(n),
+      add: (n) => _recordUsedNonce(n),
+      clear: () => {} // Retain nonces across server restarts within TTL window to prevent cross-session replay
+    };
     this.isRunning = false;
     this.startedAt = null;
     this.onCloseCallbacks = new Set();
@@ -968,9 +1030,6 @@ class EphemeralServer {
       res.writeHead(statusCode, {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
         'Connection': 'close'
       });
       res.end(payload);
@@ -980,39 +1039,34 @@ class EphemeralServer {
   _handleRequest(req, res) {
     req.on('error', () => {});
 
-    // Handle OPTIONS preflight
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Connection': 'close'
-      });
-      res.end();
-      return;
-    }
-
-    // Only accept POST requests
+    // Reject browser cross-origin preflights and non-POST requests (no wildcard CORS)
     if (req.method !== 'POST') {
       res.writeHead(405, { 'Connection': 'close' });
       res.end('Method Not Allowed');
       return;
     }
 
-    let body = '';
+    const chunks = [];
+    let totalBytes = 0;
     let destroyed = false;
     req.on('data', chunk => {
-      body += chunk;
-      if (body.length > 5 * 1024 * 1024) { // 5MB guard
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buf.length;
+      if (totalBytes > 5 * 1024 * 1024) { // Strict 5MB byte guard
         destroyed = true;
+        chunks.length = 0;
         req.destroy();
+        return;
       }
+      chunks.push(buf);
     });
 
     req.on('end', async () => {
       if (destroyed) return;
       try {
-        const parsed = JSON.parse(body || '{}');
+        const bodyStr = Buffer.concat(chunks, totalBytes).toString('utf8');
+        chunks.length = 0;
+        const parsed = JSON.parse(bodyStr || '{}');
 
         if (req.url === '/pair') {
           await this._handlePairRequest(parsed, res);
@@ -1029,107 +1083,94 @@ class EphemeralServer {
   }
 
   async _handlePairRequest(body, res) {
-    const { deviceId, deviceName, pairKeyHex, nonce, ciphertext } = body;
+    const { deviceId, deviceName, nonce, ciphertext } = body;
 
-    // Path A: AEAD-encrypted pairing proof (Zero-knowledge key confirmation over HTTP)
-    if (nonce && ciphertext) {
-      if (!deviceId || typeof nonce !== 'string' || typeof ciphertext !== 'string') {
-        this._sendJson(res, 400, { error: 'Malformed encrypted pair request' });
-        return;
+    // Require AEAD-encrypted pairing proof (Zero-knowledge key confirmation over HTTP)
+    if (!deviceId || typeof nonce !== 'string' || typeof ciphertext !== 'string') {
+      this._sendJson(res, 400, { error: 'Malformed encrypted pair request' });
+      return;
+    }
+
+    let matchedKeyHex = null;
+    let decryptedProof = null;
+
+    // 1. Check pending pairings
+    for (const [keyHex] of this.pairingManager.pendingPairings.entries()) {
+      const keyBuf = Buffer.from(keyHex, 'hex');
+      try {
+        decryptedProof = decryptLanPayload({ nonce, ciphertext }, keyBuf);
+        matchedKeyHex = keyHex;
+        break;
+      } catch {} finally {
+        keyBuf.fill(0);
       }
-      if (this.usedNonces.has(nonce)) {
-        this._sendJson(res, 400, { error: 'Pair request replay detected (nonce already used)' });
-        return;
-      }
+    }
 
-      let matchedKeyHex = null;
-      let decryptedProof = null;
-
-      // 1. Check pending pairings
-      for (const [keyHex] of this.pairingManager.pendingPairings.entries()) {
+    // 2. Check existing paired devices if not in pending
+    if (!matchedKeyHex) {
+      for (const d of this.pairingManager.pairedDevices) {
+        const keyBuf = Buffer.from(d.pairKeyHex, 'hex');
         try {
-          decryptedProof = decryptLanPayload({ nonce, ciphertext }, Buffer.from(keyHex, 'hex'));
-          matchedKeyHex = keyHex;
+          decryptedProof = decryptLanPayload({ nonce, ciphertext }, keyBuf);
+          matchedKeyHex = d.pairKeyHex;
           break;
-        } catch {}
-      }
-
-      // 2. Check existing paired devices if not in pending
-      if (!matchedKeyHex) {
-        for (const d of this.pairingManager.pairedDevices) {
-          try {
-            decryptedProof = decryptLanPayload({ nonce, ciphertext }, Buffer.from(d.pairKeyHex, 'hex'));
-            matchedKeyHex = d.pairKeyHex;
-            break;
-          } catch {}
+        } catch {} finally {
+          keyBuf.fill(0);
         }
       }
+    }
 
-      if (!matchedKeyHex || !decryptedProof) {
-        this._sendJson(res, 401, { error: 'Unauthorized pairing proof' });
+    if (!matchedKeyHex || !decryptedProof) {
+      this._sendJson(res, 401, { error: 'Unauthorized pairing proof' });
+      return;
+    }
+
+    if (this.usedNonces.has(nonce)) {
+      this._sendJson(res, 400, { error: 'Pair request replay detected (nonce already used)' });
+      return;
+    }
+
+    if (decryptedProof.direction === 'response' || decryptedProof.action === 'pair-ack') {
+      this._sendJson(res, 400, { error: 'Invalid pair packet direction (reflection detected)' });
+      return;
+    }
+
+    if (typeof decryptedProof.timestamp === 'number') {
+      if (Math.abs(Date.now() - decryptedProof.timestamp) > 120000) {
+        this._sendJson(res, 400, { error: 'Pair request timestamp expired' });
         return;
       }
-
-      if (typeof decryptedProof.timestamp === 'number') {
-        if (Math.abs(Date.now() - decryptedProof.timestamp) > 120000) {
-          this._sendJson(res, 400, { error: 'Pair request timestamp expired' });
-          return;
-        }
-      }
-
-      this.usedNonces.add(nonce);
-      const finalDeviceId = decryptedProof.deviceId || deviceId;
-      const finalDeviceName = decryptedProof.deviceName || deviceName || 'Mobil Cihaz';
-      const savedRecord = this.pairingManager.addPairedDevice({
-        deviceId: finalDeviceId,
-        deviceName: finalDeviceName,
-        pairKeyHex: matchedKeyHex
-      });
-
-      this._sendJson(res, 200, {
-        success: true,
-        desktopDeviceId: this.pairingManager.getDesktopDeviceId()
-      });
-
-      if (this.onDevicePaired) {
-        try {
-          this.onDevicePaired({
-            deviceId: savedRecord.deviceId,
-            deviceName: savedRecord.deviceName
-          });
-        } catch {}
-      }
-      return;
     }
 
-    // Path B: Legacy / direct pairKeyHex fallback
-    if (!deviceId || !pairKeyHex) {
-      this._sendJson(res, 400, { error: 'deviceId and pairKeyHex (or encrypted proof) required' });
-      return;
+    this.usedNonces.add(nonce);
+    const finalDeviceId = decryptedProof.deviceId || deviceId;
+    const finalDeviceName = decryptedProof.deviceName || deviceName || 'Mobil Cihaz';
+    const savedRecord = this.pairingManager.addPairedDevice({
+      deviceId: finalDeviceId,
+      deviceName: finalDeviceName,
+      pairKeyHex: matchedKeyHex
+    });
+
+    const desktopId = this.pairingManager.getDesktopDeviceId();
+    const ackKeyBuf = Buffer.from(matchedKeyHex, 'hex');
+    let responseProof;
+    try {
+      responseProof = encryptLanPayload({
+        action: 'pair-ack',
+        direction: 'response',
+        requestNonce: nonce,
+        desktopDeviceId: desktopId,
+        timestamp: Date.now()
+      }, ackKeyBuf);
+    } finally {
+      ackKeyBuf.fill(0);
     }
 
-    // Validate pairKey length
-    const pairKeyBuf = Buffer.from(pairKeyHex, 'hex');
-    if (pairKeyBuf.length !== PAIR_KEY_LENGTH) {
-      this._sendJson(res, 400, { error: 'Invalid pairKey length' });
-      return;
-    }
-
-    // Check if key is authorized (either in pending pairings or known)
-    let keyBuf = this.pairingManager.getDeviceKey(deviceId);
-    if (!keyBuf && this.pairingManager.pendingPairings.has(pairKeyHex)) {
-      keyBuf = Buffer.from(pairKeyHex, 'hex');
-    }
-
-    if (!keyBuf || !crypto.timingSafeEqual(keyBuf, pairKeyBuf)) {
-      this._sendJson(res, 401, { error: 'Unauthorized pairing key' });
-      return;
-    }
-
-    const savedRecord = this.pairingManager.addPairedDevice({ deviceId, deviceName, pairKeyHex });
     this._sendJson(res, 200, {
       success: true,
-      desktopDeviceId: this.pairingManager.getDesktopDeviceId()
+      desktopDeviceId: desktopId,
+      nonce: responseProof.nonce,
+      ciphertext: responseProof.ciphertext
     });
 
     if (this.onDevicePaired) {
@@ -1143,180 +1184,186 @@ class EphemeralServer {
   }
 
   async _handleSyncRequest(body, res) {
-    const { deviceId, nonce, ciphertext, pendingPairKey } = body;
-    if (!deviceId || !nonce || !ciphertext) {
+    const { deviceId, nonce, ciphertext } = body;
+    if (!deviceId || typeof nonce !== 'string' || typeof ciphertext !== 'string') {
       this._sendJson(res, 400, { error: 'Malformed sync packet' });
-      return;
-    }
-
-    if (this.usedNonces.has(nonce)) {
-      this._sendJson(res, 400, { error: 'Sync request replay detected (nonce already used)' });
       return;
     }
 
     let pairKeyBuf = null;
     let pendingKeyHexToFinalize = null;
     let matchedDeviceId = null;
+    let decryptedPayload = null;
+    let hadKnownDeviceKeyFailure = false;
 
-    // 1. If client presents pendingPairKey and it exists in pending pairings, prioritize it
-    if (pendingPairKey && typeof pendingPairKey === 'string') {
-      const candidateKeyBuf = Buffer.from(pendingPairKey, 'hex');
-      if (candidateKeyBuf.length === PAIR_KEY_LENGTH && this.pairingManager.pendingPairings.has(pendingPairKey)) {
-        pairKeyBuf = candidateKeyBuf;
-        pendingKeyHexToFinalize = pendingPairKey;
-      }
-    }
-
-    // 2. If not specified or not pending, check known confirmed paired devices
-    if (!pairKeyBuf) {
-      const confirmedDevice = this.pairingManager.pairedDevices.find(
-        d => (body.mobileDeviceId && d.deviceId === body.mobileDeviceId) ||
-             (body.deviceId && d.deviceId === body.deviceId)
-      );
-      if (confirmedDevice) {
-        pairKeyBuf = Buffer.from(confirmedDevice.pairKeyHex, 'hex');
+    // 1. Check known confirmed paired devices by explicit deviceId / mobileDeviceId first
+    const confirmedDevice = this.pairingManager.pairedDevices.find(
+      d => (body.mobileDeviceId && d.deviceId === body.mobileDeviceId) ||
+           (body.deviceId && d.deviceId === body.deviceId)
+    );
+    if (confirmedDevice) {
+      const candidateBuf = Buffer.from(confirmedDevice.pairKeyHex, 'hex');
+      try {
+        decryptedPayload = decryptLanPayload({ nonce, ciphertext }, candidateBuf);
+        pairKeyBuf = candidateBuf;
         matchedDeviceId = confirmedDevice.deviceId;
+      } catch {
+        candidateBuf.fill(0);
+        hadKnownDeviceKeyFailure = true;
       }
     }
 
-    // 3. If still not found, check getDeviceKey
+    // 2. If not found, check getDeviceKey
     if (!pairKeyBuf) {
-      pairKeyBuf = this.pairingManager.getDeviceKey(deviceId);
-      if (pairKeyBuf && this.pairingManager.pendingPairings.has(pairKeyBuf.toString('hex'))) {
-        pendingKeyHexToFinalize = pairKeyBuf.toString('hex');
+      const candidateBuf = this.pairingManager.getDeviceKey(deviceId);
+      if (candidateBuf) {
+        try {
+          decryptedPayload = decryptLanPayload({ nonce, ciphertext }, candidateBuf);
+          pairKeyBuf = candidateBuf;
+          const hexStr = candidateBuf.toString('hex');
+          if (this.pairingManager.pendingPairings.has(hexStr)) {
+            pendingKeyHexToFinalize = hexStr;
+          }
+        } catch {
+          candidateBuf.fill(0);
+          hadKnownDeviceKeyFailure = true;
+        }
       }
     }
 
-    // 4. If still not found and pending pairings exist, test candidate pending keys
+    // 3. If still not found and pending pairings exist, test candidate pending keys (single decrypt)
     if (!pairKeyBuf && this.pairingManager.pendingPairings.size > 0) {
       for (const [keyHex] of this.pairingManager.pendingPairings.entries()) {
         const candidateBuf = Buffer.from(keyHex, 'hex');
         try {
-          syncCrypto.syncDecrypt(
-            Buffer.from(ciphertext, 'hex'),
-            candidateBuf,
-            Buffer.from(nonce, 'hex'),
-            LAN_SYNC_AAD
-          );
+          decryptedPayload = decryptLanPayload({ nonce, ciphertext }, candidateBuf);
           pairKeyBuf = candidateBuf;
           pendingKeyHexToFinalize = keyHex;
           break;
-        } catch {}
+        } catch {
+          candidateBuf.fill(0);
+        }
       }
     }
 
-    // 5. If still not found, check if a known paired device matches
+    // 4. If still not found, check if a known paired device matches (single decrypt)
     if (!pairKeyBuf && this.pairingManager.pairedDevices.length > 0) {
       for (const d of this.pairingManager.pairedDevices) {
         const candidateBuf = Buffer.from(d.pairKeyHex, 'hex');
         try {
-          syncCrypto.syncDecrypt(
-            Buffer.from(ciphertext, 'hex'),
-            candidateBuf,
-            Buffer.from(nonce, 'hex'),
-            LAN_SYNC_AAD
-          );
+          decryptedPayload = decryptLanPayload({ nonce, ciphertext }, candidateBuf);
           pairKeyBuf = candidateBuf;
           matchedDeviceId = d.deviceId;
           break;
-        } catch {}
+        } catch {
+          candidateBuf.fill(0);
+        }
       }
     }
 
-    if (!pairKeyBuf) {
-      // Unauthorized device (R2)
-      this._sendJson(res, 401, { error: 'Device not paired or unauthorized' });
+    if (!pairKeyBuf || !decryptedPayload) {
+      if (hadKnownDeviceKeyFailure) {
+        this._sendJson(res, 403, { error: 'Authentication failed (wrong or forged key)' });
+      } else {
+        this._sendJson(res, 401, { error: 'Device not paired or unauthorized' });
+      }
       return;
     }
 
-    // Decrypt using pairKey and XChaCha20-Poly1305
-    let decryptedPayload;
     try {
-      decryptedPayload = decryptLanPayload({ nonce, ciphertext }, pairKeyBuf);
-    } catch (authErr) {
-      // Immediate rejection of wrong / forged key (R2)
-      this._sendJson(res, 403, { error: 'Authentication failed (wrong or forged key)' });
-      return;
-    }
-
-    // Replay attack guard: Validate timestamp freshness (max 120s window)
-    if (decryptedPayload && typeof decryptedPayload.timestamp === 'number') {
-      const timeDelta = Math.abs(Date.now() - decryptedPayload.timestamp);
-      if (timeDelta > 120000) {
-        this._sendJson(res, 400, { error: 'Sync request timestamp expired (replay protection)' });
+      if (this.usedNonces.has(nonce)) {
+        this._sendJson(res, 400, { error: 'Sync request replay detected (nonce already used)' });
         return;
       }
-    }
-
-    this.usedNonces.add(nonce);
-
-    // Determine the unique mobile device identifier:
-    // 1. Prefer explicit mobileDeviceId from client
-    // 2. If client passed a deviceId distinct from this desktop's own ID, use that
-    // 3. Otherwise generate a distinct ID based on the pairing key
-    const mobileId = (body.mobileDeviceId && typeof body.mobileDeviceId === 'string')
-      ? body.mobileDeviceId
-      : (body.deviceId && typeof body.deviceId === 'string')
-        ? body.deviceId
-        : `mobile-${(pendingKeyHexToFinalize || crypto.randomBytes(6).toString('hex')).slice(0, 12)}`;
-
-    // If this was a pending pairing, officially finalize it now that authentication succeeded
-    if (pendingKeyHexToFinalize) {
-      const savedRecord = this.pairingManager.addPairedDevice({
-        deviceId: mobileId,
-        deviceName: body.deviceName || 'Mobil Cihaz',
-        pairKeyHex: pendingKeyHexToFinalize
-      });
-      matchedDeviceId = mobileId;
-      if (this.onDevicePaired) {
-        try {
-          this.onDevicePaired({
-            deviceId: savedRecord.deviceId,
-            deviceName: savedRecord.deviceName
-          });
-        } catch {}
+      // Reject reflected response packets or cross-endpoint pair packets
+      if (
+        decryptedPayload.direction === 'response' ||
+        decryptedPayload.action === 'pair' ||
+        decryptedPayload.action === 'pair-ack'
+      ) {
+        this._sendJson(res, 400, { error: 'Invalid sync packet direction or type (reflection detected)' });
+        return;
       }
-    }
 
-    if (!decryptedPayload || !Array.isArray(decryptedPayload.entries)) {
-      this._sendJson(res, 400, { error: 'Decrypted payload must contain entries array' });
-      return;
-    }
+      // Replay attack guard: Validate timestamp freshness (max 120s window)
+      if (typeof decryptedPayload.timestamp === 'number') {
+        const timeDelta = Math.abs(Date.now() - decryptedPayload.timestamp);
+        if (timeDelta > 120000) {
+          this._sendJson(res, 400, { error: 'Sync request timestamp expired (replay protection)' });
+          return;
+        }
+      }
 
-    // 1. Get current Desktop vault entries
-    const desktopEntries = await Promise.resolve(this.getVaultEntries());
+      this.usedNonces.add(nonce);
 
-    // 2. Perform two-way conflict-free deterministic merge (R3)
-    const { mergedEntries, stats } = mergeVaultEntries(desktopEntries, decryptedPayload.entries);
+      const mobileId = (body.mobileDeviceId && typeof body.mobileDeviceId === 'string')
+        ? body.mobileDeviceId
+        : (body.deviceId && typeof body.deviceId === 'string')
+          ? body.deviceId
+          : `mobile-${(pendingKeyHexToFinalize || crypto.randomBytes(6).toString('hex')).slice(0, 12)}`;
 
-    // 3. Commit merged entries to Desktop vault
-    await Promise.resolve(this.applyMergedEntries(mergedEntries, stats));
+      // If this was a pending pairing, officially finalize it now that authentication succeeded
+      if (pendingKeyHexToFinalize) {
+        const savedRecord = this.pairingManager.addPairedDevice({
+          deviceId: mobileId,
+          deviceName: body.deviceName || 'Mobil Cihaz',
+          pairKeyHex: pendingKeyHexToFinalize
+        });
+        matchedDeviceId = mobileId;
+        if (this.onDevicePaired) {
+          try {
+            this.onDevicePaired({
+              deviceId: savedRecord.deviceId,
+              deviceName: savedRecord.deviceName
+            });
+          } catch {}
+        }
+      }
 
-    // 4. Update device's lastSyncAt
-    this.pairingManager.updateDeviceLastSync(matchedDeviceId || mobileId);
+      if (!Array.isArray(decryptedPayload.entries)) {
+        this._sendJson(res, 400, { error: 'Decrypted payload must contain entries array' });
+        return;
+      }
 
-    // 5. Encrypt merged entries for client response with pairKey
-    const responsePayload = {
-      protocol: PROTOCOL_VERSION,
-      timestamp: Date.now(),
-      entries: mergedEntries,
-      stats: stats
-    };
+      // 1. Get current Desktop vault entries
+      const desktopEntries = await Promise.resolve(this.getVaultEntries());
 
-    const encryptedResponse = encryptLanPayload(responsePayload, pairKeyBuf);
+      // 2. Perform two-way conflict-free deterministic merge (R3)
+      const { mergedEntries, stats } = mergeVaultEntries(desktopEntries, decryptedPayload.entries);
 
-    // 6. Send response
-    this._sendJson(res, 200, {
-      success: true,
-      ...encryptedResponse
-    });
+      // 3. Commit merged entries to Desktop vault
+      await Promise.resolve(this.applyMergedEntries(mergedEntries, stats));
 
-    // 7. Close server immediately upon transaction completion (R2)
-    res.on('finish', () => {
-      setImmediate(() => {
-        this.stop('completed');
+      // 4. Update device's lastSyncAt
+      this.pairingManager.updateDeviceLastSync(matchedDeviceId || mobileId);
+
+      // 5. Encrypt merged entries for client response with pairKey and cryptographic requestNonce binding
+      const responsePayload = {
+        protocol: PROTOCOL_VERSION,
+        direction: 'response',
+        requestNonce: nonce,
+        timestamp: Date.now(),
+        entries: mergedEntries,
+        stats: stats
+      };
+
+      const encryptedResponse = encryptLanPayload(responsePayload, pairKeyBuf);
+
+      // 6. Send response
+      this._sendJson(res, 200, {
+        success: true,
+        ...encryptedResponse
       });
-    });
+
+      // 7. Close server immediately upon transaction completion (R2)
+      res.on('finish', () => {
+        setImmediate(() => {
+          this.stop('completed');
+        });
+      });
+    } finally {
+      pairKeyBuf.fill(0);
+    }
   }
 }
 

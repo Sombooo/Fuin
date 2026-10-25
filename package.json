@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "lint": "node scripts/check-static.js",
-    "test": "node scripts/check-static.js && node test_remediation_suite.js && node test_challenger_ui_polish.js && node test_browser_extension_security_deep.js",
+    "test": "node scripts/check-static.js && node -e \"const fs=require('fs'),cp=require('child_process');for(const f of ['test_remediation_suite.js','test_challenger_ui_polish.js','test_browser_extension_security_deep.js','test_sync_lan_merge.js','test_sync_lan_pairing.js']){if(fs.existsSync(f))cp.execFileSync(process.execPath,[f],{stdio:'inherit'});}\"",
     "package": "electron-builder --dir",
     "build-mac": "electron-builder --mac",
     "build-win": "electron-builder --win --x64",
@@ -48,6 +48,7 @@
       "sync-lan.js",
       "renderer/**/*",
       "assets/**/*",
+      "!assets/screenshots/**/*",
       "!renderer/sync.js",
       "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
       "!**/node_modules/*/{test,__tests__,tests,pow-test}",

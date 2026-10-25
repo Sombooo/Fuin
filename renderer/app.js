@@ -4,11 +4,13 @@ const api = window.kekkai;
 let master = '', entries = [], editId = null, curView = 'all', totpIv = null;
 
 let sessionKey = null;
+const _pwScoreCache = new WeakMap();
 async function memEncrypt(text) {
   if (!text) return null;
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(text);
   const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, sessionKey, encoded);
+  encoded.fill(0);
   return { iv: Array.from(iv), data: Array.from(new Uint8Array(cipher)) };
 }
 async function memDecrypt(encObj) {
@@ -196,7 +198,11 @@ async function unlock() {
       }
       catch (err) {
         btn.disabled = false; loading.classList.remove('show');
-        toast(t('toastWrongPassword'));
+        if (err && err.message && err.message.includes('Too many attempts')) {
+          toast(err.message);
+        } else {
+          toast(t('toastWrongPassword'));
+        }
         const inp = document.getElementById('masterInp');
         inp.style.borderColor = 'var(--red)';
         setTimeout(() => inp.style.borderColor='', 800);
@@ -206,6 +212,7 @@ async function unlock() {
   } else { entries = []; }
 
   master = pw;
+  document.getElementById('masterInp').value = '';
   btn.disabled = false; loading.classList.remove('show');
   document.getElementById('lockScreen').style.display = 'none';
   const appEl = document.getElementById('app');
@@ -617,7 +624,16 @@ async function renderList() {
     </div>`; return;
   }
 
-  const scores = await Promise.all(list.map(async e=>getScore(await memDecrypt(e.password))));
+  const scores = await Promise.all(list.map(async e => {
+    if (e.password && typeof e.password === 'object') {
+      const cached = _pwScoreCache.get(e.password);
+      if (typeof cached === 'number') return cached;
+      const computed = getScore(await memDecrypt(e.password));
+      _pwScoreCache.set(e.password, computed);
+      return computed;
+    }
+    return getScore(await memDecrypt(e.password));
+  }));
   const dotClass = s => s>=3?'strong':s>=2?'medium':'weak';
 
   wrap.innerHTML = list.map((e,i) => `
@@ -1467,7 +1483,7 @@ function isNewerVersion(latest, current) {
 }
 
 async function getLocalAppVersion() {
-  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.3';
+  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.4';
 }
 
 async function silentCheckForUpdates() {
@@ -1748,7 +1764,7 @@ if (api.onLanSyncApplied) {
       for (const e of (Array.isArray(merged) ? merged : [])) {
         const site = (e.site || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
         const user = (e.username || '').trim().toLowerCase();
-        const key = site ? `${site}||${user}` : (e.id || '');
+        const key = (site && user && !e.isDeleted && !e.deletedAt) ? `${site}||${user}` : (e.id || '');
         if (key && seenCreds.has(key)) continue;
         if (key) seenCreds.add(key);
         dedupedMerged.push(e);

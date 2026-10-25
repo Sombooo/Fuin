@@ -1,25 +1,27 @@
 # PRIVACY POLICY & DISCLOSURES
 
-Fuin takes a strict local-first and offline-first approach to your data.
+Fuin is built on a strict **local-first, zero-knowledge** privacy model.
 
-## What we DO NOT do:
-- **No Cloud Infrastructure:** We do not host your vault on our servers.
-- **No Accounts:** You do not need to register an account to use Fuin.
-- **No Telemetry:** We do not collect product analytics, crash logs, or telemetry.
+## 1. What We Do Not Collect
+- **No Cloud Storage:** Your vault is never uploaded to or stored on any remote server.
+- **No User Accounts:** Fuin requires no registration, email address, phone number, or personal identifier.
+- **No Telemetry or Analytics:** Neither Fuin Desktop nor Fuin Mobile includes any analytics SDKs, crash reporters, or usage trackers.
 
-## What information is stored locally:
-Your passwords, OTP seeds, and secure notes are encrypted and stored purely on your local filesystem (Desktop and Mobile). 
+## 2. Local Data Storage
+All passwords, TOTP seeds, categories, and notes are encrypted with **AES-256-GCM** and stored exclusively on your local device filesystem (`0o600` owner-only permissions on Desktop; sandboxed app storage and hardware-backed `SecureStore` on Mobile).
 
-## Data Transfers (Air-Gap Sync V2):
-- Files and vault entries remain local unless you explicitly initiate an Air-Gap Sync transfer.
-- The transfer is strictly Desktop → Mobile via animated QR codes.
-- No network connection (Wi-Fi, Bluetooth, or LAN) is used for the transfer.
-- Your vault data NEVER leaves your physical proximity.
+## 3. Cross-Device Synchronization
+Your data only moves between your own devices when you explicitly initiate a sync session:
+- **Local LAN Sync (P2P):** Transfers XChaCha20-Poly1305 encrypted vault packets directly between your Desktop and Mobile devices over your private local network (RFC1918 Wi-Fi) using a temporary 120-second listener.
+- **Air-Gap QR Sync (V2):** Transfers encrypted vault chunks optically via animated QR codes with zero network connectivity required.
 
-## Browser Extension Permissions
-The Fuin Browser Extension requests the following permissions:
-- `activeTab`: To fill passwords into the current page upon user action.
-- `nativeMessaging`: To communicate securely with the Fuin Desktop application locally over a socket.
-- `host_permissions: "https://*/*"`: Password filling is explicitly restricted to secure HTTPS websites.
+## 4. Optional External Network Requests
+Fuin operates completely offline by default. External HTTPS requests occur only in two user-controlled scenarios:
+1. **Password Breach Check (HIBP k-Anonymity):** When you manually run a breach scan in the Health tab, Fuin sends only the first **5 characters** of each password's SHA-1 hash to `https://api.pwnedpasswords.com/range/` with `Add-Padding: true` and `cache: 'no-store'`. Your actual passwords or full hashes never leave your device.
+2. **Release Update Check:** Fuin checks the public GitHub Releases API (`https://api.github.com/repos/Sombooo/Fuin/releases/latest`) over HTTPS to notify you when a new version is available.
 
-No information is ever sent to external APIs by the extension.
+## 5. Browser Extension Permissions
+The Fuin Browser Extension requests only the minimum privileges required to operate:
+- `activeTab`: To identify login fields and populate credentials only when triggered by the user.
+- `nativeMessaging`: To communicate locally with the Fuin Desktop app over an OS-level pipe.
+- `host_permissions ("https://*/*")`: Restricts autofill operation strictly to HTTPS origins.

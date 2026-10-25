@@ -49,7 +49,24 @@
 
   var SCORE_LABELS = ['Very Weak', 'Weak', 'Medium', 'Strong', 'Very Strong'];
   var SCORE_LEVELS = ['veryWeak', 'weak', 'medium', 'strong', 'veryStrong'];
-  var SCORE_PERCENTS = [15, 35, 60, 80, 100];
+  var SCORE_PERCENTS = [20, 40, 60, 80, 100];
+
+  var KEYBOARD_ROWS = [
+    '1234567890-=',
+    '!@#$%^&*()_+',
+    'qwertyuiop[]',
+    'asdfghjkl;\'',
+    'zxcvbnm,./',
+    '1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik,9ol.0p;/'
+  ];
+
+  var COMMON_DICTIONARY_STEMS = [
+    'password', 'passw0rd', 'qwerty', 'admin', 'welcome', 'letmein', 'monkey',
+    'dragon', 'master', 'shadow', 'baseball', 'football', 'iloveyou', 'trustno1',
+    'sunshine', 'princess', 'starwars', 'batman', 'superman', 'michael', 'charlie',
+    'donald', 'mustang', 'access', 'secret', 'freedom', 'whatever', 'computer',
+    'security', 'anker', 'istanbul', 'turkiye', 'fenerbahce', 'galatasaray', 'besiktas'
+  ];
 
   // ── OPTION NORMALIZATION ─────────────────────────────────────────
   function normalizeOptions(options) {
@@ -248,13 +265,105 @@
     return r % charsetLength;
   }
 
-  // ── STRENGTH SCORING ─────────────────────────────────────────────
+  // ── BITWARDEN / ZXCVBN-ALIGNED SCIENTIFIC STRENGTH SCORING ───────
+  function normalizeL33t(str) {
+    return str
+      .toLowerCase()
+      .replace(/@|4/g, 'a')
+      .replace(/0/g, 'o')
+      .replace(/1|!/g, 'i')
+      .replace(/3/g, 'e')
+      .replace(/\$|5/g, 's')
+      .replace(/7|\+/g, 't');
+  }
+
+  function countSequenceChars(password) {
+    var seqChars = 0;
+    var run = 1;
+    var prevDiff = null;
+    var lower = password.toLowerCase();
+    for (var i = 1; i < lower.length; i++) {
+      var diff = lower.charCodeAt(i) - lower.charCodeAt(i - 1);
+      if ((diff === 1 || diff === -1) && (prevDiff === null || diff === prevDiff)) {
+        run++;
+        prevDiff = diff;
+      } else {
+        if (run >= 3) seqChars += (run - 2);
+        run = (diff === 1 || diff === -1) ? 2 : 1;
+        prevDiff = (diff === 1 || diff === -1) ? diff : null;
+      }
+    }
+    if (run >= 3) seqChars += (run - 2);
+    return seqChars;
+  }
+
+  function countKeyboardWalkChars(password) {
+    var lower = password.toLowerCase();
+    var walkChars = 0;
+    for (var r = 0; r < KEYBOARD_ROWS.length; r++) {
+      var row = KEYBOARD_ROWS[r];
+      var rev = row.split('').reverse().join('');
+      for (var i = 0; i <= lower.length - 4; i++) {
+        var sub = lower.slice(i, i + 4);
+        if (row.indexOf(sub) !== -1 || rev.indexOf(sub) !== -1) {
+          walkChars += 2;
+        }
+      }
+    }
+    return Math.min(walkChars, Math.max(0, password.length - 2));
+  }
+
+  function formatCrackTime(entropyBits) {
+    // Bitwarden / zxcvbn standard offline fast-hashing & KDF model
+    // Average guesses = 2^(entropyBits - 1), evaluated at 10^10 guesses/sec (GPU cluster)
+    var guessesLog10 = entropyBits * (Math.LN2 / Math.LN10);
+    var seconds = Math.pow(2, Math.max(0, entropyBits - 1)) / 1e10;
+
+    if (entropyBits < 28 || seconds < 1) {
+      return { seconds: seconds, guessesLog10: guessesLog10, key: 'instant', en: 'less than a second', tr: '1 saniyeden az' };
+    }
+    if (seconds < 60) {
+      var s = Math.max(1, Math.round(seconds));
+      return { seconds: seconds, guessesLog10: guessesLog10, key: 'seconds', en: s + ' seconds', tr: s + ' saniye' };
+    }
+    var minutes = seconds / 60;
+    if (minutes < 60) {
+      var m = Math.max(1, Math.round(minutes));
+      return { seconds: seconds, guessesLog10: guessesLog10, key: 'minutes', en: m + ' minutes', tr: m + ' dakika' };
+    }
+    var hours = minutes / 60;
+    if (hours < 24) {
+      var h = Math.max(1, Math.round(hours));
+      return { seconds: seconds, guessesLog10: guessesLog10, key: 'hours', en: h + ' hours', tr: h + ' saat' };
+    }
+    var days = hours / 24;
+    if (days < 31) {
+      var d = Math.max(1, Math.round(days));
+      return { seconds: seconds, guessesLog10: guessesLog10, key: 'days', en: d + ' days', tr: d + ' gün' };
+    }
+    var months = days / 30.4375;
+    if (months < 12) {
+      var mo = Math.max(1, Math.round(months));
+      return { seconds: seconds, guessesLog10: guessesLog10, key: 'months', en: mo + ' months', tr: mo + ' ay' };
+    }
+    var years = days / 365.25;
+    if (years < 100) {
+      var y = Math.max(1, Math.round(years));
+      return { seconds: seconds, guessesLog10: guessesLog10, key: 'years', en: y + ' years', tr: y + ' yıl' };
+    }
+    return { seconds: seconds, guessesLog10: guessesLog10, key: 'centuries', en: 'centuries', tr: 'yüzyıllar' };
+  }
+
   function calculatePasswordStrength(password, customCharsetLength) {
     if (!password || typeof password !== 'string') {
       return {
         score: 0,
         percent: 0,
         entropy: 0,
+        guessesLog10: 0,
+        crackTime: 'less than a second',
+        crackTimeTr: '1 saniyeden az',
+        crackTimeKey: 'instant',
         level: SCORE_LEVELS[0],
         label: SCORE_LABELS[0],
         diversity: {
@@ -281,53 +390,110 @@
     }
     var uniqueChars = Object.keys(uniqueSet).length;
 
-    // Determine character pool size
-    var poolSize = 0;
+    // Determine effective character pool size from observed character classes
+    var observedPool = 0;
+    if (hasUpper) observedPool += 26;
+    if (hasLower) observedPool += 26;
+    if (hasDigits) observedPool += 10;
+    if (hasSymbols) observedPool += 33;
+
+    var poolSize = observedPool;
     if (typeof customCharsetLength === 'number' && customCharsetLength > 0) {
-      poolSize = customCharsetLength;
-    } else {
-      if (hasUpper) poolSize += 26;
-      if (hasLower) poolSize += 26;
-      if (hasDigits) poolSize += 10;
-      if (hasSymbols) poolSize += 33;
+      // Respect custom/filtered charset cap while reflecting actual observed classes
+      poolSize = observedPool > 0 ? Math.min(observedPool, customCharsetLength) : customCharsetLength;
     }
+    if (poolSize <= 0) poolSize = 1;
 
-    if (poolSize === 0) poolSize = 1;
-
-    // Information Entropy: E = L * log2(Pool)
-    var rawEntropy = len * (Math.log(poolSize) / Math.LN2);
-
-    // Repetition / Low-entropy penalty
-    var uniqueRatio = uniqueChars / len;
-    var entropy = rawEntropy;
-    if (uniqueRatio < 0.6) {
-      entropy = rawEntropy * uniqueRatio;
-    }
-
-    // Sequence / Pattern detection penalty (e.g., 1234, abcd)
+    var bitsPerChar = Math.log(poolSize) / Math.LN2;
     var warning = '';
+
+    // 1. Deduct predictable pattern lengths (repeats, sequences, keyboard walks, dictionary stems)
+    var penaltyChars = 0;
+
+    // Repeated identical character runs (e.g., 'aaaa')
+    var repeatMatches = password.match(/(.)\1{2,}/g);
+    if (repeatMatches) {
+      for (var rm = 0; rm < repeatMatches.length; rm++) {
+        penaltyChars += (repeatMatches[rm].length - 1.5);
+      }
+      warning = 'Repeated character pattern';
+    }
+
+    // Repeated multi-character blocks (e.g., 'abcabc', '121212')
+    var blockRepeat = password.match(/(.{2,5})\1+/g);
+    if (blockRepeat) {
+      for (var br = 0; br < blockRepeat.length; br++) {
+        penaltyChars += (blockRepeat[br].length * 0.55);
+      }
+      if (!warning) warning = 'Repeating pattern';
+    }
+
+    // Sequential runs (e.g., '12345', 'abcdef')
+    var seqCount = countSequenceChars(password);
+    if (seqCount > 0) {
+      penaltyChars += seqCount * 0.75;
+      if (!warning) warning = 'Sequential characters';
+    }
+
+    // Keyboard walks (e.g., 'qwerty', 'asdfgh')
+    var walkCount = countKeyboardWalkChars(password);
+    if (walkCount > 0) {
+      penaltyChars += walkCount * 0.75;
+      if (!warning) warning = 'Keyboard pattern';
+    }
+
+    // Dictionary stems & L33t substitutions
+    var deLeeted = normalizeL33t(password);
+    for (var dIdx = 0; dIdx < COMMON_DICTIONARY_STEMS.length; dIdx++) {
+      var stem = COMMON_DICTIONARY_STEMS[dIdx];
+      if (deLeeted.indexOf(stem) !== -1) {
+        // A known dictionary word adds ~11 bits total instead of stem.length * bitsPerChar
+        penaltyChars += Math.max(0, stem.length - (11 / Math.max(1, bitsPerChar)));
+        if (!warning) warning = 'Common dictionary pattern';
+        break;
+      }
+    }
+
+    // 4-digit years (1900-2099)
+    if (/(19\d\d|20\d\d)/.test(password)) {
+      penaltyChars += 1.8;
+    }
+
+    var effectiveLen = Math.max(1, len - penaltyChars);
+    var entropy = effectiveLen * bitsPerChar;
+
+    // 2. Low unique-character diversity damping
+    var uniqueRatio = uniqueChars / len;
+    if (uniqueRatio < 0.65) {
+      entropy = entropy * (0.4 + 0.6 * uniqueRatio);
+    }
+
+    // 3. Special structural warnings & ceilings
     if (uniqueChars === 1 && len > 1) {
       entropy = Math.min(entropy, 5);
       warning = 'Repeated identical characters';
     } else if (/^[0-9]+$/.test(password)) {
-      entropy = Math.min(entropy, 25);
+      if (len <= 12) entropy = Math.min(entropy, 34);
       warning = 'Digits only';
-    } else if (/^[a-zA-Z]+$/.test(password)) {
-      entropy = entropy * 0.85;
-      warning = 'Letters only';
+    } else if (/^[a-zA-Z]+$/.test(password) && len < 14) {
+      entropy = entropy * 0.88;
+      if (!warning) warning = 'Letters only';
     }
 
-    // Multi-factor 5-level scoring (0 to 4)
-    var poolCount = (hasUpper ? 1 : 0) + (hasLower ? 1 : 0) + (hasDigits ? 1 : 0) + (hasSymbols ? 1 : 0);
+    // 4. Bitwarden / zxcvbn 5-tier score mapping (0 to 4) based on effective entropy bits
+    // Score 0 (< 28 bits): < 1 second
+    // Score 1 (28 - 44 bits): seconds to minutes
+    // Score 2 (45 - 63 bits): hours to days
+    // Score 3 (64 - 82 bits): months to years
+    // Score 4 (>= 83 bits): centuries
     var score = 0;
-
     if (len < 6 || entropy < 28) {
       score = 0;
-    } else if (entropy < 46 || len < 8 || poolCount < 2) {
+    } else if (entropy < 45 || len < 8) {
       score = 1;
-    } else if (entropy < 66 || len < 11 || poolCount < 3) {
+    } else if (entropy < 64 || len < 10) {
       score = 2;
-    } else if (entropy < 86 || len < 14) {
+    } else if (entropy < 83 || len < 12) {
       score = 3;
     } else {
       score = 4;
@@ -338,11 +504,16 @@
     if (len < 6) score = 0;
 
     entropy = Math.round(entropy * 10) / 10;
+    var crackInfo = formatCrackTime(entropy);
 
     return {
       score: score,
       percent: SCORE_PERCENTS[score],
       entropy: entropy,
+      guessesLog10: Math.round(crackInfo.guessesLog10 * 10) / 10,
+      crackTime: crackInfo.en,
+      crackTimeTr: crackInfo.tr,
+      crackTimeKey: crackInfo.key,
       level: SCORE_LEVELS[score],
       label: SCORE_LABELS[score],
       diversity: {
@@ -367,6 +538,10 @@
         score: 0,
         percent: 0,
         entropy: 0,
+        guessesLog10: 0,
+        crackTime: 'less than a second',
+        crackTimeTr: '1 saniyeden az',
+        crackTimeKey: 'instant',
         level: SCORE_LEVELS[0],
         label: SCORE_LABELS[0],
         length: 0,
@@ -382,6 +557,10 @@
         score: 0,
         percent: 0,
         entropy: 0,
+        guessesLog10: 0,
+        crackTime: 'less than a second',
+        crackTimeTr: '1 saniyeden az',
+        crackTimeKey: 'instant',
         level: SCORE_LEVELS[0],
         label: SCORE_LABELS[0],
         length: 0,
@@ -436,6 +615,10 @@
       score: strength.score,
       percent: strength.percent,
       entropy: strength.entropy,
+      guessesLog10: strength.guessesLog10,
+      crackTime: strength.crackTime,
+      crackTimeTr: strength.crackTimeTr,
+      crackTimeKey: strength.crackTimeKey,
       level: strength.level,
       label: strength.label,
       length: password.length,

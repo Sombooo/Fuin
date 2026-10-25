@@ -656,7 +656,7 @@ select.fi option { background: var(--paper); }
   background: var(--red);
 }
 .gen-strength-label {
-  font-family: var(--mono); font-size: 11px; color: var(--mu); text-align: right; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;
+  font-family: var(--mono); font-size: 11px; color: var(--mu); display: flex; justify-content: space-between; align-items: center; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; gap: 8px;
 }
 
 /* ── ZEN CONTROLS ── */

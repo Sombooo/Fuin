@@ -67,12 +67,7 @@ function createWindow() {
     },
   });
   // Ekran koruması: Casus yazılımlara ve ekran kaydına karşı koruma (Siyah ekran verir).
-  const DEV_ALLOW_SCREENSHOTS = false;
-  if (app.isPackaged && !DEV_ALLOW_SCREENSHOTS) {
-    mainWindow.setContentProtection(true);
-  } else {
-    mainWindow.setContentProtection(false);
-  }
+  mainWindow.setContentProtection(true);
   mainWindow.webContents?.on?.('will-navigate', (e) => e.preventDefault());
   mainWindow.webContents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));

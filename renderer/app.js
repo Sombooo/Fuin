@@ -1377,6 +1377,37 @@ function genPw(){
   generateAdvancedPw();
 }
 
+let _lastGenRes = null;
+
+function renderGenStrengthUI(res) {
+  if (!res) return;
+  const pw = res.password;
+  const score = res.score;
+
+  const colors = ['var(--red)', '#e67e22', 'var(--amber)', '#5cb85c', 'var(--ac)'];
+  const labels = getScoreLabels();
+  const widths = ['20%', '40%', '60%', '80%', '100%'];
+
+  const fill = document.getElementById('genStrengthFill');
+  const label = document.getElementById('genStrengthLabel');
+  if (fill && label) {
+    if (!pw) {
+      fill.style.width = '0%';
+      fill.style.background = 'var(--red)';
+      label.innerHTML = `<span>${esc(labels[0] || '...')}</span><span>0 bit</span>`;
+      return;
+    }
+    const isEn = document.documentElement.lang === 'en';
+    const crackText = isEn ? res.crackTime : res.crackTimeTr;
+    const bitUnit = isEn ? 'bits' : 'bit';
+    const tierText = labels[score] || '...';
+    const metaText = `${Math.round(res.entropy || 0)} ${bitUnit} · ${t('strengthCrackTime') || 'kırılma:'} ${crackText || ''}`;
+    fill.style.width = widths[score] || '20%';
+    fill.style.background = colors[score] || 'var(--red)';
+    label.innerHTML = `<span style="color:${colors[score] || 'var(--mu)'}">${esc(tierText)}</span><span style="color:var(--mu);font-weight:500">${esc(metaText)}</span>`;
+  }
+}
+
 function generateAdvancedPw() {
   const len = parseInt(document.getElementById('genLen').value) || 16;
   const useUpper = document.getElementById('genUpper').checked;
@@ -1393,22 +1424,10 @@ function generateAdvancedPw() {
     includeSymbols: useSym,
     excludeSimilar: exc
   });
-  const pw = res.password;
-  const score = res.score;
+  _lastGenRes = res;
 
-  document.getElementById('genPwResult').value = pw;
-
-  const colors = ['var(--red)', 'var(--amber)', 'var(--yellow)', 'var(--ac)', 'var(--ac)'];
-  const labels = [t('healthWeak') || 'Zayıf', t('healthMedium') || 'Orta', t('healthMedium') || 'Orta', t('healthStrong') || 'Güçlü', t('healthStrong') || 'Güçlü'];
-  const widths = ['20%', '40%', '60%', '80%', '100%'];
-
-  const fill = document.getElementById('genStrengthFill');
-  const label = document.getElementById('genStrengthLabel');
-  if (fill && label) {
-    fill.style.width = widths[score] || '0%';
-    fill.style.background = colors[score] || 'var(--red)';
-    label.innerText = labels[score] || '...';
-  }
+  document.getElementById('genPwResult').value = res.password;
+  renderGenStrengthUI(res);
 }
 
 function applyGeneratedPw() {
@@ -1468,6 +1487,9 @@ function refreshDynamicI18nLabels() {
   }
   if (document.getElementById('addOverlay')?.classList.contains('open')) {
     document.getElementById('addModalTitle').textContent = editId ? t('modalEditEntry') : t('modalNewEntry');
+  }
+  if (document.getElementById('genOverlay')?.classList.contains('open') && _lastGenRes) {
+    renderGenStrengthUI(_lastGenRes);
   }
   const mode = localStorage.getItem('fuin-sync-mode') || 'lan';
   updateSyncModeUI(mode);

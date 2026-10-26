@@ -729,13 +729,9 @@ async function openAddModal(id=null, force=false) {
     const histBtn = document.getElementById('f-pw-history-row');
     const histCount = e.history && Array.isArray(e.history) ? e.history.length : 0;
     if (histBtn) {
-      if (histCount > 0) {
-        histBtn.style.display = 'block';
-        const labelEl = document.getElementById('pwHistoryBtnLabel');
-        if (labelEl) labelEl.textContent = `${t('btnPwHistory')} (${histCount})`;
-      } else {
-        histBtn.style.display = 'none';
-      }
+      histBtn.style.display = 'block';
+      const labelEl = document.getElementById('pwHistoryBtnLabel');
+      if (labelEl) labelEl.textContent = `${t('btnPwHistory')} (${histCount})`;
     }
     document.getElementById('totp-section').style.display=e.totp?'block':'none';
     onPwInput();

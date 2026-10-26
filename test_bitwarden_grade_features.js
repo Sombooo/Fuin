@@ -172,7 +172,8 @@ test('5. Translation files contain all required Bitwarden-grade security keys in
     'btnPwHistory',
     'pwHistoryTitle',
     'pwHistoryEmpty',
-    'pwHistoryCopied'
+    'pwHistoryCopied',
+    'btnCopy'
   ];
 
   for (const k of requiredKeys) {

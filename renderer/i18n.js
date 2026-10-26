@@ -96,6 +96,8 @@ const TRANSLATIONS = {
     repromptWrongPw: 'Yanlış ana şifre.',
     btnCancel: 'İptal',
     btnSave: 'Kaydet',
+    btnCopy: 'Kopyala',
+    sectionSecurityPrefs: 'Güvenlik ve Tercihler',
     genPwTitle: 'Üret',
     showPwTitle: 'Göster',
 
@@ -396,6 +398,8 @@ const TRANSLATIONS = {
     repromptWrongPw: 'Wrong master password.',
     btnCancel: 'Cancel',
     btnSave: 'Save',
+    btnCopy: 'Copy',
+    sectionSecurityPrefs: 'Security & Preferences',
     genPwTitle: 'Generate',
     showPwTitle: 'Show',
 

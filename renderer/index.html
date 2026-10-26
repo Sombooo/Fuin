@@ -351,8 +351,11 @@
       <div class="modal-section" data-i18n="section2FA">İki Faktörlü Doğrulama</div>
       <div class="toggle-row">
         <div class="toggle-info">
-          <span data-i18n="toggle2FALabel">2FA Kodu Sakla</span>
-          <span>TOTP secret key</span>
+          <div class="toggle-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toggle-ico"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span data-i18n="toggle2FALabel">2FA Kodu Sakla</span>
+          </div>
+          <div class="toggle-sub" data-i18n="toggle2FASub">TOTP secret key</div>
         </div>
         <label class="toggle"><input type="checkbox" id="f-2fa-toggle"><span class="slider"></span></label>
       </div>
@@ -362,23 +365,25 @@
           <input class="fi" id="f-totp" placeholder="JBSWY3DPEHPK3PXP">
         </div>
       </div>
+      <div class="modal-divider"></div>
+      <div class="modal-section" data-i18n="sectionSecurityPrefs">Güvenlik ve Tercihler</div>
       <div class="toggle-row">
         <div class="toggle-info">
-          <span style="display:flex;align-items:center;gap:6px;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <div class="toggle-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toggle-ico"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <span data-i18n="toggleFavLabel">Favorilere Ekle</span>
-          </span>
-          <span data-i18n="toggleFavSub">Kenar çubuğunda göster</span>
+          </div>
+          <div class="toggle-sub" data-i18n="toggleFavSub">Kenar çubuğunda göster</div>
         </div>
         <label class="toggle"><input type="checkbox" id="f-fav"><span class="slider"></span></label>
       </div>
       <div class="toggle-row">
         <div class="toggle-info">
-          <span style="display:flex;align-items:center;gap:6px;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <div class="toggle-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toggle-ico"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             <span data-i18n="toggleRepromptLabel">Ana Şifre Onayı İste</span>
-          </span>
-          <span data-i18n="toggleRepromptSub">Şifreyi görmeden veya kopyalamadan önce ekstra doğrulama ister</span>
+          </div>
+          <div class="toggle-sub" data-i18n="toggleRepromptSub">Şifreyi görmeden veya kopyalamadan önce ekstra doğrulama ister</div>
         </div>
         <label class="toggle"><input type="checkbox" id="f-reprompt"><span class="slider"></span></label>
       </div>

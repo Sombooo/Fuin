@@ -476,8 +476,28 @@ select.fi option { background: var(--paper); }
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px; background: var(--bg); border: 1px solid var(--b); border-radius: 1px;
 }
-.toggle-info span:first-child { font-size: 13px; font-family: var(--mono); font-weight: 600; }
-.toggle-info span:last-child  { font-size: 11px; color: var(--mu); font-family: var(--mono); display: block; margin-top: 1px; }
+.toggle-title,
+.toggle-info > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--fg);
+}
+.toggle-ico {
+  color: var(--mu);
+  flex-shrink: 0;
+}
+.toggle-sub,
+.toggle-info > span:last-child {
+  font-size: 11px;
+  color: var(--mu);
+  font-family: var(--mono);
+  display: block;
+  margin-top: 2px;
+}
 .toggle { position: relative; width: 36px; height: 20px; }
 .toggle input { opacity: 0; width: 0; height: 0; }
 .slider { position: absolute; inset: 0; background: var(--b); border-radius: 100px; cursor: pointer; transition: .2s; }

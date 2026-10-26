@@ -57,6 +57,43 @@ test('1. Constant-time reprompt comparison matches exact master password', () =>
   assert.strictEqual(constantTimeEqual('Password123', 'password123'), false);
 });
 
+test('1.1. verifyReprompt executes callback when master password matches and clears action', () => {
+  let master = 'correct-password';
+  let repromptPendingAction = null;
+  let actionExecuted = false;
+  let modalClosed = false;
+
+  function closeRepromptModal() {
+    modalClosed = true;
+  }
+
+  function verifyReprompt(inputVal) {
+    if (constantTimeEqual(inputVal, master)) {
+      const action = repromptPendingAction;
+      repromptPendingAction = null;
+      closeRepromptModal();
+      if (typeof action === 'function') {
+        action();
+      }
+    }
+  }
+
+  // Set action
+  repromptPendingAction = () => { actionExecuted = true; };
+
+  // Wrong password -> should not execute
+  verifyReprompt('wrong-password');
+  assert.strictEqual(actionExecuted, false);
+  assert.strictEqual(modalClosed, false);
+  assert.ok(repromptPendingAction !== null);
+
+  // Correct password -> should execute and clear
+  verifyReprompt('correct-password');
+  assert.strictEqual(actionExecuted, true);
+  assert.strictEqual(modalClosed, true);
+  assert.strictEqual(repromptPendingAction, null);
+});
+
 // ── 2. Password Revision History Mechanics ────────────────────────
 test('2. Password revision history records up to 5 previous passwords', () => {
   let entry = {

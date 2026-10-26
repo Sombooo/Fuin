@@ -1014,11 +1014,15 @@ function verifyReprompt() {
   const msg = document.getElementById('repromptMsg');
   const val = inp ? inp.value : '';
   if (constantTimeEqual(val, master)) {
+    const action = repromptPendingAction;
+    repromptPendingAction = null;
     closeRepromptModal();
-    if (repromptPendingAction) {
-      const action = repromptPendingAction;
-      repromptPendingAction = null;
-      action();
+    if (typeof action === 'function') {
+      try {
+        action();
+      } catch (err) {
+        console.error('Reprompt action execution error:', err);
+      }
     }
   } else {
     if (msg) {
@@ -1032,8 +1036,12 @@ function verifyReprompt() {
   }
 }
 
-function closeRepromptModal() {
+function cancelReprompt() {
   repromptPendingAction = null;
+  closeRepromptModal();
+}
+
+function closeRepromptModal() {
   const inp = document.getElementById('repromptPwInp');
   if (inp) inp.value = '';
   closeModal('repromptOverlay');
@@ -2137,16 +2145,16 @@ function initAppListeners() {
   document.getElementById('btnModalEmergencyKit')?.addEventListener('click', exportEmergencyKit);
 
   // Master Password Reprompt modal
-  document.getElementById('btnCloseReprompt')?.addEventListener('click', closeRepromptModal);
-  document.getElementById('btnCancelReprompt')?.addEventListener('click', closeRepromptModal);
+  document.getElementById('btnCloseReprompt')?.addEventListener('click', cancelReprompt);
+  document.getElementById('btnCancelReprompt')?.addEventListener('click', cancelReprompt);
   document.getElementById('btnConfirmReprompt')?.addEventListener('click', verifyReprompt);
   document.getElementById('btnEyeReprompt')?.addEventListener('click', () => toggleEye('repromptPwInp'));
   document.getElementById('repromptPwInp')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') verifyReprompt();
-    else if (e.key === 'Escape') closeRepromptModal();
+    else if (e.key === 'Escape') cancelReprompt();
   });
   document.getElementById('repromptOverlay')?.addEventListener('mousedown', (e) => {
-    if (e.target.id === 'repromptOverlay') closeRepromptModal();
+    if (e.target.id === 'repromptOverlay') cancelReprompt();
   });
 
   // Password History modal

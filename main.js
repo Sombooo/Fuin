@@ -718,6 +718,14 @@ function setRecoveryLegacyBound(bound) {
 
 // AES-256-GCM şifre çözme — vaultKey ile
 async function decryptData(b64Str, passwordStr) {
+  // Girdi ve boyut doğrulaması (fuzzing ve bellek taşması koruması)
+  if (typeof b64Str !== 'string' || b64Str.length < 80) {
+    throw new Error('Invalid vault packet format: payload too short or invalid type');
+  }
+  if (b64Str.length > 50 * 1024 * 1024) {
+    throw new Error('Invalid vault packet format: payload exceeds maximum allowable size (50MB)');
+  }
+
   // Brute-force koruması: üstel geri çekilme
   const lockout = loadLockoutState();
   const now = Date.now();

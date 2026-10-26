@@ -209,6 +209,19 @@ ipcMain.handle('set-unlock-state', (_, unlocked) => {
   isUnlocked = !!unlocked;
   if (!isUnlocked) {
     clearAuthoritativeVaultSession();
+    if (clipboardTimer) {
+      clearTimeout(clipboardTimer);
+      clipboardTimer = null;
+    }
+    try {
+      const current = clipboard.readText();
+      const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
+      if (lastCopiedHash && currentHash === lastCopiedHash) {
+        clipboard.writeText('');
+      }
+    } catch {}
+    lastCopiedHash = null;
+
     if (_ephemeralLanServer) {
       try { _ephemeralLanServer.stop('vault-locked'); } catch {}
     }
@@ -1105,20 +1118,40 @@ ipcMain.handle('lan-status', () => {
   return _ephemeralLanServer.getStatus();
 });
 
-// ── IPC: Pano ─────────────────────────────────────────────────────
+// ── IPC: Pano (Akıllı Hash Kontrollü & Kilit Korumalı) ────────────────
 let clipboardTimer = null;
-ipcMain.handle('copy-secure', (_, text) => {
-  clipboard.writeText(text);
+let lastCopiedHash = null;
+
+ipcMain.handle('copy-secure', (_, text, durationMs = 30000) => {
+  const str = String(text || '');
+  clipboard.writeText(str);
+  lastCopiedHash = crypto.createHash('sha256').update(str).digest('hex');
   if (clipboardTimer) clearTimeout(clipboardTimer);
   clipboardTimer = setTimeout(() => {
-    try { clipboard.writeText(''); } catch {}
+    try {
+      const current = clipboard.readText();
+      const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
+      if (lastCopiedHash && currentHash === lastCopiedHash) {
+        clipboard.writeText('');
+      }
+    } catch {}
     clipboardTimer = null;
+    lastCopiedHash = null;
     mainWindow?.webContents.send('clipboard-cleared');
-  }, 30000);
+  }, durationMs);
   return true;
 });
+
 ipcMain.handle('cancel-clipboard-clear', () => {
   if (clipboardTimer) { clearTimeout(clipboardTimer); clipboardTimer = null; }
+  try {
+    const current = clipboard.readText();
+    const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
+    if (lastCopiedHash && currentHash === lastCopiedHash) {
+      clipboard.writeText('');
+    }
+  } catch {}
+  lastCopiedHash = null;
 });
 
 function backupFile(sourcePath) {

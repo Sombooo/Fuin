@@ -36,8 +36,8 @@ contextBridge.exposeInMainWorld('kekkai', {
   onLanSyncClosed:     (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('lan-sync-closed', h); return () => ipcRenderer.removeListener('lan-sync-closed', h); },
   onLanDevicePaired:   (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('lan-device-paired', h); return () => ipcRenderer.removeListener('lan-device-paired', h); },
 
-  // Pano — main process üzerinden, 30s sonra temizlenir
-  copySecure:          (text)           => ipcRenderer.invoke('copy-secure', text),
+  // Pano — main process üzerinden, akıllı hash doğrulamalı ve süreye bağlı temizlik
+  copySecure:          (text, durationMs) => ipcRenderer.invoke('copy-secure', text, durationMs),
   cancelClipboardClear:()               => ipcRenderer.invoke('cancel-clipboard-clear'),
   onClipboardCleared:  (cb)             => { ipcRenderer.on('clipboard-cleared', cb); return () => ipcRenderer.removeListener('clipboard-cleared', cb); },
 

@@ -56,10 +56,10 @@ applyTheme(localStorage.getItem('fuin-theme') || (window.matchMedia?.('(prefers-
 let clipToastT = null;
 api.onClipboardCleared(() => toast(t('toastClipCleared')));
 
-async function copySecure(text, label) {
-  await api.copySecure(text);
+async function copySecure(text, label, durationMs = 30000) {
+  await api.copySecure(text, durationMs);
   // Toast: geri sayım göster
-  let sec = 30;
+  let sec = Math.round(durationMs / 1000);
   const tick = () => {
     toast(`${label || t('toastCopiedDefault')} — ${t('toastClipTimer').replace('{s}', sec)}`);
     if (sec > 0) { sec--; clipToastT = setTimeout(tick, 1000); }
@@ -829,7 +829,7 @@ async function copyPw(id) {
   if (!e) return;
   const doCopy = async () => {
     const pw = await memDecrypt(e.password);
-    await copySecure(pw, t('toastPwCopied'));
+    await copySecure(pw, t('toastPwCopied'), 45000);
   };
   if (e.reprompt) {
     requireReprompt(id, doCopy);
@@ -1074,7 +1074,7 @@ async function openPwHistory() {
         const idx = parseInt(btn.getAttribute('data-copy-hist'), 10);
         if (entry.history[idx]) {
           const raw = await memDecrypt(entry.history[idx].password);
-          await copySecure(raw, t('pwHistoryCopied'));
+          await copySecure(raw, t('pwHistoryCopied'), 45000);
         }
       });
     });

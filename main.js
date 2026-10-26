@@ -639,22 +639,30 @@ async function encryptData(plaintext, passwordStr) {
   }
   const vaultSalt = crypto.randomBytes(32);
   const iv        = crypto.randomBytes(12);
-  const vaultKey  = await deriveVaultKey(passwordStr, vaultSalt, false);
+  let vaultKey    = null;
+  let jsonBuf     = null;
 
-  const jsonBuf = Buffer.from(JSON.stringify(plaintext), 'utf8');
-  secureBuffer(jsonBuf);
-  
-  const cipher  = crypto.createCipheriv('aes-256-gcm', vaultKey, iv);
-  const enc1    = cipher.update(jsonBuf);
-  const enc2    = cipher.final();
-  const tag     = cipher.getAuthTag();
+  try {
+    vaultKey = await deriveVaultKey(passwordStr, vaultSalt, false);
+    jsonBuf  = Buffer.from(JSON.stringify(plaintext), 'utf8');
+    secureBuffer(jsonBuf);
+    
+    const cipher  = crypto.createCipheriv('aes-256-gcm', vaultKey, iv);
+    const enc1    = cipher.update(jsonBuf);
+    const enc2    = cipher.final();
+    const tag     = cipher.getAuthTag();
 
-  unsecureBuffer(vaultKey);
-  vaultKey.fill(0);
-  unsecureBuffer(jsonBuf);
-  jsonBuf.fill(0);
-
-  return Buffer.concat([vaultSalt, iv, tag, enc1, enc2]).toString('base64');
+    return Buffer.concat([vaultSalt, iv, tag, enc1, enc2]).toString('base64');
+  } finally {
+    if (vaultKey) {
+      unsecureBuffer(vaultKey);
+      vaultKey.fill(0);
+    }
+    if (jsonBuf) {
+      unsecureBuffer(jsonBuf);
+      jsonBuf.fill(0);
+    }
+  }
 }
 
 // Güvenlik: Brute-force rate limiting — başarısız denemelerden sonra üstel gecikme

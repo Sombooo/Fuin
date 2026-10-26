@@ -253,11 +253,11 @@ function lock() {
   if (catNavEl) catNavEl.innerHTML = '';
   const catSecEl = document.getElementById('categoryNavSection');
   if (catSecEl) catSecEl.style.display = 'none';
-  ['f-site','f-user','f-pw','f-note','f-url','f-totp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp'].forEach(id => {
+  ['f-site','f-user','f-pw','f-note','f-url','f-totp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp','repromptPwInp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  ['addOverlay','totpOverlay','genOverlay','pairOverlay','lanSyncOverlay','newCategoryOverlay','changePwOverlay','backupOverlay','recoveryOverlay'].forEach(id => {
+  ['addOverlay','totpOverlay','genOverlay','pairOverlay','lanSyncOverlay','newCategoryOverlay','changePwOverlay','backupOverlay','recoveryOverlay','repromptOverlay','pwHistoryOverlay'].forEach(id => {
     document.getElementById(id)?.classList.remove('open');
   });
   const overlaySyncPass = document.getElementById('overlaySyncPass');
@@ -640,7 +640,7 @@ async function renderList() {
     <div class="pw-card" style="animation-delay:${i*15}ms">
       <div class="pw-icon">${esc(e.site.slice(0,2).toUpperCase())}</div>
       <div class="pw-info">
-        <div class="pw-site">${e.fav ? `<span class="fav-star" title="${t('navFav') || 'Favori'}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}<span class="pw-site-name">${esc(e.site)}</span></div>
+        <div class="pw-site">${e.fav ? `<span class="fav-star" title="${t('navFav') || 'Favori'}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}<span class="pw-site-name">${esc(e.site)}</span>${e.reprompt ? `<span class="reprompt-badge" title="${esc(t('badgeReprompt'))}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>` : ''}${e.url && /^http:\/\//i.test(e.url.trim()) ? `<span class="insecure-http-badge" title="${esc(t('warnInsecureHttp'))}">HTTP</span>` : ''}</div>
         <div class="pw-meta">
           <span class="pw-user">${esc(e.username)||'—'}</span>
           <span class="pw-cat">${esc(catLabel(e.category||'Diğer'))}</span>
@@ -695,7 +695,14 @@ async function renderSecurity() {
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────
-async function openAddModal(id=null) {
+async function openAddModal(id=null, force=false) {
+  if (id && !force) {
+    const target = entries.find(x => x.id === id);
+    if (target && target.reprompt) {
+      requireReprompt(id, () => openAddModal(id, true));
+      return;
+    }
+  }
   editId=id;
   document.getElementById('addModalTitle').textContent = id ? t('modalEditEntry') : t('modalNewEntry');
   
@@ -718,6 +725,18 @@ async function openAddModal(id=null) {
     document.getElementById('f-2fa-toggle').checked=!!e.totp;
     document.getElementById('f-totp').value=await memDecrypt(e.totp)||'';
     document.getElementById('f-fav').checked=!!e.fav;
+    document.getElementById('f-reprompt').checked=!!e.reprompt;
+    const histBtn = document.getElementById('f-pw-history-row');
+    const histCount = e.history && Array.isArray(e.history) ? e.history.length : 0;
+    if (histBtn) {
+      if (histCount > 0) {
+        histBtn.style.display = 'block';
+        const labelEl = document.getElementById('pwHistoryBtnLabel');
+        if (labelEl) labelEl.textContent = `${t('btnPwHistory')} (${histCount})`;
+      } else {
+        histBtn.style.display = 'none';
+      }
+    }
     document.getElementById('totp-section').style.display=e.totp?'block':'none';
     onPwInput();
   } else {
@@ -725,6 +744,9 @@ async function openAddModal(id=null) {
     sel.value='Diğer';
     document.getElementById('f-2fa-toggle').checked=false;
     document.getElementById('f-fav').checked=false;
+    document.getElementById('f-reprompt').checked=false;
+    const histBtn = document.getElementById('f-pw-history-row');
+    if (histBtn) histBtn.style.display = 'none';
     document.getElementById('totp-section').style.display='none';
     document.getElementById('zxcvbnWrap').style.display='none';
   }
@@ -741,6 +763,17 @@ async function saveEntry() {
   if(!site||!pw){toast(t('toastSiteRequired'));return;}
   const now = Date.now();
   const existing = editId ? entries.find(x=>x.id===editId) : null;
+  let history = existing && Array.isArray(existing.history) ? [...existing.history] : [];
+  if (existing) {
+    const oldPw = await memDecrypt(existing.password);
+    if (oldPw && oldPw !== pw) {
+      history.unshift({
+        password: existing.password,
+        date: now
+      });
+      if (history.length > 5) history = history.slice(0, 5);
+    }
+  }
   const entry={
     id: editId||crypto.randomUUID(), site,
     category: document.getElementById('f-category').value,
@@ -750,13 +783,14 @@ async function saveEntry() {
     url:      document.getElementById('f-url').value.trim(),
     totp:     await memEncrypt(document.getElementById('f-2fa-toggle').checked ? document.getElementById('f-totp').value.trim() : ''),
     fav:      document.getElementById('f-fav').checked,
+    reprompt: document.getElementById('f-reprompt').checked,
     updated:  now,
     updatedAt: now,
     created:  existing ? (existing.created || now) : now,
     createdAt: existing ? (existing.createdAt || existing.created || now) : now,
     deletedAt: null,
     isDeleted: false,
-    history:  existing && Array.isArray(existing.history) ? existing.history : []
+    history:  history
   };
   if(editId){const i=entries.findIndex(x=>x.id===editId);entries[i]=entry;}
   else entries.unshift(entry);
@@ -795,24 +829,38 @@ async function permDelEntry(id) {
 
 // ── ACTIONS ───────────────────────────────────────────────────────
 async function copyPw(id) {
-  const pwEnc = entries.find(x=>x.id===id)?.password;
-  if (!pwEnc) return;
-  const pw = await memDecrypt(pwEnc);
-  await copySecure(pw, t('toastPwCopied'));
+  const e = entries.find(x=>x.id===id);
+  if (!e) return;
+  const doCopy = async () => {
+    const pw = await memDecrypt(e.password);
+    await copySecure(pw, t('toastPwCopied'));
+  };
+  if (e.reprompt) {
+    requireReprompt(id, doCopy);
+  } else {
+    await doCopy();
+  }
 }
 
 async function revealPw(id) {
   const el=document.getElementById('dot-'+id); if(!el)return;
   const e=entries.find(x=>x.id===id);
-  if(el.classList.contains('pw-reveal')){
-    el.textContent='••••••'; el.classList.remove('pw-reveal'); clearTimeout(revealT[id]);
+  if (!e) return;
+  const doReveal = async () => {
+    if(el.classList.contains('pw-reveal')){
+      el.textContent='••••••'; el.classList.remove('pw-reveal'); clearTimeout(revealT[id]);
+    } else {
+      el.textContent=await memDecrypt(e.password); el.classList.add('pw-reveal');
+      clearTimeout(revealT[id]);
+      revealT[id]=setTimeout(()=>{el.textContent='••••••';el.classList.remove('pw-reveal');},3000);
+      const hideOnBlur = () => { el.textContent='••••••'; el.classList.remove('pw-reveal'); clearTimeout(revealT[id]); window.removeEventListener('blur', hideOnBlur); };
+      window.addEventListener('blur', hideOnBlur);
+    }
+  };
+  if (e.reprompt && !el.classList.contains('pw-reveal')) {
+    requireReprompt(id, doReveal);
   } else {
-    el.textContent=await memDecrypt(e.password); el.classList.add('pw-reveal');
-    clearTimeout(revealT[id]);
-    revealT[id]=setTimeout(()=>{el.textContent='••••••';el.classList.remove('pw-reveal');},3000);
-    // Güvenlik: Pencere odağı kaybedildiğinde parolayı hemen gizle
-    const hideOnBlur = () => { el.textContent='••••••'; el.classList.remove('pw-reveal'); clearTimeout(revealT[id]); window.removeEventListener('blur', hideOnBlur); };
-    window.addEventListener('blur', hideOnBlur);
+    await doReveal();
   }
 }
 
@@ -921,6 +969,393 @@ function showForgotMsg(text, type) {
 function copyRecoveryKey() {
   const key=document.getElementById('recoveryKeyDisplay').textContent;
   copySecure(key, t('toastRecoveryCopied')); // Güvenlik: 30 saniye sonra panoyu temizle
+}
+
+// ── MASTER PASSWORD REPROMPT ───────────────────────────────────────
+let repromptPendingAction = null;
+
+function constantTimeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const charA = i < a.length ? a.charCodeAt(i) : 0;
+    const charB = i < b.length ? b.charCodeAt(i) : 0;
+    diff |= charA ^ charB;
+  }
+  return diff === 0;
+}
+
+function requireReprompt(id, callback) {
+  const e = entries.find(x => x.id === id);
+  if (!e || !e.reprompt) {
+    callback();
+    return;
+  }
+  repromptPendingAction = callback;
+  const overlay = document.getElementById('repromptOverlay');
+  const inp = document.getElementById('repromptPwInp');
+  const msg = document.getElementById('repromptMsg');
+  if (inp) {
+    inp.value = '';
+    inp.type = 'password';
+  }
+  if (msg) {
+    msg.textContent = '';
+    msg.style.display = 'none';
+  }
+  const eyeBtn = document.getElementById('btnEyeReprompt');
+  if (eyeBtn) eyeBtn.textContent = '●';
+  if (overlay) overlay.classList.add('open');
+  setTimeout(() => { if (inp) inp.focus(); }, 80);
+}
+
+function verifyReprompt() {
+  const inp = document.getElementById('repromptPwInp');
+  const msg = document.getElementById('repromptMsg');
+  const val = inp ? inp.value : '';
+  if (constantTimeEqual(val, master)) {
+    closeRepromptModal();
+    if (repromptPendingAction) {
+      const action = repromptPendingAction;
+      repromptPendingAction = null;
+      action();
+    }
+  } else {
+    if (msg) {
+      msg.textContent = t('repromptWrongPw');
+      msg.style.display = 'block';
+    }
+    if (inp) {
+      inp.select();
+      inp.focus();
+    }
+  }
+}
+
+function closeRepromptModal() {
+  repromptPendingAction = null;
+  const inp = document.getElementById('repromptPwInp');
+  if (inp) inp.value = '';
+  closeModal('repromptOverlay');
+}
+
+// ── PASSWORD REVISION HISTORY ──────────────────────────────────────
+async function openPwHistory() {
+  const listEl = document.getElementById('pwHistoryList');
+  if (!listEl) return;
+  const entry = editId ? entries.find(x => x.id === editId) : null;
+  if (!entry || !Array.isArray(entry.history) || entry.history.length === 0) {
+    listEl.innerHTML = `<div style="font-family:var(--mono);font-size:12px;color:var(--mu);text-align:center;padding:16px;">${esc(t('pwHistoryEmpty'))}</div>`;
+  } else {
+    const itemsHtml = await Promise.all(entry.history.map(async (item, idx) => {
+      const decrypted = await memDecrypt(item.password);
+      const d = new Date(item.date);
+      const dateFormatted = isNaN(d.getTime()) ? '' : d.toLocaleString();
+      const masked = decrypted ? (decrypted.length > 4 ? decrypted.slice(0, 2) + '••••' + decrypted.slice(-2) : '••••') : '••••';
+      return `
+        <div class="pw-history-item">
+          <div style="display:flex;flex-direction:column;gap:2px;overflow:hidden;flex:1;">
+            <div class="pw-hist-date">${esc(dateFormatted)}</div>
+            <div class="pw-hist-val" title="${esc(decrypted)}">${esc(masked)}</div>
+          </div>
+          <button type="button" class="btn-io" data-copy-hist="${idx}" style="font-size:11px;padding:4px 8px;flex-shrink:0;">
+            ${esc(t('btnCopy') || 'Kopyala')}
+          </button>
+        </div>
+      `;
+    }));
+    listEl.innerHTML = itemsHtml.join('');
+    listEl.querySelectorAll('[data-copy-hist]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const idx = parseInt(btn.getAttribute('data-copy-hist'), 10);
+        if (entry.history[idx]) {
+          const raw = await memDecrypt(entry.history[idx].password);
+          await copySecure(raw, t('pwHistoryCopied'));
+        }
+      });
+    });
+  }
+  document.getElementById('pwHistoryOverlay')?.classList.add('open');
+}
+
+// ── EMERGENCY KIT (.html) ──────────────────────────────────────────
+function generateEmergencyKitHtml(recoveryKey, dateStr) {
+  const isEn = document.documentElement.lang === 'en';
+  const title = isEn ? 'FUIN EMERGENCY KIT' : 'FUIN ACİL DURUM KİTİ';
+  const subtitle = isEn 
+    ? 'Confidential Disaster Recovery Document for your Fuin Password Vault'
+    : 'Fuin Şifre Kasanız için Gizli ve Çevrimdışı Kurtarma Belgesi';
+  const recoveryTitle = isEn ? 'PRIMARY RECOVERY KEY' : 'BİRİNCİL KURTARMA ANAHTARI';
+  const recoveryDesc = isEn
+    ? 'This 256-bit cryptographic key can unlock and recover your vault if you ever lose or forget your Master Password. Keep this document strictly confidential.'
+    : 'Bu 256-bit kriptografik anahtar, Ana Şifrenizi unutmanız veya erişiminizi kaybetmeniz durumunda kasanızı kurtarmanızı sağlar. Bu belgeyi kesinlikle gizli tutun.';
+  const masterPwTitle = isEn ? 'MASTER PASSWORD (HANDWRITTEN)' : 'ANA ŞİFRE (EL YAZISIYLA)';
+  const masterPwDesc = isEn
+    ? 'Write your Master Password here by hand for air-gapped physical cold backup. Never save this file with your master password typed in.'
+    : 'Fiziksel soğuk yedekleme amacıyla buraya Ana Şifrenizi el yazınızla not edin. Bu dosyayı asla dijital olarak şifreniz yazılı halde kaydetmeyin.';
+  const instructionsTitle = isEn ? 'DISASTER RECOVERY INSTRUCTIONS' : 'KASAYI KURTARMA ADIMLARI';
+  const step1 = isEn 
+    ? '1. Open Fuin on your desktop or mobile device.'
+    : '1. Fuin uygulamasını bilgisayarınızda veya telefonunuzda açın.';
+  const step2 = isEn
+    ? '2. On the unlock screen, click "Forgot Password" ("Şifremi Unuttum").'
+    : '2. Kilit ekranında "Şifremi Unuttum" bağlantısına tıklayın.';
+  const step3 = isEn
+    ? '3. Enter the 32-character Primary Recovery Key listed above exactly as shown.'
+    : '3. Yukarıda listelenen 32 karakterlik Birincil Kurtarma Anahtarını eksiksiz girin.';
+  const step4 = isEn
+    ? '4. Set your new Master Password. Your vault entries will be atomically re-encrypted.'
+    : '4. Yeni Ana Şifrenizi belirleyin. Kasanız yeni şifrenizle baştan sona otomatik olarak yeniden şifrelenir.';
+  const securityRulesTitle = isEn ? 'SECURITY BEST PRACTICES' : 'GÜVENLİK KURALLARI';
+  const rule1 = isEn
+    ? 'PRINT IMMEDIATELY: Print this page physically on paper and delete this unencrypted HTML file from your downloads.'
+    : 'HEMEN YAZDIRIN: Bu sayfayı fiziksel kağıda yazdırın ve indirilen bu HTML dosyasını bilgisayarınızdan kalıcı olarak silin.';
+  const rule2 = isEn
+    ? 'PHYSICAL STORAGE: Store the printed sheet in a fireproof safe, bank deposit box, or sealed envelope.'
+    : 'FİZİKSEL SAKLAMA: Çıktıyı yangına dayanıklı bir kasada, banka kasasında veya kilitli bir çekmecede saklayın.';
+  const rule3 = isEn
+    ? 'NO DIGITAL SHARING: Never upload this file to Google Drive, iCloud, Dropbox, or send it via email or messaging apps.'
+    : 'DİJİTAL PAYLAŞIM YASAKTIR: Bu belgeyi asla bulut depolamaya yüklemeyin, e-posta veya mesajlaşma uygulamalarıyla göndermeyin.';
+  const footerNote = isEn
+    ? 'Fuin Password Vault • Zero-Knowledge Local Architecture • High-Assurance End-to-End Cryptography'
+    : 'Fuin Şifre Yöneticisi • Sıfır Bilgi Yerel Mimari • Uçtan Uca Yüksek Güvenceli Kriptografi';
+
+  return `<!DOCTYPE html>
+<html lang="${isEn ? 'en' : 'tr'}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #111827;
+    --muted: #4b5563;
+    --border: #e5e7eb;
+    --card: #f9fafb;
+    --accent: #0f172a;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #090a0f;
+      --fg: #f3f4f6;
+      --muted: #9ca3af;
+      --border: #1f2937;
+      --card: #111827;
+      --accent: #38bdf8;
+    }
+  }
+  @media print {
+    :root {
+      --bg: #ffffff !important;
+      --fg: #000000 !important;
+      --muted: #333333 !important;
+      --border: #cccccc !important;
+      --card: #f8f9fa !important;
+      --accent: #000000 !important;
+    }
+    body { padding: 0 !important; }
+    .no-print { display: none !important; }
+    .kit-card { break-inside: avoid; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    line-height: 1.5;
+    padding: 40px 20px;
+    display: flex;
+    justify-content: center;
+  }
+  .container {
+    max-width: 720px;
+    width: 100%;
+  }
+  .header {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .header-left h1 {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--accent);
+  }
+  .header-left p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .meta-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .btn-print {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 20px;
+  }
+  .kit-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .kit-card h2 {
+    font-size: 13px;
+    font-family: var(--mono);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .kit-card p {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+    line-height: 1.6;
+  }
+  .key-box {
+    background: var(--bg);
+    border: 2px dashed var(--accent);
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-align: center;
+    border-radius: 6px;
+    word-break: break-all;
+    user-select: all;
+  }
+  .handwrite-line {
+    border-bottom: 1px solid var(--muted);
+    height: 36px;
+    margin-top: 10px;
+    display: flex;
+    align-items: flex-end;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    padding-bottom: 4px;
+  }
+  ol, ul {
+    padding-left: 20px;
+    font-size: 13px;
+    color: var(--fg);
+  }
+  li { margin-bottom: 8px; line-height: 1.5; }
+  .footer {
+    border-top: 1px solid var(--border);
+    margin-top: 30px;
+    padding-top: 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="no-print" style="display:flex; justify-content:flex-end;">
+    <button class="btn-print" onclick="window.print()">🖨 ${isEn ? 'Print Emergency Kit' : 'Bu Kiti Yazdır'}</button>
+  </div>
+  <div class="header">
+    <div class="header-left">
+      <h1>FUIN</h1>
+      <p>${subtitle}</p>
+    </div>
+    <div class="meta-tag">
+      ${isEn ? 'Exported' : 'Tarih'}: ${dateStr}
+    </div>
+  </div>
+
+  <div class="kit-card">
+    <h2>🔑 ${recoveryTitle}</h2>
+    <p>${recoveryDesc}</p>
+    <div class="key-box">${recoveryKey || '________________________________________'}</div>
+  </div>
+
+  <div class="kit-card">
+    <h2>✍️ ${masterPwTitle}</h2>
+    <p>${masterPwDesc}</p>
+    <div class="handwrite-line">${isEn ? '[ Note Master Password here by hand after printing ]' : '[ Yazdırdıktan sonra buraya elle Ana Şifrenizi yazınız ]'}</div>
+  </div>
+
+  <div class="kit-card">
+    <h2>📋 ${instructionsTitle}</h2>
+    <ol>
+      <li>${step1}</li>
+      <li>${step2}</li>
+      <li>${step3}</li>
+      <li>${step4}</li>
+    </ol>
+  </div>
+
+  <div class="kit-card" style="border-left: 4px solid #b07020;">
+    <h2>🛡 ${securityRulesTitle}</h2>
+    <ul>
+      <li><b>${rule1.split(':')[0]}:</b> ${rule1.split(':')[1]}</li>
+      <li><b>${rule2.split(':')[0]}:</b> ${rule2.split(':')[1]}</li>
+      <li><b>${rule3.split(':')[0]}:</b> ${rule3.split(':')[1]}</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    ${footerNote}
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+async function exportEmergencyKit() {
+  if (!master) {
+    toast(t('toastLoginFirst'));
+    return;
+  }
+  let rKey = document.getElementById('recoveryKeyDisplay')?.textContent?.trim() || '';
+  if (!rKey) {
+    const proceed = confirm(t('confirmGenKitRegen') || 'Acil durum kitine anahtarınızı eklemek için yeni bir kurtarma anahtarı üretilecek. Onaylıyor musunuz?');
+    if (!proceed) return;
+    rKey = generateRecoveryKey();
+    await saveRecoveryKey(rKey, master);
+    document.getElementById('recoveryKeyDisplay').textContent = rKey;
+    await checkRecoveryStatus();
+  }
+  const dateStr = new Date().toLocaleString();
+  const html = generateEmergencyKitHtml(rKey, dateStr);
+  const success = await api.exportFile({
+    content: html,
+    defaultName: 'Fuin-Acil-Durum-Kiti.html',
+    filters: [{ name: 'HTML Document', extensions: ['html'] }]
+  });
+  if (success) {
+    toast(t('toastEmergencyKitSaved'));
+  }
 }
 
 // ── SIFIRLAMA (giriş ekranından — tüm verileri sil) ───────────────
@@ -1694,10 +2129,33 @@ function initAppListeners() {
   document.getElementById('btnCloseTOTP')?.addEventListener('click', closeTOTP);
   document.getElementById('totpCode')?.addEventListener('click', copyTOTP);
 
-  // Recovery modal
+  // Recovery modal & Emergency Kit
   document.getElementById('recoveryKeyDisplay')?.addEventListener('click', copyRecoveryKey);
   document.getElementById('btnCloseRecovery')?.addEventListener('click', () => closeModal('recoveryOverlay'));
   document.getElementById('btnRegenRecovery')?.addEventListener('click', handleRegenerateRecovery);
+  document.getElementById('btnDownloadEmergencyKit')?.addEventListener('click', exportEmergencyKit);
+  document.getElementById('btnModalEmergencyKit')?.addEventListener('click', exportEmergencyKit);
+
+  // Master Password Reprompt modal
+  document.getElementById('btnCloseReprompt')?.addEventListener('click', closeRepromptModal);
+  document.getElementById('btnCancelReprompt')?.addEventListener('click', closeRepromptModal);
+  document.getElementById('btnConfirmReprompt')?.addEventListener('click', verifyReprompt);
+  document.getElementById('btnEyeReprompt')?.addEventListener('click', () => toggleEye('repromptPwInp'));
+  document.getElementById('repromptPwInp')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') verifyReprompt();
+    else if (e.key === 'Escape') closeRepromptModal();
+  });
+  document.getElementById('repromptOverlay')?.addEventListener('mousedown', (e) => {
+    if (e.target.id === 'repromptOverlay') closeRepromptModal();
+  });
+
+  // Password History modal
+  document.getElementById('btnOpenPwHistory')?.addEventListener('click', openPwHistory);
+  document.getElementById('btnClosePwHistory')?.addEventListener('click', () => closeModal('pwHistoryOverlay'));
+  document.getElementById('btnDonePwHistory')?.addEventListener('click', () => closeModal('pwHistoryOverlay'));
+  document.getElementById('pwHistoryOverlay')?.addEventListener('mousedown', (e) => {
+    if (e.target.id === 'pwHistoryOverlay') closeModal('pwHistoryOverlay');
+  });
   document.getElementById('btnBannerGoSettings')?.addEventListener('click', () => {
     setView('settings');
     document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.id === 'nav-settings'));

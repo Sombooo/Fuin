@@ -223,8 +223,9 @@
             <div id="recoverySettingWarning" style="display:none; margin-top:8px; padding:8px 10px; background:rgba(176,112,32,0.1); border:1px solid rgba(176,112,32,0.25); border-radius:6px; font-size:11px; color:var(--amber); line-height:1.4;">
               <span data-i18n="recoveryLegacyWarnText">⚠️ <b>Cihaza Bağlı Anahtar:</b> Kasa parolanız taşınabilir formata yükseltildi, ancak kurtarma anahtarınız bu cihaza bağımlı kalmaya devam ediyor. Verilerinizi başka bir cihaza taşımadan önce yeni bir kurtarma anahtarı üretin.</span>
             </div>
-            <div style="margin-top:10px; display:flex; align-items:center; gap:12px;">
+            <div style="margin-top:10px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
               <button class="btn-io pri" id="btnRegenRecovery" data-i18n="btnRegenRecovery">Kurtarma Anahtarını Yenile</button>
+              <button class="btn-io" id="btnDownloadEmergencyKit" data-i18n="btnEmergencyKit">Acil Durum Kiti İndir (.html)</button>
               <span id="recoveryStatusBadge" style="font-family:var(--mono); font-size:11px; color:var(--mu);"></span>
             </div>
           </div>
@@ -371,6 +372,22 @@
         </div>
         <label class="toggle"><input type="checkbox" id="f-fav"><span class="slider"></span></label>
       </div>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span style="display:flex;align-items:center;gap:6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span data-i18n="toggleRepromptLabel">Ana Şifre Onayı İste</span>
+          </span>
+          <span data-i18n="toggleRepromptSub">Şifreyi görmeden veya kopyalamadan önce ekstra doğrulama ister</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="f-reprompt"><span class="slider"></span></label>
+      </div>
+      <div id="f-pw-history-row" style="display:none;margin-top:10px;">
+        <button type="button" class="btn-io" id="btnOpenPwHistory" style="width:100%;font-size:11px;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+          <span id="pwHistoryBtnLabel" data-i18n="btnPwHistory">Şifre Geçmişi</span>
+        </button>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn-cancel" id="btnCancelAdd" data-i18n="btnCancel">İptal</button>
@@ -408,7 +425,8 @@
       <div class="recovery-key-display" id="recoveryKeyDisplay"></div>
       <div style="font-family:var(--mono);font-size:11px;color:var(--mu);text-align:center" data-i18n="recoveryHint">anahtara tıkla → kopyala</div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <button class="btn-cancel" id="btnModalEmergencyKit" data-i18n="btnEmergencyKit" style="font-size:11px;">Acil Durum Kiti İndir (.html)</button>
       <button class="btn-save" id="btnCloseRecovery" data-i18n="recoverySavedBtn">Kaydettim, Kapat</button>
     </div>
   </div>
@@ -466,6 +484,54 @@
     <div class="modal-footer">
       <button class="btn-cancel" id="btnCancelHardReset" data-i18n="btnCancel">İptal</button>
       <button class="btn-save" id="btnConfirmHardReset" style="background:var(--red)" data-i18n="hardResetBtn">Sıfırla</button>
+    </div>
+  </div>
+</div>
+
+<!-- REPROMPT MODAL -->
+<div class="overlay" id="repromptOverlay">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-head">
+      <div class="modal-title" style="display:flex;align-items:center;gap:6px;" data-i18n="repromptModalTitle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>ANA ŞİFRE DOĞRULAMASI</span>
+      </div>
+      <button class="modal-close" id="btnCloseReprompt">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:12px;" data-i18n="repromptModalDesc">
+        Bu kayıt yüksek güvenliklidir. Devam etmek için lütfen Ana Şifrenizi girin.
+      </div>
+      <div class="fg">
+        <label data-i18n="lockMasterLabel">Ana Şifre</label>
+        <div class="pw-row">
+          <input class="fi" id="repromptPwInp" type="password" placeholder="••••••••">
+          <div class="pw-row-btns">
+            <button class="icon-btn" id="btnEyeReprompt" type="button">●</button>
+          </div>
+        </div>
+      </div>
+      <div id="repromptMsg" style="font-family:var(--mono);font-size:11px;color:var(--red);margin-top:6px;display:none;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="btnCancelReprompt" data-i18n="btnCancel">İptal</button>
+      <button class="btn-save" id="btnConfirmReprompt" data-i18n="repromptBtnVerify">Doğrula ve Aç</button>
+    </div>
+  </div>
+</div>
+
+<!-- PASSWORD HISTORY MODAL -->
+<div class="overlay" id="pwHistoryOverlay">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="pwHistoryTitle">ŞİFRE GEÇMİŞİ</div>
+      <button class="modal-close" id="btnClosePwHistory">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="pwHistoryList" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="btnDonePwHistory" data-i18n="btnClose">Kapat</button>
     </div>
   </div>
 </div>

@@ -3,13 +3,12 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
       time: "06:00"
       timezone: "Europe/Istanbul"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     commit-message:
-      prefix: "security(deps)"
+      prefix: "chore(deps)"
     labels:
       - "dependencies"
-      - "security"

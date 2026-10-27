@@ -439,7 +439,7 @@ api.onExtLookupRequest((req) => {
   api.extRespond(req.requestId, matches);
 });
 
-api.onExtRevealRequest((req) => {
+api.onExtRevealRequest(async (req) => {
   if (pendingExtReveal !== null) {
     api.extRespond(req.requestId, { error: 'busy' });
     return;
@@ -453,6 +453,20 @@ api.onExtRevealRequest((req) => {
     api.extRespond(req.requestId, { error: 'domain-mismatch' });
     return;
   }
+
+  // Bitwarden & 1Password tarzı kesintisiz anında otomatik doldurma (Seamless Autofill):
+  // Kasa açıkken ve alan adı tam eşleştiğinde ekrandan onay istemeden şifreyi doğrudan doldur.
+  const requirePrompt = localStorage.getItem('fuin-ext-prompt-approval') === 'true';
+  if (!requirePrompt) {
+    try {
+      api.extRespond(req.requestId, { username: entry.username, password: await memDecrypt(entry.password) });
+      toast(t('toastExtCredSent') || 'Şifre tarayıcıya aktarıldı');
+    } catch {
+      api.extRespond(req.requestId, { error: 'internal-error' });
+    }
+    return;
+  }
+
   pendingExtReveal = { requestId: req.requestId, entry, domain: req.domain };
   document.getElementById('extRevealSite').textContent = entry.site;
   document.getElementById('extRevealUser').textContent = entry.username || '—';
@@ -2184,6 +2198,14 @@ function initAppListeners() {
   // Extension reveal modal
   document.getElementById('btnDenyExtReveal')?.addEventListener('click', denyExtReveal);
   document.getElementById('btnApproveExtReveal')?.addEventListener('click', approveExtReveal);
+
+  const togglePrompt = document.getElementById('toggleExtPromptApproval');
+  if (togglePrompt) {
+    togglePrompt.checked = localStorage.getItem('fuin-ext-prompt-approval') === 'true';
+    togglePrompt.addEventListener('change', (e) => {
+      localStorage.setItem('fuin-ext-prompt-approval', e.target.checked ? 'true' : 'false');
+    });
+  }
 
   // Extension Settings & Chrome Extension registration
   document.getElementById('btnRegisterChromeExt')?.addEventListener('click', handleRegisterChromeExt);

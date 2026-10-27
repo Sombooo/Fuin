@@ -350,8 +350,7 @@
   // Cmd+Shift+L (macOS) veya Ctrl+Shift+L (Windows/Linux)
   // capture: true ile sayfa scriptlerinin event'i yutması engellenir.
   window.addEventListener('keydown', (e) => {
-    const isMac = (typeof navigator !== 'undefined' && (navigator.platform?.toUpperCase().includes('MAC') || navigator.userAgent?.includes('Mac')));
-    const hasModifier = isMac ? (e.metaKey || e.ctrlKey) : e.ctrlKey;
+    const hasModifier = e.metaKey || e.ctrlKey;
     const isKeyL = e.key === 'l' || e.key === 'L' || e.code === 'KeyL';
 
     if (hasModifier && e.shiftKey && isKeyL) {

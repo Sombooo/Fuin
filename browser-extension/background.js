@@ -71,10 +71,19 @@ if (typeof chrome !== 'undefined' && chrome.commands?.onCommand) {
   chrome.commands.onCommand.addListener((command) => {
     if (command === 'autofill-credential') {
       const api = typeof browser !== 'undefined' && browser.tabs ? browser : chrome;
-      api.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs?.[0]?.id) {
-          api.tabs.sendMessage(tabs[0].id, { type: 'fuin-trigger-fill' }, () => {
+      api.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+        const tab = tabs?.[0];
+        if (tab?.id) {
+          api.tabs.sendMessage(tab.id, { type: 'fuin-trigger-fill' }, () => {
             if (chrome.runtime?.lastError) { /* tab might not have content script injected */ }
+          });
+        } else {
+          api.tabs.query({ active: true, currentWindow: true }, (fallbackTabs) => {
+            if (fallbackTabs?.[0]?.id) {
+              api.tabs.sendMessage(fallbackTabs[0].id, { type: 'fuin-trigger-fill' }, () => {
+                if (chrome.runtime?.lastError) {}
+              });
+            }
           });
         }
       });

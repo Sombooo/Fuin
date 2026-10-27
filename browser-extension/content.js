@@ -314,6 +314,21 @@
     }), 0);
   }
 
+  function triggerFill() {
+    const activeEl = document.activeElement && document.activeElement.matches && document.activeElement.matches('input') ? document.activeElement : null;
+    const pwField = activeEl || document.querySelector('input[type="password"]') || findStandaloneUsernameFields()[0];
+    if (pwField) {
+      let entry = FIELD_MAP.get(pwField);
+      if (!entry) {
+        injectIcon(pwField);
+        entry = FIELD_MAP.get(pwField);
+      }
+      if (entry && entry.shadow) {
+        handleFillClick(pwField, entry.icon || pwField, entry.shadow);
+      }
+    }
+  }
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'fuin-trigger-fill') {
       const activeEl = document.activeElement && document.activeElement.matches && document.activeElement.matches('input') ? document.activeElement : null;
@@ -330,6 +345,21 @@
       }
     }
   });
+
+  // Sayfa içi klavye kısayolu dinleyicisi:
+  // Cmd+Shift+L (macOS) veya Ctrl+Shift+L (Windows/Linux)
+  // capture: true ile sayfa scriptlerinin event'i yutması engellenir.
+  window.addEventListener('keydown', (e) => {
+    const isMac = (typeof navigator !== 'undefined' && (navigator.platform?.toUpperCase().includes('MAC') || navigator.userAgent?.includes('Mac')));
+    const hasModifier = isMac ? (e.metaKey || e.ctrlKey) : e.ctrlKey;
+    const isKeyL = e.key === 'l' || e.key === 'L' || e.code === 'KeyL';
+
+    if (hasModifier && e.shiftKey && isKeyL) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerFill();
+    }
+  }, true);
 
   function scan() {
     findLoginForms().forEach(injectIcon);

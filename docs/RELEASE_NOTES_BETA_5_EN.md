@@ -29,4 +29,4 @@ shasum -a 256 Fuin-1.0.0-beta.5-arm64.dmg
 ```
 
 ---
-*Security reports:* [security@sombo.dev](mailto:security@sombo.dev) · *Repository:* [github.com/Sombooo/Fuin](https://github.com/Sombooo/Fuin)
+*Security reports:* [hellofuin@gmail.com](mailto:hellofuin@gmail.com) · *Repository:* [github.com/Sombooo/Fuin](https://github.com/Sombooo/Fuin)

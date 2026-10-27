@@ -3,7 +3,7 @@
 **Version:** 1.0 (Beta 5 Hardened Baseline)  
 **Date:** October 2026  
 **Status:** Active Architectural Standard  
-**Maintainer:** Fuin Security Core (`security@sombo.dev`)  
+**Maintainer:** Fuin Security Core (`hellofuin@gmail.com`)  
 
 ---
 
@@ -133,7 +133,7 @@ Open any standard network inspection tool:
 ## 6. Responsible Disclosure & Security Audits
 
 Fuin adheres to the [RFC 9116](https://datatracker.ietf.org/doc/html/rfc9116) reporting specification:
-- **Security Contact:** `mailto:security@sombo.dev`
+- **Security Contact:** `mailto:hellofuin@gmail.com`
 - **Security Policy:** [/.well-known/security.txt](file:///.well-known/security.txt)
 - **Vulnerability Reporting:** [GitHub Security Advisories](https://github.com/Sombooo/Fuin/security/advisories)
 - **Response Commitment:** All valid security advisories receive an initial response within 48 hours. Fixes are prioritized and released with full cryptographic disclosure.

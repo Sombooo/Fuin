@@ -49,7 +49,7 @@ Fuin syncs vault data directly between devices without cloud intermediaries, cen
 ## 6. Vulnerability Reporting & Responsible Disclosure
 We welcome security researchers and independent auditors to inspect Fuin's open-source architecture. Fuin maintains an RFC 9116 compliant security policy:
 
-- **Security Contact:** [security@sombo.dev](mailto:security@sombo.dev)
+- **Security Contact:** [hellofuin@gmail.com](mailto:hellofuin@gmail.com)
 - **RFC 9116 Policy:** [/.well-known/security.txt](file:///.well-known/security.txt)
 - **Confidential Advisories:** Please report vulnerabilities via [GitHub Security Advisories](https://github.com/Sombooo/Fuin/security/advisories) or email before public disclosure.
 - **Response SLA:** We acknowledge all valid security reports within 48 hours and prioritize patch releases. Confirmed researchers are acknowledged in release notes.

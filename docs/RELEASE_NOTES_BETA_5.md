@@ -61,5 +61,5 @@ shasum -a 256 Fuin-1.0.0-beta.5-arm64.dmg
 
 ## 💬 Geri Bildirim ve Katkı
 
-- **Güvenlik İletişimi:** `security@sombo.dev`
+- **Güvenlik İletişimi:** `hellofuin@gmail.com`
 - **Kaynak Kod:** [github.com/Sombooo/Fuin](https://github.com/Sombooo/Fuin)

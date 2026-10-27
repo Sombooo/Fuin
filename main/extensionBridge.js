@@ -237,7 +237,7 @@ function handleExtResponse(requestId, payload) {
   return true;
 }
 
-function startExtensionBridge({ app, getMainWindow, getIsUnlocked }) {
+function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity }) {
   if (extServer) return;
   const token = getOrCreateExtToken(app);
   const socketPath = getExtSocketPath(app);
@@ -283,6 +283,10 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked }) {
     }
     if (!getIsUnlocked()) {
       return reply({ id: msg.id, error: 'locked' });
+    }
+
+    if (typeof onActivity === 'function') {
+      try { onActivity(); } catch {}
     }
 
     try {

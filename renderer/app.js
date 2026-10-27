@@ -335,6 +335,17 @@ function dismissAutoLockWarning() {
   document.getElementById('autoLockOverlay')?.classList.remove('open');
 }
 
+let _lastActivityReport = 0;
+function reportUserActivity() {
+  const now = Date.now();
+  if (now - _lastActivityReport > 5000) {
+    _lastActivityReport = now;
+    try { api.notifyActivity?.(); } catch {}
+  }
+}
+window.addEventListener('pointerdown', reportUserActivity, { passive: true });
+window.addEventListener('keydown', reportUserActivity, { passive: true });
+
 // ── TARAYICI EKLENTİSİ KÖPRÜSÜ ──────────────────────────────────────
 // main.js sadece taşıyıcı; asıl arama/ifşa işlemi burada (renderer'ın
 // bellekte tuttuğu `entries` üzerinde) yapılır — şifre çözülmüş veri

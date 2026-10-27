@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld('kekkai', {
   onAutoLockWarningCancel: (cb)         => { ipcRenderer.on('auto-lock-warning-cancel', cb); return () => ipcRenderer.removeListener('auto-lock-warning-cancel', cb); },
   onForceLock:         (cb)             => { const h = (_, reason) => cb(reason); ipcRenderer.on('force-lock', h); return () => ipcRenderer.removeListener('force-lock', h); },
   setIdleLock:         (s)              => ipcRenderer.invoke('set-idle-lock', s),
+  notifyActivity:      ()               => ipcRenderer.send('user-activity'),
   checkTouchId:        ()               => ipcRenderer.invoke('check-touchid-available'),
   touchIdUnlock:       ()               => ipcRenderer.invoke('touchid-unlock'),
   saveTouchIdKey:      (k)              => ipcRenderer.invoke('save-touchid-key', k),

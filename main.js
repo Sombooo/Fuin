@@ -74,6 +74,10 @@ function createWindow() {
   mainWindow.webContents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   
+  mainWindow.on('focus', () => {
+    powerMonitorManager.recordActivity();
+  });
+
   mainWindow.on('minimize', () => {
     // Pencere simge durumuna küçüldüğünde kasayı zorla kilitleme;
     // otomatik kilitlenme sayacı (powerMonitor) arka planda işlemeye devam eder.
@@ -113,9 +117,15 @@ app.whenReady().then(() => {
     getIsUnlocked: () => isUnlocked,
     onForceLock: (reason) => triggerForceLock(reason),
     onWarning: (remaining) => mainWindow?.webContents?.send('auto-lock-warning', remaining),
-    onWarningCancel: () => mainWindow?.webContents?.send('auto-lock-warning-cancel')
+    onWarningCancel: () => mainWindow?.webContents?.send('auto-lock-warning-cancel'),
+    getMainWindow: () => mainWindow
   });
-  startExtensionBridge();
+  startExtensionBridge({
+    app,
+    getMainWindow: () => mainWindow,
+    getIsUnlocked: () => isUnlocked,
+    onActivity: () => powerMonitorManager.recordActivity()
+  });
   autoInstallNativeMessagingHosts();
 
   // Cleanup any orphaned recovery transactions from crashes (Task R1)
@@ -234,6 +244,10 @@ ipcMain.handle('set-unlock-state', (_, unlocked) => {
 
 ipcMain.handle('set-idle-lock', (_, seconds) => {
   powerMonitorManager.setIdleLockSeconds(seconds);
+});
+
+ipcMain.on('user-activity', () => {
+  powerMonitorManager.recordActivity();
 });
 
 // ===================================================================

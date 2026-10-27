@@ -75,15 +75,15 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   
   mainWindow.on('minimize', () => {
-    if (powerMonitorManager.getIdleLockSeconds() > 0) {
-      triggerForceLock('minimized');
-    }
+    // Pencere simge durumuna küçüldüğünde kasayı zorla kilitleme;
+    // otomatik kilitlenme sayacı (powerMonitor) arka planda işlemeye devam eder.
   });
 
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
-      triggerForceLock('closed');
+      // Pencere kapatıldığında arka planda sessizce açık kalır (Bitwarden/1Password gibi);
+      // kasa yalnızca boşta kalma süresi (idle) dolunca veya ekran kilitlenince kilitlenir.
       mainWindow.hide();
     }
   });

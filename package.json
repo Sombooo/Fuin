@@ -16,7 +16,7 @@
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
     "electron": "^42.11.16",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.18.0"
   },
   "overrides": {
     "tar": "^7.5.22"

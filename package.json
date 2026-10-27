@@ -27,7 +27,7 @@
     "cbor": "^10.0.12",
     "crc-32": "^1.2.2",
     "node-machine-id": "^1.1.12",
-    "sodium-native": "^5.1.0",
+    "sodium-native": "^5.2.0",
     "zstdify": "^1.4.0",
     "zxcvbn": "^4.4.2"
   },

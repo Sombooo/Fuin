@@ -109,67 +109,76 @@ function check(desc, fn) {
 
 const DESKTOP_ROOT = path.resolve(__dirname);
 const MOBILE_ROOT = path.resolve(__dirname, '..', 'FuinMobile');
+const hasMobile = fs.existsSync(MOBILE_ROOT);
 
 // ── 1. SEC-BUILD-01: Android Release Signing ────────────────────────────────
 console.log('\n[1. SEC-BUILD-01: Android Release Signing Configuration]');
 
-check('1.1 buildTypes.release does NOT use debug signing config', () => {
-  const gradlePath = path.join(MOBILE_ROOT, 'android', 'app', 'build.gradle');
-  const content = fs.readFileSync(gradlePath, 'utf8');
-  const releaseMatch = content.match(/buildTypes\s*\{[\s\S]*?release\s*\{([\s\S]*?)\}/);
-  assert.ok(releaseMatch, 'buildTypes.release block must exist');
-  assert.ok(!releaseMatch[1].includes('signingConfig signingConfigs.debug'), 'release must not use signingConfigs.debug');
-  assert.ok(releaseMatch[1].includes('signingConfig signingConfigs.release'), 'release must use signingConfigs.release');
-});
+if (hasMobile) {
+  check('1.1 buildTypes.release does NOT use debug signing config', () => {
+    const gradlePath = path.join(MOBILE_ROOT, 'android', 'app', 'build.gradle');
+    const content = fs.readFileSync(gradlePath, 'utf8');
+    const releaseMatch = content.match(/buildTypes\s*\{[\s\S]*?release\s*\{([\s\S]*?)\}/);
+    assert.ok(releaseMatch, 'buildTypes.release block must exist');
+    assert.ok(!releaseMatch[1].includes('signingConfig signingConfigs.debug'), 'release must not use signingConfigs.debug');
+    assert.ok(releaseMatch[1].includes('signingConfig signingConfigs.release'), 'release must use signingConfigs.release');
+  });
 
-check('1.2 signingConfigs.release reads MYAPP_UPLOAD_* properties and env vars', () => {
-  const gradlePath = path.join(MOBILE_ROOT, 'android', 'app', 'build.gradle');
-  const content = fs.readFileSync(gradlePath, 'utf8');
-  assert.ok(content.includes('MYAPP_UPLOAD_STORE_FILE'), 'must check MYAPP_UPLOAD_STORE_FILE');
-  assert.ok(content.includes('MYAPP_UPLOAD_STORE_PASSWORD'), 'must check MYAPP_UPLOAD_STORE_PASSWORD');
-  assert.ok(content.includes('MYAPP_UPLOAD_KEY_ALIAS'), 'must check MYAPP_UPLOAD_KEY_ALIAS');
-  assert.ok(content.includes('MYAPP_UPLOAD_KEY_PASSWORD'), 'must check MYAPP_UPLOAD_KEY_PASSWORD');
-});
+  check('1.2 signingConfigs.release reads MYAPP_UPLOAD_* properties and env vars', () => {
+    const gradlePath = path.join(MOBILE_ROOT, 'android', 'app', 'build.gradle');
+    const content = fs.readFileSync(gradlePath, 'utf8');
+    assert.ok(content.includes('MYAPP_UPLOAD_STORE_FILE'), 'must check MYAPP_UPLOAD_STORE_FILE');
+    assert.ok(content.includes('MYAPP_UPLOAD_STORE_PASSWORD'), 'must check MYAPP_UPLOAD_STORE_PASSWORD');
+    assert.ok(content.includes('MYAPP_UPLOAD_KEY_ALIAS'), 'must check MYAPP_UPLOAD_KEY_ALIAS');
+    assert.ok(content.includes('MYAPP_UPLOAD_KEY_PASSWORD'), 'must check MYAPP_UPLOAD_KEY_PASSWORD');
+  });
 
-check('1.3 taskGraph fail-safe hook validates release credentials safely', () => {
-  const gradlePath = path.join(MOBILE_ROOT, 'android', 'app', 'build.gradle');
-  const content = fs.readFileSync(gradlePath, 'utf8');
-  assert.ok(content.includes('gradle.taskGraph.whenReady'), 'must have taskGraph.whenReady validation');
-  assert.ok(content.includes('throw new GradleException'), 'must throw GradleException on missing release credentials');
-  assert.ok(content.includes('Release build failed: Missing production signing credentials'), 'descriptive error message');
-});
+  check('1.3 taskGraph fail-safe hook validates release credentials safely', () => {
+    const gradlePath = path.join(MOBILE_ROOT, 'android', 'app', 'build.gradle');
+    const content = fs.readFileSync(gradlePath, 'utf8');
+    assert.ok(content.includes('gradle.taskGraph.whenReady'), 'must have taskGraph.whenReady validation');
+    assert.ok(content.includes('throw new GradleException'), 'must throw GradleException on missing release credentials');
+    assert.ok(content.includes('Release build failed: Missing production signing credentials'), 'descriptive error message');
+  });
+} else {
+  console.log('  ⚠ [SKIP] FuinMobile repository not found (CI environment)');
+}
 
 // ── 2. SEC-IOS-01: iOS Face ID Configuration ────────────────────────────────
 console.log('\n[2. SEC-IOS-01: iOS Face ID Configuration & Biometric Preservation]');
 
-check('2.1 app.json contains NSFaceIDUsageDescription under ios.infoPlist', () => {
-  const appJsonPath = path.join(MOBILE_ROOT, 'app.json');
-  const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
-  assert.ok(appJson.expo?.ios?.infoPlist?.NSFaceIDUsageDescription, 'NSFaceIDUsageDescription must be set');
-  assert.strictEqual(
-    appJson.expo.ios.infoPlist.NSFaceIDUsageDescription,
-    'Allow Fuin Mobile to use Face ID to unlock your secure vault.'
-  );
-});
+if (hasMobile) {
+  check('2.1 app.json contains NSFaceIDUsageDescription under ios.infoPlist', () => {
+    const appJsonPath = path.join(MOBILE_ROOT, 'app.json');
+    const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
+    assert.ok(appJson.expo?.ios?.infoPlist?.NSFaceIDUsageDescription, 'NSFaceIDUsageDescription must be set');
+    assert.strictEqual(
+      appJson.expo.ios.infoPlist.NSFaceIDUsageDescription,
+      'Allow Fuin Mobile to use Face ID to unlock your secure vault.'
+    );
+  });
 
-check('2.2 app.json plugins include expo-local-authentication with faceIDPermission', () => {
-  const appJsonPath = path.join(MOBILE_ROOT, 'app.json');
-  const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
-  const plugins = appJson.expo?.plugins || [];
-  const localAuthPlugin = plugins.find(p => Array.isArray(p) && p[0] === 'expo-local-authentication');
-  assert.ok(localAuthPlugin, 'expo-local-authentication plugin entry must exist');
-  assert.strictEqual(
-    localAuthPlugin[1]?.faceIDPermission,
-    'Allow Fuin Mobile to use Face ID to unlock your secure vault.'
-  );
-});
+  check('2.2 app.json plugins include expo-local-authentication with faceIDPermission', () => {
+    const appJsonPath = path.join(MOBILE_ROOT, 'app.json');
+    const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
+    const plugins = appJson.expo?.plugins || [];
+    const localAuthPlugin = plugins.find(p => Array.isArray(p) && p[0] === 'expo-local-authentication');
+    assert.ok(localAuthPlugin, 'expo-local-authentication plugin entry must exist');
+    assert.strictEqual(
+      localAuthPlugin[1]?.faceIDPermission,
+      'Allow Fuin Mobile to use Face ID to unlock your secure vault.'
+    );
+  });
 
-check('2.3 Android biometric permissions and camera description preserved', () => {
-  const appJsonPath = path.join(MOBILE_ROOT, 'app.json');
-  const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
-  assert.ok(appJson.expo?.ios?.infoPlist?.NSCameraUsageDescription, 'Camera permission must be preserved');
-  assert.ok(appJson.expo?.android?.permissions?.includes('android.permission.CAMERA'), 'Android camera permission preserved');
-});
+  check('2.3 Android biometric permissions and camera description preserved', () => {
+    const appJsonPath = path.join(MOBILE_ROOT, 'app.json');
+    const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
+    assert.ok(appJson.expo?.ios?.infoPlist?.NSCameraUsageDescription, 'Camera permission must be preserved');
+    assert.ok(appJson.expo?.android?.permissions?.includes('android.permission.CAMERA'), 'Android camera permission preserved');
+  });
+} else {
+  console.log('  ⚠ [SKIP] FuinMobile repository not found (CI environment)');
+}
 
 // ── 3. SEC-EXT-01: Chrome/Edge/Windows Native Messaging Distribution ────────
 console.log('\n[3. SEC-EXT-01: Chrome/Edge/Windows Native Messaging Distribution]');
@@ -342,25 +351,33 @@ check('8.1 Desktop app.js validates minimum 10 characters for sync password', ()
   assert.ok(content.includes('toastSyncPassMinLength'), 'shows localized min length toast');
 });
 
-check('8.2 Mobile App.js validates minimum 10 characters for sync password', () => {
-  const mobileAppPath = path.join(MOBILE_ROOT, 'App.js');
-  const content = fs.readFileSync(mobileAppPath, 'utf8');
-  assert.ok(content.includes('pw.length < 10'), 'validates mobile sync password length < 10');
-  assert.ok(content.includes('syncPassMinLen'), 'shows localized min length alert');
-});
+if (hasMobile) {
+  check('8.2 Mobile App.js validates minimum 10 characters for sync password', () => {
+    const mobileAppPath = path.join(MOBILE_ROOT, 'App.js');
+    const content = fs.readFileSync(mobileAppPath, 'utf8');
+    assert.ok(content.includes('pw.length < 10'), 'validates mobile sync password length < 10');
+    assert.ok(content.includes('syncPassMinLen'), 'shows localized min length alert');
+  });
+} else {
+  console.log('  ⚠ [SKIP] FuinMobile repository not found (CI environment)');
+}
 
 // ── 9. FIND-SYNC-02: Mobile Sync Password Retry Throttling ──────────────────
 console.log('\n[9. FIND-SYNC-02: Mobile Sync Password Retry Throttling]');
 
-check('9.1 Mobile App.js implements exponential backoff on wrong sync password', () => {
-  const mobileAppPath = path.join(MOBILE_ROOT, 'App.js');
-  const content = fs.readFileSync(mobileAppPath, 'utf8');
-  assert.ok(content.includes('const [syncFailCount, setSyncFailCount] = useState(0);'), 'declares syncFailCount');
-  assert.ok(content.includes('const [syncLockUntil, setSyncLockUntil] = useState(0);'), 'declares syncLockUntil');
-  assert.ok(content.includes('Math.min(Math.pow(2, newFailCount - 1), 30)'), 'exponential backoff 1, 2, 4, 8, 16, max 30s');
-  assert.ok(content.includes('Date.now() < syncLockUntil'), 'throttles attempts when locked');
-  assert.ok(content.includes('setSyncFailCount(0)'), 'resets on successful transfer or app lock');
-});
+if (hasMobile) {
+  check('9.1 Mobile App.js implements exponential backoff on wrong sync password', () => {
+    const mobileAppPath = path.join(MOBILE_ROOT, 'App.js');
+    const content = fs.readFileSync(mobileAppPath, 'utf8');
+    assert.ok(content.includes('const [syncFailCount, setSyncFailCount] = useState(0);'), 'declares syncFailCount');
+    assert.ok(content.includes('const [syncLockUntil, setSyncLockUntil] = useState(0);'), 'declares syncLockUntil');
+    assert.ok(content.includes('Math.min(Math.pow(2, newFailCount - 1), 30)'), 'exponential backoff 1, 2, 4, 8, 16, max 30s');
+    assert.ok(content.includes('Date.now() < syncLockUntil'), 'throttles attempts when locked');
+    assert.ok(content.includes('setSyncFailCount(0)'), 'resets on successful transfer or app lock');
+  });
+} else {
+  console.log('  ⚠ [SKIP] FuinMobile repository not found (CI environment)');
+}
 
 // ── 10. EDGE-STOR-01: Recovery Pair Window 5 Commit State Machine ───────────
 console.log('\n[10. EDGE-STOR-01: Recovery Pair Window 5 Commit Marker & Crash Recovery]');
@@ -468,12 +485,16 @@ check('11.2 i18n.js has identical sync password keys in TR and EN', () => {
 // ── 12. LIC-01: Mobile LICENSE Copyright ────────────────────────────────────
 console.log('\n[12. LIC-01: Mobile LICENSE Copyright Alignment]');
 
-check('12.1 FuinMobile/LICENSE copyright belongs to Fuin Dev.', () => {
-  const licPath = path.join(MOBILE_ROOT, 'LICENSE');
-  const content = fs.readFileSync(licPath, 'utf8');
-  assert.ok(content.includes('Copyright (c) 2026 Fuin Dev.'), 'must match Copyright (c) 2026 Fuin Dev.');
-  assert.ok(!content.includes('650 Industries'), 'must NOT contain 650 Industries template text');
-});
+if (hasMobile) {
+  check('12.1 FuinMobile/LICENSE copyright belongs to Fuin Dev.', () => {
+    const licPath = path.join(MOBILE_ROOT, 'LICENSE');
+    const content = fs.readFileSync(licPath, 'utf8');
+    assert.ok(content.includes('Copyright (c) 2026 Fuin Dev.'), 'must match Copyright (c) 2026 Fuin Dev.');
+    assert.ok(!content.includes('650 Industries'), 'must NOT contain 650 Industries template text');
+  });
+} else {
+  console.log('  ⚠ [SKIP] FuinMobile repository not found (CI environment)');
+}
 
 // ── 13. IPC-IPC-01: Vestigial Recovery IPC Cleanup ──────────────────────────
 console.log('\n[13. IPC-IPC-01: Preload Surface Reduction & Handler Deprecation]');

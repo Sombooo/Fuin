@@ -187,10 +187,14 @@ console.log('\n[6. API Privacy & K-Anonymity Audit]');
 
 const healthScannerJs = fs.readFileSync(path.join(__dirname, 'renderer/modules/healthScanner.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, 'renderer/app.js'), 'utf8');
-const mobileHealthJs = fs.readFileSync(path.join(__dirname, '../FuinMobile/src/screens/HealthModal.js'), 'utf8');
+const mobileHealthPath = path.join(__dirname, '../FuinMobile/src/screens/HealthModal.js');
+const targets = [['healthScanner.js', healthScannerJs], ['app.js', appJs]];
+if (fs.existsSync(mobileHealthPath)) {
+  targets.push(['Mobile HealthModal.js', fs.readFileSync(mobileHealthPath, 'utf8')]);
+}
 
 check('6.1 HIBP check strictly sends 5-character SHA-1 prefix only (k-anonymity)', () => {
-  for (const [name, code] of [['healthScanner.js', healthScannerJs], ['app.js', appJs], ['Mobile HealthModal.js', mobileHealthJs]]) {
+  for (const [name, code] of targets) {
     const hasSlice = /h(?:ash)?\.slice\(0,\s*5\)/.test(code);
     assert.ok(hasSlice, `${name} must extract 5-char prefix`);
     assert.ok(code.includes('/range/${pre}'), `${name} must query /range/\${pre}`);
@@ -199,13 +203,13 @@ check('6.1 HIBP check strictly sends 5-character SHA-1 prefix only (k-anonymity)
 });
 
 check('6.2 HIBP check sends Add-Padding: true to prevent response size leakage', () => {
-  for (const [name, code] of [['healthScanner.js', healthScannerJs], ['app.js', appJs], ['Mobile HealthModal.js', mobileHealthJs]]) {
+  for (const [name, code] of targets) {
     assert.ok(code.includes("'Add-Padding': 'true'"), `${name} must send Add-Padding header`);
   }
 });
 
 check('6.3 HIBP check specifies cache: "no-store" to prevent disk cache hash retention', () => {
-  for (const [name, code] of [['healthScanner.js', healthScannerJs], ['app.js', appJs], ['Mobile HealthModal.js', mobileHealthJs]]) {
+  for (const [name, code] of targets) {
     assert.ok(code.includes("cache: 'no-store'"), `${name} must set cache: no-store`);
   }
 });

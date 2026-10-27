@@ -32,7 +32,8 @@ const TEST_FILES = [
   'test_challenger_storage_kdf.js',
   'test_challenger_ui_polish.js',
   'test_adversarial_challenger_1.js',
-  'test_adversarial_remediation_challenge.js'
+  'test_adversarial_remediation_challenge.js',
+  'test_autofill_heuristics_and_shortcuts.js'
 ];
 
 let totalPassedSuites = 0;

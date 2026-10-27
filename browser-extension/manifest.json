@@ -31,6 +31,15 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "commands": {
+    "autofill-credential": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Autofill credentials from Fuin"
+    }
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "fuin-app@sombo.dev",

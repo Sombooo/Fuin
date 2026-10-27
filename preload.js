@@ -70,6 +70,8 @@ contextBridge.exposeInMainWorld('kekkai', {
   // Tarayıcı eklentisi köprüsü
   getExtToken:         ()               => ipcRenderer.invoke('get-ext-token-masked'),
   extBridgeStatus:     ()               => ipcRenderer.invoke('ext-bridge-status'),
+  registerChromeExtId: (extensionId)    => ipcRenderer.invoke('register-chrome-ext-id', { extensionId }),
+  getExtensionStatus:  ()               => ipcRenderer.invoke('get-extension-status'),
   onExtLookupRequest:  (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('ext-lookup-request', h); return () => ipcRenderer.removeListener('ext-lookup-request', h); },
   onExtRevealRequest:  (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('ext-reveal-request', h); return () => ipcRenderer.removeListener('ext-reveal-request', h); },
   extRespond:          (requestId, payload) => ipcRenderer.invoke('ext-response', { requestId, payload }),

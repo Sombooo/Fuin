@@ -1,33 +1,75 @@
 'use strict';
 // ═══════════════════════════════════════════════════════════════════
-// Sayfadaki giriş formlarını tespit eder, şifre alanının yanına bir
-// "Fuin ile doldur" ikonu koyar. Tıklanınca background'dan mevcut
-// domain için eşleşen kayıtları ister, birden fazlaysa seçim listesi
-// gösterir, seçilen kayıt için background'dan gerçek şifreyi (reveal)
-// ister ve formu doldurur.
+// FUIN BROWSER EXTENSION — CONTENT SCRIPT
+//
+// Sayfadaki giriş formlarını tespit eder:
+// 1. Standart formlar: input[type="password"] yanına Fuin ikonu koyar.
+// 2. Bölünmüş formlar (Split Login: Google, Microsoft, Apple vb.):
+//    Sayfada hiç şifre alanı yoksa, kullanıcı adı / e-posta alanını
+//    tespit edip ikonu oraya ekler ve 1. adımı otomatik doldurur.
+//
+// Özellikler:
+// - Closed Shadow DOM ile DOM izolasyonu ve zararlı script koruması
+// - e.isTrusted ile sentetik tıklama ve CSRF/Clickjacking engelleme
+// - TOTP / 2FA kodu sağlandığında tek tıkla otomatik panoya kopyalama
+// - Klavye kısayolu (Cmd+Shift+L / Ctrl+Shift+L) desteği
+// - Fuin Tasarım Sistemi renkleri (#222019, #3d3830, #5a9a6e, #6bb382)
 // ═══════════════════════════════════════════════════════════════════
 (function () {
   const PROCESSED = new WeakSet();
   const FIELD_MAP = new WeakMap();
 
+  function isVisibleInput(el) {
+    if (!el || el.disabled || el.readOnly || el.type === 'hidden') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
   function findLoginForms() {
-    const pwFields = Array.from(document.querySelectorAll('input[type="password"]'));
-    return pwFields.filter(f => !PROCESSED.has(f));
+    const pwFields = Array.from(document.querySelectorAll('input[type="password"]')).filter(isVisibleInput);
+    if (pwFields.length > 0) {
+      return pwFields.filter(f => !PROCESSED.has(f));
+    }
+
+    // Bölünmüş giriş formları (Split login: Google/MS gibi sayfada şifre alanı olmayan 1. adım)
+    return findStandaloneUsernameFields().filter(f => !PROCESSED.has(f));
+  }
+
+  function findStandaloneUsernameFields() {
+    const candidates = Array.from(document.querySelectorAll(
+      'input[type="text"], input[type="email"], input[type="tel"], input:not([type])'
+    )).filter(isVisibleInput);
+
+    const matches = [];
+    const idNameRegex = /(?:user(?:name)?|login|email|identifier|auth|account|eposta|kullanici)/i;
+
+    for (const c of candidates) {
+      const autocomplete = (c.getAttribute('autocomplete') || '').toLowerCase();
+      const name = c.getAttribute('name') || '';
+      const id = c.getAttribute('id') || '';
+      const placeholder = c.getAttribute('placeholder') || '';
+
+      if (autocomplete.includes('username') || autocomplete.includes('email')) {
+        matches.push(c);
+        break; // Öncelikli eşleşme
+      }
+      if (idNameRegex.test(name) || idNameRegex.test(id) || idNameRegex.test(placeholder) || c.type === 'email') {
+        matches.push(c);
+        break;
+      }
+    }
+    return matches;
   }
 
   function findUsernameField(pwField) {
     const form = pwField.closest('form') || document;
     const candidates = Array.from(form.querySelectorAll(
       'input[type="text"], input[type="email"], input[type="tel"], input[autocomplete*="user"], input:not([type])'
-    )).filter(c => {
-      if (c === pwField || c.disabled || c.readOnly || c.type === 'hidden') return false;
-      const rect = c.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
+    )).filter(c => c !== pwField && isVisibleInput(c));
+
     const all = Array.from(document.querySelectorAll('input'));
     const pwIdx = all.indexOf(pwField);
 
-    // Öncelikle şifre alanından ÖNCE gelen görünür input'ları tercih et
     let bestBefore = null, bestBeforeDist = Infinity;
     let bestAny = null, bestAnyDist = Infinity;
     for (const c of candidates) {
@@ -65,21 +107,35 @@
     const icon = document.createElement('div');
     icon.className = 'fuin-ext-icon';
     icon.textContent = '⬡';
-    icon.title = 'Fuin ile doldur';
+    icon.title = 'Fuin ile doldur (Kısayol: Cmd+Shift+L / Ctrl+Shift+L)';
     const isHttp = location.protocol === 'http:';
     
+    // Fuin Warm Dark Design System Palette
     Object.assign(icon.style, {
       position: 'absolute', width: '22px', height: '22px', lineHeight: '22px',
       textAlign: 'center', cursor: 'pointer', fontSize: '14px',
-      background: '#2a2520', color: isHttp ? '#ff4d4f' : '#c8a96e', borderRadius: '4px',
-      border: isHttp ? '1px solid #ff4d4f' : '1px solid #3a332c',
-      boxShadow: '0 1px 4px rgba(0,0,0,.25)',
-      fontFamily: 'monospace', userSelect: 'none', pointerEvents: 'auto'
+      background: '#222019', color: isHttp ? '#ff4d4f' : '#5a9a6e', borderRadius: '4px',
+      border: isHttp ? '1px solid #ff4d4f' : '1px solid #3d3830',
+      boxShadow: '0 2px 6px rgba(0,0,0,.35)',
+      fontFamily: 'monospace', userSelect: 'none', pointerEvents: 'auto',
+      transition: 'background 0.15s ease, border-color 0.15s ease, color 0.15s ease'
     });
 
     if (isHttp) {
       icon.title = 'Fuin: DİKKAT! Bu bağlantı güvenli değil (HTTP).';
+    } else {
+      icon.addEventListener('mouseenter', () => {
+        icon.style.background = '#2a2720';
+        icon.style.borderColor = '#5a9a6e';
+        icon.style.color = '#6bb382';
+      });
+      icon.addEventListener('mouseleave', () => {
+        icon.style.background = '#222019';
+        icon.style.borderColor = '#3d3830';
+        icon.style.color = '#5a9a6e';
+      });
     }
+
     shadow.appendChild(icon);
     document.body.appendChild(host);
     FIELD_MAP.set(pwField, { host, shadow, icon });
@@ -114,7 +170,7 @@
     });
   }
 
-  async function requestAndFill(pwField, icon, shadowRoot, matchId, domain) {
+  async function requestAndFill(targetField, icon, shadowRoot, matchId, domain) {
     icon.textContent = '…';
     let revealRes;
     try {
@@ -129,10 +185,26 @@
       showMenu(icon, shadowRoot, [formatRevealError(err)]);
       return;
     }
-    fillForm(pwField, revealRes);
+
+    // TOTP Otomatik Kopyalama (Eğer kayıtta 2FA varsa)
+    if (revealRes.totp) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(revealRes.totp);
+          icon.textContent = '✓';
+          icon.title = 'Fuin: Şifre dolduruldu & TOTP kopyalandı!';
+          setTimeout(() => {
+            icon.textContent = '⬡';
+            icon.title = 'Fuin ile doldur (Kısayol: Cmd+Shift+L / Ctrl+Shift+L)';
+          }, 2500);
+        }
+      } catch {}
+    }
+
+    fillForm(targetField, revealRes);
   }
 
-  async function handleFillClick(pwField, icon, shadowRoot) {
+  async function handleFillClick(targetField, icon, shadowRoot) {
     if (!shadowRoot) return;
     if (location.protocol === 'http:') {
       showMenu(icon, shadowRoot, ['⚠ Güvenli olmayan bağlantı — Fuin bu sayfada şifre doldurmaz']);
@@ -154,35 +226,46 @@
 
     // Tek eşleşme varsa seçim menüsünü atla, direkt izin iste
     if (res.matches.length === 1) {
-      await requestAndFill(pwField, icon, shadowRoot, res.matches[0].id, domain);
+      await requestAndFill(targetField, icon, shadowRoot, res.matches[0].id, domain);
       return;
     }
 
     showMenu(icon, shadowRoot, res.matches.map(m => m.username ? `${m.site} (${m.username})` : m.site), async (idx) => {
       const match = res.matches[idx];
-      if (match) await requestAndFill(pwField, icon, shadowRoot, match.id, domain);
+      if (match) await requestAndFill(targetField, icon, shadowRoot, match.id, domain);
     });
   }
 
-  function fillForm(pwField, creds) {
-    const userField = findUsernameField(pwField);
-    const setVal = (el, val) => {
-      if (!el || val == null) return;
-      el.focus();
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-      const protoSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
-      const setter = nativeSetter || protoSetter;
-      if (setter) {
-        setter.call(el, val);
-      } else {
-        el.value = val;
+  function setFieldValue(el, val) {
+    if (!el || val == null) return;
+    el.focus();
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    const protoSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+    const setter = nativeSetter || protoSetter;
+    if (setter) {
+      setter.call(el, val);
+    } else {
+      el.value = val;
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event('blur', { bubbles: true }));
+  }
+
+  function fillForm(targetField, creds) {
+    if (targetField.type === 'password') {
+      const userField = findUsernameField(targetField);
+      setFieldValue(userField, creds.username);
+      setFieldValue(targetField, creds.password);
+    } else {
+      // Bölünmüş form (1. adım username)
+      setFieldValue(targetField, creds.username);
+      // Eğer aynı anda sayfada bir şifre alanı açılmışsa onu da doldur
+      const pwField = document.querySelector('input[type="password"]');
+      if (pwField && isVisibleInput(pwField)) {
+        setFieldValue(pwField, creds.password);
       }
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.dispatchEvent(new Event('blur', { bubbles: true }));
-    };
-    setVal(userField, creds.username);
-    setVal(pwField, creds.password);
+    }
   }
 
   function showMenu(anchor, parent, items, onSelect) {
@@ -192,14 +275,14 @@
     const menu = document.createElement('div');
     menu.className = 'fuin-ext-menu';
     Object.assign(menu.style, {
-      position: 'absolute', background: '#1f1c18', border: '1px solid #3a332c',
-      borderRadius: '6px', fontFamily: 'monospace', fontSize: '12px', color: '#f5f0e8',
-      zIndex: 2147483647, boxShadow: '0 6px 20px rgba(0,0,0,.45)', minWidth: '210px',
-      maxWidth: '320px', overflow: 'hidden', pointerEvents: 'auto'
+      position: 'absolute', background: '#1f1c18', border: '1px solid #3d3830',
+      borderRadius: '6px', fontFamily: 'monospace', fontSize: '12px', color: '#e8e2d8',
+      zIndex: 2147483647, boxShadow: '0 6px 20px rgba(0,0,0,.45)', minWidth: '220px',
+      maxWidth: '340px', overflow: 'hidden', pointerEvents: 'auto'
     });
     const r = anchor.getBoundingClientRect();
     menu.style.top  = (window.scrollY + r.bottom + 6) + 'px';
-    menu.style.left = Math.max(8, window.scrollX + r.right - 210) + 'px';
+    menu.style.left = Math.max(8, window.scrollX + r.right - 220) + 'px';
 
     items.forEach((label, idx) => {
       const row = document.createElement('div');
@@ -207,15 +290,16 @@
       Object.assign(row.style, {
         padding: '9px 12px',
         cursor: onSelect ? 'pointer' : 'default',
-        color: onSelect ? '#f5f0e8' : '#b8afa3',
-        borderBottom: idx < items.length - 1 ? '1px solid #2d2722' : 'none',
+        color: onSelect ? '#e8e2d8' : '#a69d92',
+        borderBottom: idx < items.length - 1 ? '1px solid #2a2720' : 'none',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
-        textOverflow: 'ellipsis'
+        textOverflow: 'ellipsis',
+        transition: 'background 0.1s ease, color 0.1s ease'
       });
       if (onSelect) {
-        row.addEventListener('mouseenter', () => { row.style.background = '#2a2520'; row.style.color = '#c8a96e'; });
-        row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; row.style.color = '#f5f0e8'; });
+        row.addEventListener('mouseenter', () => { row.style.background = '#2a2720'; row.style.color = '#6bb382'; });
+        row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; row.style.color = '#e8e2d8'; });
         row.addEventListener('click', () => { onSelect(idx); menu.remove(); });
       }
       menu.appendChild(row);
@@ -232,8 +316,8 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'fuin-trigger-fill') {
-      const activePw = document.activeElement && document.activeElement.matches && document.activeElement.matches('input[type="password"]') ? document.activeElement : null;
-      const pwField = activePw || document.querySelector('input[type="password"]');
+      const activeEl = document.activeElement && document.activeElement.matches && document.activeElement.matches('input') ? document.activeElement : null;
+      const pwField = activeEl || document.querySelector('input[type="password"]') || findStandaloneUsernameFields()[0];
       if (pwField) {
         let entry = FIELD_MAP.get(pwField);
         if (!entry) {

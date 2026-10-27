@@ -67,6 +67,21 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
   }
 }
 
+if (typeof chrome !== 'undefined' && chrome.commands?.onCommand) {
+  chrome.commands.onCommand.addListener((command) => {
+    if (command === 'autofill-credential') {
+      const api = typeof browser !== 'undefined' && browser.tabs ? browser : chrome;
+      api.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs?.[0]?.id) {
+          api.tabs.sendMessage(tabs[0].id, { type: 'fuin-trigger-fill' }, () => {
+            if (chrome.runtime?.lastError) { /* tab might not have content script injected */ }
+          });
+        }
+      });
+    }
+  });
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const isInternalExtension = sender.id === chrome.runtime.id && !sender.tab;
   

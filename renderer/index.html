@@ -261,6 +261,43 @@
               <!-- Paired devices populated by app.js -->
             </div>
           </div>
+
+          <!-- Browser Autofill Extension Card -->
+          <div class="io-card" id="browserExtCard">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div>
+                <div class="io-title" style="display:flex;align-items:center;gap:6px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/>
+                  </svg>
+                  <span data-i18n="settingExtTitle">Tarayıcı Eklentisi & Autofill</span>
+                </div>
+                <div class="io-sub" data-i18n="settingExtSub">Web sitelerinde şifreleri ve TOTP kodlarını otomatik doldurmak için Fuin eklentisini bağlayın.</div>
+              </div>
+              <div id="extStatusBadge" style="padding:4px 8px;border-radius:4px;font-size:11px;font-family:var(--mono);background:var(--paper);border:1px solid var(--b);color:var(--mu);">
+                Köprü Aktif
+              </div>
+            </div>
+
+            <div style="margin-top:14px;padding:12px;background:var(--paper);border:1px solid var(--b);border-radius:6px;font-size:12px;line-height:1.5;">
+              <div style="margin-bottom:8px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;">
+                <span>🌐 Chrome / Brave / Edge Bağlantısı</span>
+              </div>
+              <div style="color:var(--mu);margin-bottom:10px;">
+                Geliştirici modundaki eklentinin 32 karakterlik ID'sini yapıştırıp "Bağla" butonuna basın:
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="text" id="chromeExtIdInp" placeholder="Örn: abcdefghijklmnopqrstuvwxyz123456" maxlength="32" style="background:var(--bg);color:var(--text);border:1px solid var(--b);padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:12px;flex:1;outline:none;">
+                <button class="btn-io pri" id="btnRegisterChromeExt" data-i18n="btnConnectExt" style="white-space:nowrap;">Bağla</button>
+              </div>
+              <div id="extConnectMsg" style="margin-top:6px;font-family:var(--mono);font-size:11px;display:none;"></div>
+            </div>
+
+            <div style="margin-top:10px;font-size:11px;color:var(--mu);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+              <span>🦊 Firefox: Hazır (<code style="color:var(--ac)">fuin-app@sombo.dev</code>)</span>
+              <span>Kısayol: <b style="color:var(--text)">Cmd+Shift+L</b> / <b style="color:var(--text)">Ctrl+Shift+L</b></span>
+            </div>
+          </div>
         </div>
 
         <div class="main-title" style="margin-top:32px; margin-bottom:16px;" data-i18n="sysTitle">SİSTEM & GÜNCELLEMELER</div>

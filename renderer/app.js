@@ -554,6 +554,7 @@ function setView(v, btn) {
   } else if (v==='settings') {
     document.getElementById('view-settings').style.display='block';
     loadSyncSettings();
+    updateExtStatusUI();
     getLocalAppVersion().then(ver => {
       const sub = document.getElementById('sysUpdateCheckSub');
       if (sub) sub.textContent = `${t('sysUpdateCheckSub') || "Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin."} (Mevcut: v${normalizeVersion(ver)})`;
@@ -2183,6 +2184,60 @@ function initAppListeners() {
   // Extension reveal modal
   document.getElementById('btnDenyExtReveal')?.addEventListener('click', denyExtReveal);
   document.getElementById('btnApproveExtReveal')?.addEventListener('click', approveExtReveal);
+
+  // Extension Settings & Chrome Extension registration
+  document.getElementById('btnRegisterChromeExt')?.addEventListener('click', handleRegisterChromeExt);
+  document.getElementById('chromeExtIdInp')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleRegisterChromeExt();
+  });
+}
+
+async function handleRegisterChromeExt() {
+  const inp = document.getElementById('chromeExtIdInp');
+  const msg = document.getElementById('extConnectMsg');
+  if (!inp || !msg) return;
+  const id = inp.value.trim().toLowerCase();
+  if (!id || !/^[a-p]{32}$/.test(id)) {
+    msg.textContent = t('extInvalidId') || 'Geçersiz eklenti kimliği. 32 karakterlik küçük harflerden oluşmalıdır.';
+    msg.style.color = 'var(--red)';
+    msg.style.display = 'block';
+    return;
+  }
+  try {
+    const res = await api.registerChromeExtId(id);
+    if (res?.ok) {
+      msg.textContent = t('extConnectedSuccess') || 'Eklenti başarıyla bağlandı! Tarayıcınızı tamamen kapatıp açabilirsiniz.';
+      msg.style.color = 'var(--ac)';
+      msg.style.display = 'block';
+      inp.value = '';
+      toast(t('extConnectedSuccess') || 'Eklenti başarıyla bağlandı!');
+      updateExtStatusUI();
+    } else {
+      msg.textContent = t('extInvalidId') || 'Kayıt başarısız.';
+      msg.style.color = 'var(--red)';
+      msg.style.display = 'block';
+    }
+  } catch (err) {
+    msg.textContent = 'Hata: ' + (err?.message || err);
+    msg.style.color = 'var(--red)';
+    msg.style.display = 'block';
+  }
+}
+
+async function updateExtStatusUI() {
+  try {
+    const badge = document.getElementById('extStatusBadge');
+    if (!badge || !api.getExtensionStatus) return;
+    const status = await api.getExtensionStatus();
+    if (status?.running) {
+      const count = status.chromeOrigins?.length || 0;
+      badge.textContent = `Köprü Aktif (${count} Chrome ID)`;
+      badge.style.color = 'var(--ac)';
+    } else {
+      badge.textContent = 'Köprü Pasif';
+      badge.style.color = 'var(--mu)';
+    }
+  } catch {}
 }
 
 if (document.readyState === 'loading') {

@@ -1373,7 +1373,8 @@ function registerWindowsRegistryKey(subKey, manifestPath) {
 }
 
 function autoInstallNativeMessagingHosts() {
-  return extensionBridge.autoInstallNativeMessagingHosts(app, KNOWN_EXTENSION_IDS);
+  const ids = extensionBridge.getKnownExtensionIds(app);
+  return extensionBridge.autoInstallNativeMessagingHosts(app, ids);
 }
 
 function startExtensionBridge() {
@@ -1398,6 +1399,20 @@ ipcMain.handle('get-ext-token-masked', () => {
 
 ipcMain.handle('ext-bridge-status', () => {
   return extensionBridge.getExtBridgeStatus(app);
+});
+
+ipcMain.handle('register-chrome-ext-id', (_, { extensionId }) => {
+  return extensionBridge.registerChromeOrigin(app, extensionId);
+});
+
+ipcMain.handle('get-extension-status', () => {
+  const ids = extensionBridge.getKnownExtensionIds(app);
+  const bridgeStatus = extensionBridge.getExtBridgeStatus(app);
+  return {
+    ...bridgeStatus,
+    chromeOrigins: ids.chromeOrigins,
+    firefoxIds: ids.firefoxIds,
+  };
 });
 
 

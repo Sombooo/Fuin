@@ -7,19 +7,67 @@ const crypto = require('crypto');
 
 const NATIVE_HOST_NAME = 'com.fuin.nativehost';
 
-function getKnownExtensionIds() {
+function getChromeOriginsFilePath(app) {
+  return app ? path.join(app.getPath('userData'), 'fuin.chrome-origins.json') : null;
+}
+
+function loadSavedChromeOrigins(app) {
+  try {
+    const f = getChromeOriginsFilePath(app);
+    if (f && fs.existsSync(f)) {
+      const data = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (Array.isArray(data)) return data.filter(s => typeof s === 'string' && s.startsWith('chrome-extension://'));
+    }
+  } catch {}
+  return [];
+}
+
+function saveChromeOrigins(app, origins) {
+  try {
+    const f = getChromeOriginsFilePath(app);
+    if (f) {
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, JSON.stringify(origins, null, 2), { mode: 0o600, encoding: 'utf8' });
+    }
+  } catch {}
+}
+
+function getKnownExtensionIds(app) {
   const publishedId = process.env.FUIN_CHROME_EXTENSION_ID || '';
   const extraOrigins = process.env.FUIN_CHROME_ORIGINS
     ? process.env.FUIN_CHROME_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
     : [];
+  const savedOrigins = loadSavedChromeOrigins(app);
+
+  const uniqueOrigins = Array.from(new Set([
+    ...(publishedId ? [`chrome-extension://${publishedId}/`] : []),
+    ...extraOrigins,
+    ...savedOrigins,
+  ]));
 
   return {
-    chromeOrigins: [
-      ...(publishedId ? [`chrome-extension://${publishedId}/`] : []),
-      ...extraOrigins,
-    ],
+    chromeOrigins: uniqueOrigins,
     firefoxIds: ['fuin-app@sombo.dev', 'fuin@sombo.dev'],
   };
+}
+
+function registerChromeOrigin(app, extensionId) {
+  if (!extensionId || typeof extensionId !== 'string') {
+    return { ok: false, error: 'invalid-id' };
+  }
+  const cleanId = extensionId.trim().toLowerCase();
+  if (!/^[a-p]{32}$/.test(cleanId)) {
+    return { ok: false, error: 'invalid-format' };
+  }
+  const origin = `chrome-extension://${cleanId}/`;
+  const saved = loadSavedChromeOrigins(app);
+  if (!saved.includes(origin)) {
+    saved.push(origin);
+    saveChromeOrigins(app, saved);
+  }
+  const knownIds = getKnownExtensionIds(app);
+  const results = autoInstallNativeMessagingHosts(app, knownIds);
+  return { ok: true, origin, installedCount: results.filter(Boolean).length };
 }
 
 function getExtTokenPath(app) {
@@ -42,6 +90,7 @@ function ensureNativeHostWrapper(app) {
   const hostJs = getNativeHostJsPath(app).replace(/"/g, '');
   const wrapperDir = app.getPath('userData');
   const electronPath = process.execPath.replace(/"/g, '');
+  fs.mkdirSync(wrapperDir, { recursive: true });
 
   if (process.platform === 'win32') {
     const batPath = path.join(wrapperDir, 'fuin-host.bat');
@@ -294,4 +343,7 @@ module.exports = {
   stopExtensionBridge,
   getExtBridgeStatus,
   getMaskedToken,
+  registerChromeOrigin,
+  loadSavedChromeOrigins,
+  getChromeOriginsFilePath,
 };

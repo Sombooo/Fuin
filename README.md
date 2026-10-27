@@ -51,9 +51,8 @@ I built **Fuin** around a simpler idea: **your passwords should just live on you
 ## ✨ What It Does
 
 - **Local Vault:** Your data is encrypted and stored directly on your computer's disk.
-- **Two Ways to Sync with Your Phone:**
-  - **Local Wi-Fi Sync (LAN):** Pair your phone once by scanning a QR code. When you hit sync, Fuin opens a temporary 120-second encrypted local connection over your home Wi-Fi, merges changes both ways without losing history, and closes the port immediately.
-  - **Air-Gap QR Sync:** If you don't even want to use Wi-Fi, you can transfer your encrypted vault optically from screen to camera using animated QR codes.
+- **Private P2P Sync with Your Phone:**
+  - Pair your phone once by scanning an optical QR code. When you hit sync, Fuin opens a temporary 120-second encrypted local peer-to-peer connection over your home Wi-Fi or phone hotspot, performs a two-way differential merge without losing history, and closes the ephemeral port immediately. Zero cloud servers, zero external relays.
 - **Built-in 2FA (TOTP) Codes:** You can store your 2FA secret keys right inside your entries and generate 6-digit time-based codes without needing a separate authenticator app.
 - **Password Generator & Health Check:** Includes an offline password strength analyzer (`zxcvbn`), duplicate/weak password detection, and an optional breach check using the HaveIBeenPwned k-Anonymity API (only the first 5 characters of the SHA-1 hash ever leave your device).
 - **Easy Import & Export:** Supports importing existing passwords from **Bitwarden (JSON)**, **1Password (CSV)**, **LastPass (CSV)**, and **Chrome / Edge (CSV)**, plus encrypted `.bak` automatic backups.
@@ -118,7 +117,7 @@ No software can promise "100% unbreakable" security, so instead of marketing cla
 - **Key Derivation (`Argon2id`):** Your master password is turned into encryption keys using **Argon2id** (`128 MiB` memory cost, `4` iterations), making brute-force guessing slow and expensive.
 - **Vault Encryption (`AES-256-GCM`):** Your local vault file and automatic backups are encrypted with authenticated **AES-256-GCM**. If the file is tampered with, decryption fails safely.
 - **Dual-Key Separation:** Your master password derives two separate keys—one for your local disk vault (`VaultKey`) and one for sync (`SyncKey`).
-- **LAN & QR Encryption (`XChaCha20-Poly1305`):** Local sync packets are encrypted end-to-end with **XChaCha20-Poly1305** and verified with nonces so old packets cannot be replayed.
+- **LAN P2P Sync Encryption (`XChaCha20-Poly1305`):** Local sync packets between paired devices are encrypted end-to-end with **XChaCha20-Poly1305** and verified with nonces so old packets cannot be replayed.
 - **Memory & Clipboard Hygiene:** Sensitive buffers are zeroed out (`Buffer.fill(0)`) after operations, screenshots are blocked in production builds, and copied passwords are automatically cleared from your clipboard after 30 seconds.
 
 If you'd like to inspect the technical details or threat model, feel free to check [`SECURITY.md`](./SECURITY.md).

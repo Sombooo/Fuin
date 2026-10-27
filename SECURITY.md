@@ -20,17 +20,24 @@ Fuin is engineered around a strict **zero-knowledge, offline-first, peer-to-peer
   - Desktop windows enforce `setContentProtection(true)` and Mobile screens enforce `preventScreenCaptureAsync()`.
   - Copied credentials are automatically cleared from the OS clipboard after a 30–45 second TTL using SHA-256 digest verification.
 
-## 3. Hybrid P2P Synchronization Security
-### A. Local LAN Sync (P2P)
-- **Out-of-Band Pairing:** A 256-bit CSPRNG `pairKey` is exchanged optically via QR code. Pairing proofs (`/pair`) and acknowledgments (`pair-ack`) are authenticated with **XChaCha20-Poly1305**.
-- **Transport Hardening:**
-  - Bound to a 120-second ephemeral HTTP listener that immediately terminates upon sync completion or vault lock.
-  - Enforces strict **RFC1918 / Loopback** socket filtering, rejecting public internet IPs and browser CORS preflights.
-  - Protects against reflection, MitM, and cross-session replay attacks via directional tags (`direction: 'request' | 'response'`), cryptographic `requestNonce` binding, a 120-second freshness window, and a cross-session nonce replay cache.
-- **Conflict-Free Deterministic Merge:** Concurrent edits are resolved deterministically with a `+5 minute` clock-skew ceiling, preserving superseded credentials in `history` and propagating tombstone deletions (`deletedAt`).
+## 3. Cross-Device P2P Synchronization Security
+Fuin syncs vault data directly between devices without cloud intermediaries, central accounts, or third-party relay servers.
 
-### B. Air-Gap QR Sync (V2)
-- Operates with zero network interfaces enabled. Vault snapshots are serialized in canonical CBOR, compressed with ZSTD, encrypted with **XChaCha20-Poly1305** (keyed via **Argon2id** + **HKDF-SHA256**), and transmitted over animated Base45 QR frames with CRC-32 frame verification and a strictly monotonic `generation` counter.
+### A. One-Time Optical Pairing (QR Exchange)
+- **Zero-Network Trust Establishment:** Mobile and Desktop devices establish mutual trust out-of-band by scanning a single optical QR code generated on the desktop screen.
+- **Cryptographic Ephemeral Handshake:**
+  - The pairing QR code encodes a 256-bit CSPRNG `pairKey`, an ephemeral port, local RFC1918 IP candidates, and the desktop `deviceId`.
+  - The mobile device initiates an authenticated handshake (`/pair`) encrypted with **XChaCha20-Poly1305** using a single-use CSPRNG nonce.
+  - Plaintext keys are never sent over the wire. Once the desktop validates and records the mobile device (`pair-ack`), pairing is finalized, and either device can revoke the pairing at any time with a single click.
+
+### B. Encrypted Local P2P Synchronization (LAN / Hotspot)
+- **Network Scope:** Operates strictly on private local networks (RFC1918 Wi-Fi subnets or phone Personal Hotspots).
+- **Transport Hardening:**
+  - Bound to an ephemeral HTTP server active only for a 120-second window during synchronization.
+  - Automatically shuts down immediately upon sync completion, explicit cancellation, or vault lock.
+  - Enforces strict socket-level filtering: public internet IP addresses, loopback forgery, and browser CORS cross-origin requests are rejected upfront.
+  - **Replay & Reflection Defense:** Directional binding (`direction: 'request' | 'response'`), cryptographic `requestNonce` verification, a 120-second freshness window, and a persistent cross-session nonce cache prevent packet injection and replay attacks.
+- **Conflict-Free Deterministic Merge:** Two-way edits are merged deterministically using entry-level timestamps with a `+5 minute` clock-skew ceiling. Superseded entries are preserved in entry history, and tombstone deletions (`deletedAt`) are propagated safely across devices.
 
 ## 4. Browser Extension & Phishing Defenses
 - **No Silent Autofill:** Credentials are never injected automatically on page load. Every autofill request requires explicit user approval in the Desktop app modal showing the target domain.
@@ -39,5 +46,10 @@ Fuin is engineered around a strict **zero-knowledge, offline-first, peer-to-peer
 ## 5. Known Runtime Boundaries
 - **JavaScript Engine String Immutability:** While byte buffers (`Buffer` / `Uint8Array`) are deterministically zeroized, transient JavaScript strings created during UI rendering remain subject to V8 / Hermes garbage collection cycles.
 
-## Responsible Disclosure
-If you discover a security vulnerability, please open a confidential security advisory on GitHub or contact the maintainers before public disclosure.
+## 6. Vulnerability Reporting & Responsible Disclosure
+We welcome security researchers and independent auditors to inspect Fuin's open-source architecture. Fuin maintains an RFC 9116 compliant security policy:
+
+- **Security Contact:** [security@sombo.dev](mailto:security@sombo.dev)
+- **RFC 9116 Policy:** [/.well-known/security.txt](file:///.well-known/security.txt)
+- **Confidential Advisories:** Please report vulnerabilities via [GitHub Security Advisories](https://github.com/Sombooo/Fuin/security/advisories) or email before public disclosure.
+- **Response SLA:** We acknowledge all valid security reports within 48 hours and prioritize patch releases. Confirmed researchers are acknowledged in release notes.

@@ -162,7 +162,7 @@ const TRANSLATIONS = {
     secEncryption: 'Şifreleme', secRamZero: 'RAM Zeroing', secRamZeroVal: 'Aktif', secRamZeroSub: 'Buffer.fill(0) her işlem sonrası',
     secTiming: 'Timing Attack', secTimingVal: 'Korumalı', secClipboard: 'Pano', secClipboardVal: '30s Auto-Clear',
     secEntropy: 'Entropi Analizi', secEntropyReal: 'Tahmin bazlı gerçek zamanlı', secEntropySimple: 'Regex tabanlı', secEntropySimpleName: 'Basit',
-    secQrSync: 'QR Sync', secQrReady: 'Hazır', secQrSub: 'SyncKey ile şifreli chunk\'lar',
+    secLanSync: 'Yerel Ağ Eşitleme (P2P)', secLanSyncVal: 'XChaCha20', secLanSyncSub: '120s geçici port · QR ile eşleme',
 
     ioTitle: 'DIŞA / İÇE AKTAR',
     ioExportJsonTitle: '↑ JSON Dışa Aktar', ioExportJsonSub: 'Tüm kayıtları JSON formatında kaydedin.', ioExportJsonBtn: 'JSON İndir',
@@ -464,7 +464,7 @@ const TRANSLATIONS = {
     secEncryption: 'Encryption', secRamZero: 'RAM Zeroing', secRamZeroVal: 'Active', secRamZeroSub: 'Buffer.fill(0) after every operation',
     secTiming: 'Timing Attack', secTimingVal: 'Protected', secClipboard: 'Clipboard', secClipboardVal: '30s Auto-Clear',
     secEntropy: 'Entropy Analysis', secEntropyReal: 'Real-time, estimation-based', secEntropySimple: 'Regex-based', secEntropySimpleName: 'Simple',
-    secQrSync: 'QR Sync', secQrReady: 'Ready', secQrSub: 'Chunks encrypted with SyncKey',
+    secLanSync: 'LAN Sync (P2P)', secLanSyncVal: 'XChaCha20', secLanSyncSub: '120s ephemeral port · QR paired',
 
     ioTitle: 'EXPORT / IMPORT',
     ioExportJsonTitle: '↑ Export JSON', ioExportJsonSub: 'Save all entries in JSON format.', ioExportJsonBtn: 'Download JSON',

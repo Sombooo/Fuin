@@ -1,0 +1,6 @@
+Contact: mailto:security@sombo.dev
+Expires: 2027-10-27T00:00:00.000Z
+Preferred-Languages: en, tr
+Canonical: https://fuin.app/.well-known/security.txt
+Policy: https://github.com/Sombooo/Fuin/blob/main/SECURITY.md
+Acknowledgments: https://github.com/Sombooo/Fuin/security/advisories

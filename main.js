@@ -66,8 +66,10 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
-  // Ekran koruması: Casus yazılımlara ve ekran kaydına karşı koruma (Siyah ekran verir).
-  mainWindow.setContentProtection(true);
+  // Ekran koruması: Varsayılan olarak tam koruma etkindir (true).
+  // Yalnızca pazarlama/dokümantasyon ekran görüntüsü için --dev-allow-screenshots bayrağı ile geçici devre dışı bırakılabilir.
+  const allowDevScreenshots = process.argv.includes('--dev-allow-screenshots') || process.env.FUIN_DEV_SCREENSHOTS === '1';
+  mainWindow.setContentProtection(!allowDevScreenshots);
   mainWindow.webContents?.on?.('will-navigate', (e) => e.preventDefault());
   mainWindow.webContents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));

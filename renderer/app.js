@@ -688,9 +688,9 @@ async function renderSecurity() {
     <div class="sec-card"><div class="sec-card-title">${t('secEntropy')}</div>
       <div class="sec-card-value">${info.zxcvbn?'zxcvbn':t('secEntropySimpleName')}</div>
       <div class="sec-card-sub">${info.zxcvbn?t('secEntropyReal'):t('secEntropySimple')}</div></div>
-    <div class="sec-card"><div class="sec-card-title">${t('secQrSync')}</div>
-      <div class="sec-card-value">${t('secQrReady')}</div>
-      <div class="sec-card-sub">${t('secQrSub')}</div></div>
+    <div class="sec-card"><div class="sec-card-title">${t('secLanSync')}</div>
+      <div class="sec-card-value">${t('secLanSyncVal')}</div>
+      <div class="sec-card-sub">${t('secLanSyncSub')}</div></div>
   `;
 }
 
@@ -1879,7 +1879,7 @@ function applyGeneratedPw() {
   setTimeout(()=>{inp.type='password';},2000);
 }
 
-function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');}
+function esc(s){return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');}
 
 let toastT;
 function toast(msg){
@@ -1944,7 +1944,7 @@ function isNewerVersion(latest, current) {
 }
 
 async function getLocalAppVersion() {
-  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.4';
+  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.5';
 }
 
 async function silentCheckForUpdates() {

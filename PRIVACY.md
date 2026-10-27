@@ -12,8 +12,7 @@ All passwords, TOTP seeds, categories, and notes are encrypted with **AES-256-GC
 
 ## 3. Cross-Device Synchronization
 Your data only moves between your own devices when you explicitly initiate a sync session:
-- **Local LAN Sync (P2P):** Transfers XChaCha20-Poly1305 encrypted vault packets directly between your Desktop and Mobile devices over your private local network (RFC1918 Wi-Fi) using a temporary 120-second listener.
-- **Air-Gap QR Sync (V2):** Transfers encrypted vault chunks optically via animated QR codes with zero network connectivity required.
+- **Local LAN P2P Sync:** Transfers XChaCha20-Poly1305 encrypted vault packets directly between your Desktop and Mobile devices over your private local network (RFC1918 Wi-Fi or phone hotspot) using a temporary 120-second listener. Initial trust is established once via an optical QR code pairing exchange. No third-party servers, relays, or cloud intermediaries are ever involved.
 
 ## 4. Optional External Network Requests
 Fuin operates completely offline by default. External HTTPS requests occur only in two user-controlled scenarios:

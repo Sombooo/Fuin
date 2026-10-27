@@ -59,7 +59,7 @@
       <div class="lock-progress"><div class="lock-progress-bar"></div></div>
     </div>
     <button class="btn-primary" id="unlockBtn" data-i18n="lockUnlockBtn">AÇIK →</button>
-    <button class="btn-io" id="touchIdBtn" data-i18n="lockTouchIdBtn" style="display:none; width:100%; margin-top:10px; justify-content:center; border: 1px solid var(--accent); color: var(--accent);">Touch ID ile Giriş Yap</button>
+    <button class="btn-io" id="touchIdBtn" data-i18n="lockTouchIdBtn" style="display:none; width:100%; margin-top:10px; justify-content:center; border: none; color: var(--ac);">Touch ID ile Giriş Yap</button>
     <div id="lockErr" class="lock-err"></div>
     <button class="btn-forgot" id="btnForgot" data-i18n="lockForgot">şifremi unuttum</button>
     <button class="btn-forgot" id="btnHardReset" style="color:var(--red);opacity:.6" data-i18n="lockHardReset">tüm verileri sıfırla</button>
@@ -202,7 +202,7 @@
             <div class="io-title">Otomatik Kilitleme (Auto-Lock)</div>
             <div class="io-sub">Hareketsizlik süresi dolduğunda veya uygulama simge durumuna küçültüldüğünde kilitlenir.</div>
             <div style="margin-top:10px;">
-              <select id="autoLockTimer" style="background:var(--surface);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:6px;font-size:13px;width:100%;cursor:pointer;outline:none;">
+              <select id="autoLockTimer" style="background:var(--paper);color:var(--text);border:1px solid var(--b);padding:8px 12px;border-radius:6px;font-size:13px;width:100%;cursor:pointer;outline:none;">
                 <option value="60">1 Dakika Hareketsizlikte</option>
                 <option value="300" selected>5 Dakika Hareketsizlikte</option>
                 <option value="900">15 Dakika Hareketsizlikte</option>
@@ -213,7 +213,7 @@
           
           <div class="io-card">
             <div class="io-title">Pano Güvenliği</div>
-            <div class="io-sub">Kopyaladığınız parolalar <b style="color:var(--accent)">30 saniye</b> içinde otomatik olarak sistem panosundan (clipboard) temizlenir. Bu özellik güvenlik gereği daima devrededir.</div>
+            <div class="io-sub">Kopyaladığınız parolalar <b style="color:var(--ac)">30 saniye</b> içinde otomatik olarak sistem panosundan (clipboard) temizlenir. Bu özellik güvenlik gereği daima devrededir.</div>
           </div>
           
           <!-- ADV-03: Recovery Key Management Card -->
@@ -267,7 +267,7 @@
         <div class="io-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
           <div class="io-card">
             <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               <span data-i18n="sysUpdateCheckTitle">Sürüm Kontrolü</span>
             </div>
             <div class="io-sub" id="sysUpdateCheckSub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.</div>
@@ -278,7 +278,7 @@
           </div>
           <div class="io-card">
             <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               <span data-i18n="sysBackupTitle">Yedekleme Klasörü</span>
             </div>
             <div class="io-sub" id="sysBackupSub" data-i18n="sysBackupSub">Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.</div>
@@ -875,7 +875,7 @@
       <button class="modal-close" id="btnCloseSyncPass">✕</button>
     </div>
     <div class="modal-body">
-      <div id="syncPassPairedSection" style="display:none;margin-bottom:14px;padding:12px;background:var(--paper);border:1px solid var(--border);border-radius:4px;">
+      <div id="syncPassPairedSection" style="display:none;margin-bottom:14px;padding:12px;background:var(--card);border:1px solid var(--b);border-radius:4px;">
         <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px;" id="syncPassPairedDeviceName">Eşleşmiş Cihaz</div>
         <div style="font-size:11px;color:var(--mu);margin-bottom:10px;" data-i18n="syncPassPairedDesc">Cihazınız eşleşmiş durumda. Şifre girmeden otomatik Air-Gap QR üretebilirsiniz.</div>
         <button class="btn-save" type="button" id="btnSyncPassUsePaired" style="width:100%;height:36px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;">

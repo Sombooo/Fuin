@@ -515,6 +515,30 @@ api.onExtCheckSaveCandidateRequest?.(async (req) => {
   api.extRespond(req.requestId, { shouldPrompt: true, action: 'save', username: req.username || '' });
 });
 
+function formatCleanSiteName(domain) {
+  if (!domain) return 'Yeni Hesap';
+  let clean = domain.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0].trim();
+  const parts = clean.split('.');
+  if (parts.length >= 2) {
+    const name = parts[0];
+    return name.charAt(0).toUpperCase() + name.slice(1) + '.' + parts.slice(1).join('.');
+  }
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
+function deduceCategory(domain) {
+  if (!domain) return 'Diğer';
+  const d = domain.toLowerCase();
+  if (/chess|steam|twitch|epicgames|riotgames|blizzard|playstation|xbox|ea\.com|roblox|minecraft/i.test(d)) return 'Oyun';
+  if (/twitter|x\.com|facebook|instagram|linkedin|tiktok|reddit|threads|pinterest|mastodon/i.test(d)) return 'Sosyal Medya';
+  if (/gmail|mail|outlook|proton|yahoo|zoho|tutanota|fastmail/i.test(d)) return 'E-posta';
+  if (/github|gitlab|bitbucket|stackoverflow|vercel|netlify|aws|digitalocean|cloudflare|azure/i.test(d)) return 'Geliştirici / Araçlar';
+  if (/amazon|ebay|trendyol|hepsiburada|aliexpress|shopify|etsy|n11/i.test(d)) return 'Alışveriş';
+  if (/bank|garanti|isbank|akbank|ziraat|yapikredi|paypal|stripe|wise|revolut|binance|coinbase/i.test(d)) return 'Finans';
+  if (/slack|notion|jira|asana|trello|zoom|figma|miro|linear|office|microsoft/i.test(d)) return 'İş / Kurumsal';
+  return 'Diğer';
+}
+
 api.onExtSaveCredentialRequest?.(async (req) => {
   if (!master) {
     api.extRespond(req.requestId, { error: 'locked' });
@@ -542,14 +566,16 @@ api.onExtSaveCredentialRequest?.(async (req) => {
     }
   }
 
+  const site = formatCleanSiteName(req.domain);
+  const category = deduceCategory(req.domain);
   const newEntry = {
     id: crypto.randomUUID(),
-    site: req.domain || '',
-    category: '',
+    site,
+    category,
     username: req.username || '',
     password: await memEncrypt(req.password),
     note: '',
-    url: req.domain ? ('https://' + req.domain) : '',
+    url: req.domain ? (req.domain.startsWith('http') ? req.domain : 'https://' + req.domain) : '',
     totp: await memEncrypt(''),
     fav: false,
     reprompt: false,
@@ -564,7 +590,7 @@ api.onExtSaveCredentialRequest?.(async (req) => {
   entries.unshift(newEntry);
   await persist();
   renderList();
-  toast(t('toastSaved') || 'Yeni hesap Fuin kasanıza kaydedildi');
+  toast(`${t('toastSaved') || 'Yeni hesap kaydedildi'}: ${site}${newEntry.username ? ' (' + newEntry.username + ')' : ''}`);
   api.extRespond(req.requestId, { ok: true, action: 'created', id: newEntry.id });
 });
 
@@ -2063,10 +2089,18 @@ async function silentCheckForUpdates() {
 async function checkForUpdates() {
   if (window.FuinUpdateManager) return window.FuinUpdateManager.checkForUpdates(t);
 }
-// ── EVENT DELEGATION FOR DYNAMIC BUTTONS ────────────────────────────
+// ── EVENT DELEGATION FOR DYNAMIC BUTTONS & CARDS ───────────────────
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-action]');
-  if (!btn) return;
+  if (!btn) {
+    const card = e.target.closest('.pw-card');
+    if (card) {
+      const editBtn = card.querySelector('button[data-action="edit-pw"]');
+      const val = editBtn ? editBtn.getAttribute('data-val') : null;
+      if (val) openAddModal(val);
+    }
+    return;
+  }
   const action = btn.getAttribute('data-action');
   const val = btn.getAttribute('data-val');
 

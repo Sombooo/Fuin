@@ -63,20 +63,47 @@
   }
 
   function findUsernameField(pwField) {
-    const form = pwField.closest('form') || document;
+    const form = pwField ? (pwField.closest('form') || document) : document;
     const candidates = Array.from(form.querySelectorAll(
-      'input[type="text"], input[type="email"], input[type="tel"], input[autocomplete*="user"], input:not([type])'
+      'input[type="text"], input[type="email"], input[type="tel"], input[autocomplete*="user"], input[autocomplete*="email"], input:not([type])'
     )).filter(c => c !== pwField && isVisibleInput(c));
 
+    const idNameRegex = /(?:user(?:name)?|login|email|identifier|auth|account|eposta|kullanici)/i;
+
+    // 1. Değeri dolu ve meta bilgisi kullanıcı adına uyan alanlar
+    const withVal = candidates.filter(c => c.value && c.value.trim().length > 0);
+    const namedWithVal = withVal.find(c => {
+      const meta = ((c.name || '') + ' ' + (c.id || '') + ' ' + (c.getAttribute('autocomplete') || '') + ' ' + (c.placeholder || '')).toLowerCase();
+      return c.type === 'email' || idNameRegex.test(meta) || (c.value && c.value.includes('@'));
+    });
+    if (namedWithVal) return namedWithVal;
+
+    // 2. Değeri dolu herhangi bir alan (şifreden hemen önceki)
+    if (withVal.length > 0 && pwField) {
+      const all = Array.from(document.querySelectorAll('input'));
+      const pwIdx = all.indexOf(pwField);
+      let best = null, bestDist = Infinity;
+      for (const c of withVal) {
+        const idx = all.indexOf(c);
+        if (idx < pwIdx && (pwIdx - idx) < bestDist) {
+          bestDist = pwIdx - idx;
+          best = c;
+        }
+      }
+      if (best) return best;
+      return withVal[0];
+    }
+
+    // 3. Şifreden önceki en yakın input
     const all = Array.from(document.querySelectorAll('input'));
-    const pwIdx = all.indexOf(pwField);
+    const pwIdx = pwField ? all.indexOf(pwField) : -1;
 
     let bestBefore = null, bestBeforeDist = Infinity;
     let bestAny = null, bestAnyDist = Infinity;
     for (const c of candidates) {
       const idx = all.indexOf(c);
       const dist = Math.abs(pwIdx - idx);
-      if (idx < pwIdx && (pwIdx - idx) < bestBeforeDist) {
+      if (pwIdx >= 0 && idx < pwIdx && (pwIdx - idx) < bestBeforeDist) {
         bestBeforeDist = pwIdx - idx;
         bestBefore = c;
       }
@@ -85,7 +112,7 @@
         bestAny = c;
       }
     }
-    return bestBefore || bestAny;
+    return bestBefore || bestAny || candidates[0] || null;
   }
 
   function formatRevealError(err) {
@@ -380,15 +407,56 @@
   // ── YENİ ŞİFRE KAYDETME / GÜNCELLEME BİLDİRİMİ (SAVE PROMPT) ────────
   let activeSaveHost = null;
   let lastProcessedSubmitTime = 0;
+  let _lastTypedUsername = '';
+  let _lastTypedPassword = '';
+
+  document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el || el.tagName !== 'INPUT') return;
+    if (el.type === 'password') {
+      if (el.value) _lastTypedPassword = el.value;
+      const uField = findUsernameField(el);
+      if (uField && uField.value && uField.value.trim()) {
+        _lastTypedUsername = uField.value.trim();
+      }
+    } else {
+      const meta = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('autocomplete') || '') + ' ' + (el.placeholder || '')).toLowerCase();
+      const idNameRegex = /(?:user(?:name)?|login|email|identifier|auth|account|eposta|kullanici)/i;
+      if (el.type === 'email' || idNameRegex.test(meta) || (el.value && el.value.includes('@'))) {
+        if (el.value) _lastTypedUsername = el.value.trim();
+      }
+    }
+  }, true);
+
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (!el || el.tagName !== 'INPUT') return;
+    if (el.type === 'password' && el.value) {
+      _lastTypedPassword = el.value;
+    } else if (el.value && (el.type === 'email' || el.value.includes('@') || /user|login|email/i.test(el.name || ''))) {
+      _lastTypedUsername = el.value.trim();
+    }
+  }, true);
 
   function captureFormCredentials(contextEl) {
     const allPws = Array.from(document.querySelectorAll('input[type="password"]'));
     const filledPw = allPws.find(f => f.value && f.value.length > 0) || allPws.find(isVisibleInput) || allPws[0];
-    if (!filledPw || !filledPw.value) return null;
+    
+    let password = (filledPw && filledPw.value) ? filledPw.value : _lastTypedPassword;
+    if (!password || password.length < 2) return null;
 
-    const userField = findUsernameField(filledPw) || findStandaloneUsernameFields()[0];
-    const username = userField && userField.value ? userField.value.trim() : '';
-    const password = filledPw.value;
+    let username = '';
+    const userField = filledPw ? findUsernameField(filledPw) : null;
+    if (userField && userField.value && userField.value.trim()) {
+      username = userField.value.trim();
+    } else if (_lastTypedUsername) {
+      username = _lastTypedUsername;
+    } else {
+      const standalone = findStandaloneUsernameFields()[0];
+      if (standalone && standalone.value && standalone.value.trim()) {
+        username = standalone.value.trim();
+      }
+    }
 
     return { username, password };
   }
@@ -436,14 +504,14 @@
 
     const card = document.createElement('div');
     Object.assign(card.style, {
-      width: '310px',
+      width: '320px',
       background: '#222019',
       border: '1px solid #3d3830',
-      borderRadius: '8px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+      borderRadius: '10px',
+      boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       color: '#e8e2d8',
-      padding: '14px',
+      padding: '16px',
       boxSizing: 'border-box'
     });
 
@@ -452,7 +520,7 @@
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: '8px'
+      marginBottom: '10px'
     });
 
     const logoRow = document.createElement('div');
@@ -490,26 +558,140 @@
 
     const isUpdate = result.action === 'update';
     const titleText = document.createElement('div');
-    titleText.textContent = isUpdate ? 'Şifreniz Güncellensin mi?' : 'Hesap Kaydedilsin mi?';
+    titleText.textContent = isUpdate ? 'Şifre Güncellensin mi?' : 'Hesap Kaydedilsin mi?';
     Object.assign(titleText.style, {
-      fontSize: '13px',
+      fontSize: '14px',
       fontWeight: '600',
       color: '#e8e2d8',
       marginBottom: '4px'
     });
     card.appendChild(titleText);
 
-    const descText = document.createElement('div');
-    descText.textContent = `${location.hostname}${candidate.username ? ' (' + candidate.username + ')' : ''}`;
-    Object.assign(descText.style, {
+    const rawHost = location.hostname.replace(/^www\./i, '');
+    const cleanSite = rawHost ? (rawHost.charAt(0).toUpperCase() + rawHost.slice(1)) : 'Bu Site';
+
+    const siteBadge = document.createElement('div');
+    Object.assign(siteBadge.style, {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '6px',
+      background: '#1a1816',
+      border: '1px solid #3d3830',
+      borderRadius: '4px',
+      padding: '3px 8px',
       fontSize: '11px',
-      color: '#a69d92',
-      marginBottom: '12px',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap'
+      color: '#6bb382',
+      fontWeight: '500',
+      marginBottom: '12px'
     });
-    card.appendChild(descText);
+    siteBadge.textContent = '🌐 ' + cleanSite;
+    card.appendChild(siteBadge);
+
+    const fieldsBox = document.createElement('div');
+    Object.assign(fieldsBox.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+      marginBottom: '14px'
+    });
+
+    // Kullanıcı Adı
+    const userWrap = document.createElement('div');
+    const userLabel = document.createElement('div');
+    userLabel.textContent = 'Kullanıcı Adı';
+    Object.assign(userLabel.style, {
+      fontSize: '10px',
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      color: '#a69d92',
+      marginBottom: '3px'
+    });
+    const userInput = document.createElement('input');
+    userInput.type = 'text';
+    userInput.value = candidate.username || '';
+    userInput.placeholder = 'Kullanıcı adı veya e-posta';
+    Object.assign(userInput.style, {
+      width: '100%',
+      boxSizing: 'border-box',
+      background: '#1a1816',
+      border: '1px solid #3d3830',
+      borderRadius: '5px',
+      padding: '7px 10px',
+      fontSize: '12px',
+      color: '#e8e2d8',
+      outline: 'none',
+      fontFamily: 'inherit'
+    });
+    userInput.addEventListener('focus', () => { userInput.style.borderColor = '#5a9a6e'; });
+    userInput.addEventListener('blur', () => { userInput.style.borderColor = '#3d3830'; });
+    userWrap.appendChild(userLabel);
+    userWrap.appendChild(userInput);
+    fieldsBox.appendChild(userWrap);
+
+    // Şifre
+    const pwWrap = document.createElement('div');
+    const pwLabel = document.createElement('div');
+    pwLabel.textContent = 'Şifre';
+    Object.assign(pwLabel.style, {
+      fontSize: '10px',
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      color: '#a69d92',
+      marginBottom: '3px'
+    });
+    const pwRow = document.createElement('div');
+    Object.assign(pwRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      position: 'relative'
+    });
+    const pwInput = document.createElement('input');
+    pwInput.type = 'password';
+    pwInput.value = candidate.password || '';
+    Object.assign(pwInput.style, {
+      width: '100%',
+      boxSizing: 'border-box',
+      background: '#1a1816',
+      border: '1px solid #3d3830',
+      borderRadius: '5px',
+      padding: '7px 32px 7px 10px',
+      fontSize: '12px',
+      color: '#e8e2d8',
+      outline: 'none',
+      fontFamily: 'monospace'
+    });
+    pwInput.addEventListener('focus', () => { pwInput.style.borderColor = '#5a9a6e'; });
+    pwInput.addEventListener('blur', () => { pwInput.style.borderColor = '#3d3830'; });
+
+    const eyeBtn = document.createElement('button');
+    eyeBtn.type = 'button';
+    eyeBtn.textContent = '👁';
+    eyeBtn.title = 'Şifreyi göster / gizle';
+    Object.assign(eyeBtn.style, {
+      position: 'absolute',
+      right: '6px',
+      background: 'transparent',
+      border: 'none',
+      color: '#a69d92',
+      fontSize: '12px',
+      cursor: 'pointer',
+      padding: '2px',
+      lineHeight: '1'
+    });
+    eyeBtn.addEventListener('click', (e) => {
+      if (!e.isTrusted) return;
+      pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+    });
+
+    pwRow.appendChild(pwInput);
+    pwRow.appendChild(eyeBtn);
+    pwWrap.appendChild(pwLabel);
+    pwWrap.appendChild(pwRow);
+    fieldsBox.appendChild(pwWrap);
+
+    card.appendChild(fieldsBox);
 
     const btnRow = document.createElement('div');
     Object.assign(btnRow.style, {
@@ -525,10 +707,10 @@
       background: '#2a2720',
       border: '1px solid #3d3830',
       color: '#a69d92',
-      fontSize: '11px',
+      fontSize: '12px',
       fontWeight: '500',
-      padding: '6px 12px',
-      borderRadius: '4px',
+      padding: '7px 12px',
+      borderRadius: '5px',
       cursor: 'pointer'
     });
     notNowBtn.addEventListener('click', (e) => {
@@ -543,22 +725,26 @@
       background: '#5a9a6e',
       border: '1px solid #5a9a6e',
       color: '#1a1816',
-      fontSize: '11px',
+      fontSize: '12px',
       fontWeight: '600',
-      padding: '6px 14px',
-      borderRadius: '4px',
+      padding: '7px 16px',
+      borderRadius: '5px',
       cursor: 'pointer'
     });
 
     saveBtn.addEventListener('click', async (e) => {
       if (!e.isTrusted) return;
+      const finalUsername = userInput.value.trim();
+      const finalPassword = pwInput.value;
+      if (!finalPassword) return;
+
       saveBtn.disabled = true;
       saveBtn.textContent = 'Kaydediliyor…';
       try {
         const resp = await chrome.runtime.sendMessage({
           type: 'fuin-save-credential',
-          username: candidate.username,
-          password: candidate.password,
+          username: finalUsername,
+          password: finalPassword,
           updateEntryId: result.entryId
         });
         if (resp && resp.ok) {
@@ -599,14 +785,14 @@
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-      setTimeout(() => handleCandidateSubmission(e.target), 60);
+      handleCandidateSubmission(e.target);
     }
   }, true);
 
   window.addEventListener('click', (e) => {
     const btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], [role="button"], a[role="button"]') : null;
     if (btn) {
-      setTimeout(() => handleCandidateSubmission(btn), 60);
+      handleCandidateSubmission(btn);
     }
   }, true);
 })();

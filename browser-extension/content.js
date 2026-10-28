@@ -2,18 +2,13 @@
 // ═══════════════════════════════════════════════════════════════════
 // FUIN BROWSER EXTENSION — CONTENT SCRIPT
 //
-// Sayfadaki giriş formlarını tespit eder:
-// 1. Standart formlar: input[type="password"] yanına Fuin ikonu koyar.
-// 2. Bölünmüş formlar (Split Login: Google, Microsoft, Apple vb.):
-//    Sayfada hiç şifre alanı yoksa, kullanıcı adı / e-posta alanını
-//    tespit edip ikonu oraya ekler ve 1. adımı otomatik doldurur.
-//
-// Özellikler:
-// - Closed Shadow DOM ile DOM izolasyonu ve zararlı script koruması
-// - e.isTrusted ile sentetik tıklama ve CSRF/Clickjacking engelleme
-// - TOTP / 2FA kodu sağlandığında tek tıkla otomatik panoya kopyalama
-// - Klavye kısayolu (Cmd+Shift+L / Ctrl+Shift+L) desteği
-// - Fuin Tasarım Sistemi renkleri (#222019, #3d3830, #5a9a6e, #6bb382)
+// Bitwarden tarzı sade otomatik doldurma (input içine ikon gömmeden,
+// sayfadaki şifre göster/gizle 👁 ikonlarını kapatmadan çalışır):
+// 1. Eklenti araç çubuğu menüsünden ("Doldur") veya klavye kısayoluyla
+//    (Cmd+Shift+L / Ctrl+Shift+L) standart ve bölünmüş (Split Login)
+//    formları otomatik doldurur.
+// 2. Form gönderildiğinde yeni/güncel şifreleri Closed Shadow DOM
+//    bildirimi ile kaydetmeyi önerir.
 // ═══════════════════════════════════════════════════════════════════
 (function () {
   const PROCESSED = new WeakSet();
@@ -122,85 +117,40 @@
     PROCESSED.add(pwField);
     const host = document.createElement('fuin-ext-host');
     Object.assign(host.style, {
-      position: 'absolute', top: '0', left: '0', width: '100%', height: '100%', 
+      position: 'absolute', top: '0', left: '0', width: '0', height: '0',
       pointerEvents: 'none', zIndex: '2147483647'
     });
     const shadow = host.attachShadow({ mode: 'closed' });
+    // Bitwarden varsayılanı gibi input içine görünür ikon gömülmez (göz ikonlarını kapatmamak için).
+    // Yalnızca Cmd+Shift+L çoklu hesap seçim menüsü için kapalı Shadow DOM çapa referansı tutulur.
     const icon = document.createElement('div');
-    icon.className = 'fuin-ext-icon';
-    icon.textContent = '⬡';
-    icon.title = 'Fuin ile doldur (Kısayol: Cmd+Shift+L / Ctrl+Shift+L)';
-    const isHttp = location.protocol === 'http:';
-    
-    // Fuin Warm Dark Design System Palette
-    Object.assign(icon.style, {
-      position: 'absolute', width: '22px', height: '22px', lineHeight: '22px',
-      textAlign: 'center', cursor: 'pointer', fontSize: '14px',
-      background: '#222019', color: isHttp ? '#ff4d4f' : '#5a9a6e', borderRadius: '4px',
-      border: isHttp ? '1px solid #ff4d4f' : '1px solid #3d3830',
-      boxShadow: '0 2px 6px rgba(0,0,0,.35)',
-      fontFamily: 'monospace', userSelect: 'none', pointerEvents: 'auto',
-      transition: 'background 0.15s ease, border-color 0.15s ease, color 0.15s ease'
-    });
-
-    if (isHttp) {
-      icon.title = 'Fuin: DİKKAT! Bu bağlantı güvenli değil (HTTP).';
-    } else {
-      icon.addEventListener('mouseenter', () => {
-        icon.style.background = '#2a2720';
-        icon.style.borderColor = '#5a9a6e';
-        icon.style.color = '#6bb382';
-      });
-      icon.addEventListener('mouseleave', () => {
-        icon.style.background = '#222019';
-        icon.style.borderColor = '#3d3830';
-        icon.style.color = '#5a9a6e';
-      });
-    }
+    icon.className = 'fuin-ext-anchor';
+    icon._targetField = pwField;
+    icon.style.display = 'none';
 
     shadow.appendChild(icon);
     document.body.appendChild(host);
     FIELD_MAP.set(pwField, { host, shadow, icon });
 
-    function position() {
+    function cleanupIfDetached() {
       if (!document.body.contains(pwField) || !document.body.contains(host)) {
-        window.removeEventListener('scroll', position, true);
-        window.removeEventListener('resize', position);
-        pwField.removeEventListener('focus', position);
+        window.removeEventListener('scroll', cleanupIfDetached, true);
+        window.removeEventListener('resize', cleanupIfDetached);
         if (host.parentNode) host.remove();
         FIELD_MAP.delete(pwField);
-        return;
       }
-      const r = pwField.getBoundingClientRect();
-      if (r.width < 40 || r.height < 14) {
-        icon.style.display = 'none';
-        return;
-      }
-      icon.style.display = 'block';
-      icon.style.top  = (window.scrollY + r.top + (r.height - 22) / 2) + 'px';
-      icon.style.left = (window.scrollX + r.right - 28) + 'px';
     }
-    position();
-    window.addEventListener('scroll', position, true);
-    window.addEventListener('resize', position);
-    pwField.addEventListener('focus', position);
-
-    icon.addEventListener('click', async (e) => {
-      if (!e.isTrusted) return;
-      e.preventDefault(); e.stopPropagation();
-      await handleFillClick(pwField, icon, shadow);
-    });
+    window.addEventListener('scroll', cleanupIfDetached, true);
+    window.addEventListener('resize', cleanupIfDetached);
   }
 
   async function requestAndFill(targetField, icon, shadowRoot, matchId, domain) {
-    icon.textContent = '…';
     let revealRes;
     try {
       revealRes = await chrome.runtime.sendMessage({ type: 'fuin-reveal', entryId: matchId, domain });
     } catch {
       revealRes = { error: 'native-host-unreachable' };
     }
-    icon.textContent = '⬡';
     if (!revealRes || revealRes.error) {
       const err = revealRes?.error || 'unknown';
       if (err === 'denied' || err === 'navigation-cancelled') return;
@@ -213,12 +163,6 @@
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(revealRes.totp);
-          icon.textContent = '✓';
-          icon.title = 'Fuin: Şifre dolduruldu & TOTP kopyalandı!';
-          setTimeout(() => {
-            icon.textContent = '⬡';
-            icon.title = 'Fuin ile doldur (Kısayol: Cmd+Shift+L / Ctrl+Shift+L)';
-          }, 2500);
         }
       } catch {}
     }
@@ -241,14 +185,12 @@
       return;
     }
 
-    icon.textContent = '…';
     let res;
     try {
       res = await chrome.runtime.sendMessage({ type: 'fuin-lookup', domain });
     } catch {
       res = { error: 'native-host-unreachable' };
     }
-    icon.textContent = '⬡';
 
     if (!res || res.error === 'locked') return showMenu(icon, shadowRoot, ['🔒 Fuin kilitli — önce açın']);
     if (res.error)                      return showMenu(icon, shadowRoot, ['⚠ Fuin masaüstü uygulamasına ulaşılamıyor']);
@@ -327,9 +269,10 @@
       zIndex: 2147483647, boxShadow: '0 6px 20px rgba(0,0,0,.45)', minWidth: '220px',
       maxWidth: '340px', overflow: 'hidden', pointerEvents: 'auto'
     });
-    const r = anchor.getBoundingClientRect();
+    const targetEl = (anchor && anchor._targetField) ? anchor._targetField : anchor;
+    const r = targetEl.getBoundingClientRect();
     menu.style.top  = (window.scrollY + r.bottom + 6) + 'px';
-    menu.style.left = Math.max(8, window.scrollX + r.right - 220) + 'px';
+    menu.style.left = Math.max(8, window.scrollX + r.left) + 'px';
 
     items.forEach((label, idx) => {
       const row = document.createElement('div');
@@ -347,7 +290,11 @@
       if (onSelect) {
         row.addEventListener('mouseenter', () => { row.style.background = '#2a2720'; row.style.color = '#6bb382'; });
         row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; row.style.color = '#e8e2d8'; });
-        row.addEventListener('click', () => { onSelect(idx); menu.remove(); });
+        row.addEventListener('click', (e) => {
+          if (!e.isTrusted) return;
+          onSelect(idx);
+          menu.remove();
+        });
       }
       menu.appendChild(row);
     });
@@ -431,7 +378,6 @@
 
   function scan() {
     document.querySelectorAll('input[type="password"]').forEach(el => _knownPasswordInputs.add(el));
-    findLoginForms().forEach(injectIcon);
   }
 
   scan();

@@ -219,6 +219,8 @@ async function runNativeHostAndSuppressionTests() {
     contentJs.includes('function isLikelySubmitControl') && contentJs.includes('function markLocalDismissed'));
   report('5.3 content.js supports "Bu Sitede Asla" (fuin-exclude-domain) & fuin-close-save-prompt',
     contentJs.includes("type: 'fuin-exclude-domain'") && contentJs.includes("msg.type === 'fuin-close-save-prompt'"));
+  report('5.9 content.js avoids injecting visible inline icons over password eye buttons',
+    !contentJs.includes('fuin-ext-icon') && !contentJs.includes('findLoginForms().forEach(injectIcon)'));
 
   // Execute background.js in VM sandbox to verify session dismissal & domain exclusion
   let onMessageHandler = null;

@@ -652,7 +652,7 @@ function highlightSavedCard(entryId) {
 
   renderList().then(() => {
     setTimeout(() => {
-      const cardEl = document.querySelector(`.pw-card[data-id="${entryId}"]`);
+      const cardEl = Array.from(document.querySelectorAll('.pw-card')).find(c => c.dataset.id === entryId);
       if (cardEl) {
         cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         cardEl.style.borderColor = 'var(--ac)';

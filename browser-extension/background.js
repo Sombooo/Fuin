@@ -52,11 +52,13 @@ const MULTI_TENANT_SUFFIXES = new Set([
   'workers.dev', 'web.app', 'azurewebsites.net', 'cloudfront.net', 'railway.app',
   'up.railway.app', 'deno.dev', 'appspot.com', 'surge.sh', 'amplifyapp.com',
   'elasticbeanstalk.com', 's3.amazonaws.com', 'fastly.net', 'b-cdn.net',
-  'ngrok-free.app', 'ngrok.io', 'glitch.me', 'myshopify.com'
+  'ngrok-free.app', 'ngrok.io', 'glitch.me', 'myshopify.com',
+  'wixsite.com', 'ghost.io', 'substack.com', 'azureedge.net', 'trafficmanager.net',
+  'blob.core.windows.net', 'blogspot.com', 'wordpress.com'
 ]);
 
 function normDomainKey(d) {
-  return String(d || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split(':')[0].trim();
+  return String(d || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split(':')[0].trim().replace(/\.$/, '');
 }
 
 function isMultiTenantHost(h) {
@@ -73,7 +75,18 @@ function getBaseSite(h) {
   if (isMultiTenantHost(clean)) return clean;
   const parts = clean.split('.');
   if (parts.length <= 2) return clean;
-  const twoPartTlds = new Set(['com.tr', 'org.tr', 'net.tr', 'edu.tr', 'gov.tr', 'co.uk', 'org.uk', 'co.jp', 'com.au', 'com.br']);
+  const twoPartTlds = new Set([
+    'com.tr', 'org.tr', 'net.tr', 'edu.tr', 'gov.tr', 'gen.tr',
+    'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk',
+    'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp',
+    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
+    'co.nz', 'org.nz', 'net.nz',
+    'com.br', 'net.br', 'org.br',
+    'co.za', 'org.za',
+    'com.cn', 'net.cn', 'org.cn', 'gov.cn',
+    'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in',
+    'com.de', 'co.ca', 'com.sg', 'com.hk', 'com.mx', 'com.ar'
+  ]);
   const lastTwo = parts.slice(-2).join('.');
   if (twoPartTlds.has(lastTwo) && parts.length >= 3) {
     return parts.slice(-3).join('.');

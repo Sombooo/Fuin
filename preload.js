@@ -75,6 +75,8 @@ contextBridge.exposeInMainWorld('kekkai', {
   getExtensionStatus:  ()               => ipcRenderer.invoke('get-extension-status'),
   onExtLookupRequest:  (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('ext-lookup-request', h); return () => ipcRenderer.removeListener('ext-lookup-request', h); },
   onExtRevealRequest:  (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('ext-reveal-request', h); return () => ipcRenderer.removeListener('ext-reveal-request', h); },
+  onExtCheckSaveCandidateRequest: (cb) => { const h = (_, d) => cb(d); ipcRenderer.on('ext-check-save-candidate-request', h); return () => ipcRenderer.removeListener('ext-check-save-candidate-request', h); },
+  onExtSaveCredentialRequest: (cb)      => { const h = (_, d) => cb(d); ipcRenderer.on('ext-save-credential-request', h); return () => ipcRenderer.removeListener('ext-save-credential-request', h); },
   extRespond:          (requestId, payload) => ipcRenderer.invoke('ext-response', { requestId, payload }),
 
   exportFile:          (opts)           => ipcRenderer.invoke('export-file', opts),

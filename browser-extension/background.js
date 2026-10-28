@@ -131,6 +131,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     askFuin({ type: 'lookup', domain: actualDomain }).then(sendResponse);
     return true;
   }
+  if (msg.type === 'fuin-check-save-candidate' && msg.password) {
+    askFuin({
+      type: 'check-save-candidate',
+      domain: actualDomain,
+      username: msg.username || '',
+      password: msg.password
+    }).then(sendResponse);
+    return true;
+  }
+  if (msg.type === 'fuin-save-credential' && msg.password) {
+    askFuin({
+      type: 'save-credential',
+      domain: actualDomain,
+      username: msg.username || '',
+      password: msg.password,
+      updateEntryId: msg.updateEntryId
+    }).then(sendResponse);
+    return true;
+  }
   if (msg.type === 'fuin-reveal') {
     if (pendingReveal !== null) {
       sendResponse({ error: 'busy' });

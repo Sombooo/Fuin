@@ -305,6 +305,21 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
       } else if (msg.type === 'reveal') {
         const result = await relayToRenderer(getMainWindow, 'ext-reveal-request', { entryId: msg.entryId, domain: msg.domain });
         reply({ id: msg.id, ...result });
+      } else if (msg.type === 'check-save-candidate') {
+        const result = await relayToRenderer(getMainWindow, 'ext-check-save-candidate-request', {
+          domain: msg.domain,
+          username: msg.username,
+          password: msg.password
+        });
+        reply({ id: msg.id, ...result });
+      } else if (msg.type === 'save-credential') {
+        const result = await relayToRenderer(getMainWindow, 'ext-save-credential-request', {
+          domain: msg.domain,
+          username: msg.username,
+          password: msg.password,
+          updateEntryId: msg.updateEntryId
+        });
+        reply({ id: msg.id, ...result });
       } else {
         reply({ id: msg.id, error: 'unknown-type' });
       }

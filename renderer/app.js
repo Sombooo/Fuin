@@ -485,6 +485,89 @@ api.onExtRevealRequest(async (req) => {
   document.getElementById('extRevealOverlay').classList.add('open');
 });
 
+api.onExtCheckSaveCandidateRequest?.(async (req) => {
+  if (!master) {
+    api.extRespond(req.requestId, { error: 'locked' });
+    return;
+  }
+  const matchingEntries = entries.filter(e => !e.isDeleted && domainMatches(e, req.domain));
+  if (!matchingEntries.length) {
+    api.extRespond(req.requestId, { shouldPrompt: true, action: 'save', username: req.username || '' });
+    return;
+  }
+
+  const userMatch = matchingEntries.find(e => (e.username || '').toLowerCase() === (req.username || '').toLowerCase());
+  if (userMatch) {
+    const existingPw = await memDecrypt(userMatch.password);
+    if (existingPw === req.password) {
+      api.extRespond(req.requestId, { shouldPrompt: false });
+      return;
+    }
+    api.extRespond(req.requestId, {
+      shouldPrompt: true,
+      action: 'update',
+      entryId: userMatch.id,
+      username: userMatch.username || req.username || ''
+    });
+    return;
+  }
+
+  api.extRespond(req.requestId, { shouldPrompt: true, action: 'save', username: req.username || '' });
+});
+
+api.onExtSaveCredentialRequest?.(async (req) => {
+  if (!master) {
+    api.extRespond(req.requestId, { error: 'locked' });
+    return;
+  }
+  const now = Date.now();
+  if (req.updateEntryId) {
+    const existing = entries.find(x => x.id === req.updateEntryId && !x.isDeleted);
+    if (existing) {
+      const oldPw = await memDecrypt(existing.password);
+      if (oldPw !== req.password) {
+        let history = Array.isArray(existing.history) ? [...existing.history] : [];
+        history.unshift({ password: existing.password, date: now });
+        if (history.length > 5) history = history.slice(0, 5);
+        existing.history = history;
+        existing.password = await memEncrypt(req.password);
+        existing.updated = now;
+        existing.updatedAt = now;
+        await persist();
+        renderList();
+        toast(t('toastUpdated') || 'Şifre güncellendi');
+        api.extRespond(req.requestId, { ok: true, action: 'updated', id: existing.id });
+        return;
+      }
+    }
+  }
+
+  const newEntry = {
+    id: crypto.randomUUID(),
+    site: req.domain || '',
+    category: '',
+    username: req.username || '',
+    password: await memEncrypt(req.password),
+    note: '',
+    url: req.domain ? ('https://' + req.domain) : '',
+    totp: await memEncrypt(''),
+    fav: false,
+    reprompt: false,
+    updated: now,
+    updatedAt: now,
+    created: now,
+    createdAt: now,
+    deletedAt: null,
+    isDeleted: false,
+    history: []
+  };
+  entries.unshift(newEntry);
+  await persist();
+  renderList();
+  toast(t('toastSaved') || 'Yeni hesap Fuin kasanıza kaydedildi');
+  api.extRespond(req.requestId, { ok: true, action: 'created', id: newEntry.id });
+});
+
 async function approveExtReveal() {
   if (!pendingExtReveal) return;
   const { requestId, entry } = pendingExtReveal;

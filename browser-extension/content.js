@@ -376,4 +376,237 @@
 
   scan();
   new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+
+  // ── YENİ ŞİFRE KAYDETME / GÜNCELLEME BİLDİRİMİ (SAVE PROMPT) ────────
+  let activeSaveHost = null;
+  let lastProcessedSubmitTime = 0;
+
+  function captureFormCredentials(contextEl) {
+    const root = (contextEl && contextEl.closest && contextEl.closest('form')) || document;
+    const pwField = root.querySelector('input[type="password"]');
+    if (!pwField || !pwField.value) return null;
+
+    const userField = findUsernameField(pwField) || findStandaloneUsernameFields()[0];
+    const username = userField && userField.value ? userField.value.trim() : '';
+    const password = pwField.value;
+
+    return { username, password };
+  }
+
+  async function handleCandidateSubmission(target) {
+    if (location.protocol !== 'https:') return;
+    const now = Date.now();
+    if (now - lastProcessedSubmitTime < 1500) return; // 1.5s debounce
+
+    const creds = captureFormCredentials(target);
+    if (!creds || !creds.password || creds.password.length < 2) return;
+
+    lastProcessedSubmitTime = now;
+
+    let res;
+    try {
+      res = await chrome.runtime.sendMessage({
+        type: 'fuin-check-save-candidate',
+        username: creds.username,
+        password: creds.password
+      });
+    } catch {
+      return;
+    }
+
+    if (res && res.shouldPrompt) {
+      showSavePrompt(creds, res);
+    }
+  }
+
+  function showSavePrompt(candidate, result) {
+    if (activeSaveHost) {
+      try { activeSaveHost.remove(); } catch {}
+      activeSaveHost = null;
+    }
+
+    const host = document.createElement('fuin-save-prompt');
+    Object.assign(host.style, {
+      position: 'fixed',
+      top: '16px',
+      right: '16px',
+      zIndex: '2147483647',
+      pointerEvents: 'auto'
+    });
+    const shadow = host.attachShadow({ mode: 'closed' });
+
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      width: '310px',
+      background: '#222019',
+      border: '1px solid #3d3830',
+      borderRadius: '8px',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      color: '#e8e2d8',
+      padding: '14px',
+      boxSizing: 'border-box'
+    });
+
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: '8px'
+    });
+
+    const logoRow = document.createElement('div');
+    Object.assign(logoRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      fontSize: '12px',
+      fontWeight: '700',
+      color: '#5a9a6e',
+      fontFamily: 'monospace'
+    });
+    logoRow.textContent = '⬡ FUIN';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    Object.assign(closeBtn.style, {
+      background: 'transparent',
+      border: 'none',
+      color: '#a69d92',
+      fontSize: '13px',
+      cursor: 'pointer',
+      padding: '2px 4px',
+      lineHeight: '1'
+    });
+    closeBtn.addEventListener('click', (e) => {
+      if (!e.isTrusted) return;
+      host.remove();
+      activeSaveHost = null;
+    });
+
+    header.appendChild(logoRow);
+    header.appendChild(closeBtn);
+    card.appendChild(header);
+
+    const isUpdate = result.action === 'update';
+    const titleText = document.createElement('div');
+    titleText.textContent = isUpdate ? 'Şifreniz Güncellensin mi?' : 'Hesap Kaydedilsin mi?';
+    Object.assign(titleText.style, {
+      fontSize: '13px',
+      fontWeight: '600',
+      color: '#e8e2d8',
+      marginBottom: '4px'
+    });
+    card.appendChild(titleText);
+
+    const descText = document.createElement('div');
+    descText.textContent = `${location.hostname}${candidate.username ? ' (' + candidate.username + ')' : ''}`;
+    Object.assign(descText.style, {
+      fontSize: '11px',
+      color: '#a69d92',
+      marginBottom: '12px',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    });
+    card.appendChild(descText);
+
+    const btnRow = document.createElement('div');
+    Object.assign(btnRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: '8px'
+    });
+
+    const notNowBtn = document.createElement('button');
+    notNowBtn.textContent = 'Şimdi Değil';
+    Object.assign(notNowBtn.style, {
+      background: '#2a2720',
+      border: '1px solid #3d3830',
+      color: '#a69d92',
+      fontSize: '11px',
+      fontWeight: '500',
+      padding: '6px 12px',
+      borderRadius: '4px',
+      cursor: 'pointer'
+    });
+    notNowBtn.addEventListener('click', (e) => {
+      if (!e.isTrusted) return;
+      host.remove();
+      activeSaveHost = null;
+    });
+
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet';
+    Object.assign(saveBtn.style, {
+      background: '#5a9a6e',
+      border: '1px solid #5a9a6e',
+      color: '#1a1816',
+      fontSize: '11px',
+      fontWeight: '600',
+      padding: '6px 14px',
+      borderRadius: '4px',
+      cursor: 'pointer'
+    });
+
+    saveBtn.addEventListener('click', async (e) => {
+      if (!e.isTrusted) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Kaydediliyor…';
+      try {
+        const resp = await chrome.runtime.sendMessage({
+          type: 'fuin-save-credential',
+          username: candidate.username,
+          password: candidate.password,
+          updateEntryId: result.entryId
+        });
+        if (resp && resp.ok) {
+          saveBtn.textContent = 'Kaydedildi! ✓';
+          saveBtn.style.background = '#6bb382';
+          setTimeout(() => {
+            if (host.parentNode) host.remove();
+            activeSaveHost = null;
+          }, 1200);
+        } else {
+          saveBtn.textContent = 'Hata';
+          setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet'; }, 2000);
+        }
+      } catch {
+        saveBtn.textContent = 'Bağlantı hatası';
+      }
+    });
+
+    btnRow.appendChild(notNowBtn);
+    btnRow.appendChild(saveBtn);
+    card.appendChild(btnRow);
+
+    shadow.appendChild(card);
+    document.body.appendChild(host);
+    activeSaveHost = host;
+
+    setTimeout(() => {
+      if (activeSaveHost === host && host.parentNode) {
+        host.remove();
+        activeSaveHost = null;
+      }
+    }, 25000);
+  }
+
+  window.addEventListener('submit', (e) => {
+    handleCandidateSubmission(e.target);
+  }, true);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') {
+      setTimeout(() => handleCandidateSubmission(e.target), 100);
+    }
+  }, true);
+
+  window.addEventListener('click', (e) => {
+    if (e.target && (e.target.type === 'submit' || (e.target.matches && e.target.matches('button, input[type="submit"], [role="button"]')))) {
+      setTimeout(() => handleCandidateSubmission(e.target), 100);
+    }
+  }, true);
 })();

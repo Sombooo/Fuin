@@ -268,7 +268,7 @@
 
   function setFieldValue(el, val) {
     if (!el || val == null) return;
-    el.focus();
+    try { el.focus(); } catch {}
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
     const protoSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
     const setter = nativeSetter || protoSetter;
@@ -277,24 +277,41 @@
     } else {
       el.value = val;
     }
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    try {
+      el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: String(val) }));
+    } catch {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     el.dispatchEvent(new Event('change', { bubbles: true }));
-    el.dispatchEvent(new Event('blur', { bubbles: true }));
+    try { el.dispatchEvent(new Event('blur', { bubbles: true })); } catch {}
   }
 
   function fillForm(targetField, creds) {
-    if (targetField.type === 'password') {
-      const userField = findUsernameField(targetField);
+    if (!creds) return;
+    const form = targetField?.closest?.('form') || document;
+
+    // 1. Kullanıcı adı alanlarını bul ve doldur
+    const userField = targetField ? findUsernameField(targetField) : null;
+    const allUsers = Array.from(form.querySelectorAll(
+      'input[type="text"], input[type="email"], input[type="tel"], input[autocomplete*="user"], input[autocomplete*="email"], input[name*="user"], input[name*="login"], input[name*="email"], input[id*="user"], input[id*="login"], input[id*="email"], input:not([type])'
+    )).filter(c => c.type !== 'password' && c.type !== 'checkbox' && c.type !== 'radio' && c.type !== 'submit');
+
+    const visibleUsers = allUsers.filter(isVisibleInput);
+    if (visibleUsers.length > 0) {
+      visibleUsers.forEach(u => setFieldValue(u, creds.username));
+    } else if (userField) {
       setFieldValue(userField, creds.username);
+    }
+
+    // 2. Şifre alanlarını bul ve doldur
+    const allPws = Array.from(form.querySelectorAll('input[type="password"]'));
+    const visiblePws = allPws.filter(isVisibleInput);
+    if (visiblePws.length > 0) {
+      visiblePws.forEach(p => setFieldValue(p, creds.password));
+    } else if (targetField && targetField.type === 'password') {
       setFieldValue(targetField, creds.password);
-    } else {
-      // Bölünmüş form (1. adım username)
-      setFieldValue(targetField, creds.username);
-      // Eğer aynı anda sayfada bir şifre alanı açılmışsa onu da doldur
-      const pwField = document.querySelector('input[type="password"]');
-      if (pwField && isVisibleInput(pwField)) {
-        setFieldValue(pwField, creds.password);
-      }
+    } else if (allPws.length > 0) {
+      allPws.forEach(p => setFieldValue(p, creds.password));
     }
   }
 
@@ -344,9 +361,29 @@
     }), 0);
   }
 
-  function triggerFill() {
+  function findBestFillField() {
     const activeEl = document.activeElement && document.activeElement.matches && document.activeElement.matches('input') ? document.activeElement : null;
-    const pwField = activeEl || document.querySelector('input[type="password"]') || findStandaloneUsernameFields()[0];
+    if (activeEl && isVisibleInput(activeEl)) return activeEl;
+
+    // 1. Önce sayfadaki görünür şifre alanını ara
+    const allPws = Array.from(document.querySelectorAll('input[type="password"]'));
+    const visiblePw = allPws.find(isVisibleInput);
+    if (visiblePw) return visiblePw;
+
+    // 2. Görünür bölünmüş giriş (split login) kullanıcı adı alanını ara
+    const standalone = findStandaloneUsernameFields().find(isVisibleInput);
+    if (standalone) return standalone;
+
+    // 3. Herhangi bir görünür kullanıcı adı/e-posta alanını ara
+    const allInputs = Array.from(document.querySelectorAll('input[type="text"], input[type="email"], input:not([type])'));
+    const visibleUser = allInputs.find(isVisibleInput);
+    if (visibleUser) return visibleUser;
+
+    return allPws[0] || null;
+  }
+
+  function triggerFill() {
+    const pwField = findBestFillField();
     if (pwField) {
       let entry = FIELD_MAP.get(pwField);
       if (!entry) {
@@ -362,8 +399,7 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'fuin-trigger-fill') {
       if (msg.entryId) _pendingDirectFillEntryId = msg.entryId;
-      const activeEl = document.activeElement && document.activeElement.matches && document.activeElement.matches('input') ? document.activeElement : null;
-      const pwField = activeEl || document.querySelector('input[type="password"]') || findStandaloneUsernameFields()[0];
+      const pwField = findBestFillField();
       if (pwField) {
         let entry = FIELD_MAP.get(pwField);
         if (!entry) {

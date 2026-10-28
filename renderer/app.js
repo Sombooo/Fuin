@@ -802,7 +802,7 @@ async function renderList() {
         <div class="pw-meta">
           <span class="pw-user">${esc(e.username)||'—'}</span>
           <span class="pw-cat">${esc(catLabel(e.category||'Diğer'))}</span>
-          <span class="pw-dots" id="dot-${esc(e.id)}">••••••</span>
+          <span class="pw-dots" id="dot-${esc(e.id)}" title="Şifreyi görmek için tıklayın">••••••</span>
           <div class="str-dot ${dotClass(scores[i])}"></div>
         </div>
       </div>
@@ -1014,8 +1014,6 @@ async function revealPw(id) {
       el.textContent=await memDecrypt(e.password); el.classList.add('pw-reveal');
       clearTimeout(revealT[id]);
       revealT[id]=setTimeout(()=>{el.textContent='••••••';el.classList.remove('pw-reveal');},8000);
-      const hideOnBlur = () => { el.textContent='••••••'; el.classList.remove('pw-reveal'); clearTimeout(revealT[id]); window.removeEventListener('blur', hideOnBlur); };
-      window.addEventListener('blur', hideOnBlur);
     }
   };
   if (e.reprompt && !el.classList.contains('pw-reveal')) {
@@ -2281,6 +2279,14 @@ function initAppListeners() {
   document.getElementById('btnCloseAddModal')?.addEventListener('click', () => closeModal('addOverlay'));
   document.getElementById('f-pw')?.addEventListener('input', onPwInput);
   document.getElementById('btnEyePw')?.addEventListener('click', () => toggleEye('f-pw'));
+  document.getElementById('btnCopyModalPw')?.addEventListener('click', async () => {
+    const pw = document.getElementById('f-pw').value;
+    if (pw) {
+      await copySecure(pw, t('toastPwCopied'), 45000);
+    } else {
+      toast('Şifre alanı boş');
+    }
+  });
   document.getElementById('btnGenPw')?.addEventListener('click', genPw);
   document.getElementById('f-2fa-toggle')?.addEventListener('change', toggle2FA);
   document.getElementById('btnCancelAdd')?.addEventListener('click', () => closeModal('addOverlay'));

@@ -128,8 +128,46 @@ function renderPendingSaveBanner(item, container) {
   user.className = 'match-user';
   user.textContent = item.username || '— (İsimsiz)';
 
+  const pwRow = document.createElement('div');
+  pwRow.style.display = 'flex';
+  pwRow.style.alignItems = 'center';
+  pwRow.style.gap = '6px';
+  pwRow.style.marginTop = '2px';
+
+  const pwDots = document.createElement('span');
+  pwDots.textContent = '••••••••';
+  pwDots.style.fontFamily = 'monospace';
+  pwDots.style.fontSize = '11px';
+  pwDots.style.color = 'var(--mu)';
+  pwDots.style.letterSpacing = '1px';
+
+  const pwEye = document.createElement('button');
+  pwEye.type = 'button';
+  pwEye.textContent = '👁';
+  pwEye.title = 'Algılanan şifreyi gör / gizle';
+  pwEye.style.background = 'transparent';
+  pwEye.style.border = 'none';
+  pwEye.style.color = 'var(--mu)';
+  pwEye.style.fontSize = '11px';
+  pwEye.style.cursor = 'pointer';
+  pwEye.style.padding = '0';
+  pwEye.style.lineHeight = '1';
+
+  let bannerPwShown = false;
+  pwEye.addEventListener('click', (e) => {
+    e.stopPropagation();
+    bannerPwShown = !bannerPwShown;
+    pwDots.textContent = bannerPwShown ? (item.password || '—') : '••••••••';
+    pwDots.style.color = bannerPwShown ? 'var(--text)' : 'var(--mu)';
+    pwEye.textContent = bannerPwShown ? '👁‍🗨' : '👁';
+  });
+
+  pwRow.appendChild(pwDots);
+  pwRow.appendChild(pwEye);
+
   info.appendChild(title);
   info.appendChild(user);
+  info.appendChild(pwRow);
   banner.appendChild(info);
 
   const actions = document.createElement('div');
@@ -193,8 +231,77 @@ function renderMatches(matches, container, tab) {
     site.className = 'match-site';
     site.textContent = m.site || currentDomain;
 
+    const pwRow = document.createElement('div');
+    pwRow.className = 'match-pw-row';
+    pwRow.style.display = 'flex';
+    pwRow.style.alignItems = 'center';
+    pwRow.style.gap = '6px';
+    pwRow.style.marginTop = '4px';
+
+    const pwDots = document.createElement('span');
+    pwDots.className = 'match-pw-dots';
+    pwDots.textContent = '••••••••';
+    pwDots.style.fontFamily = 'monospace';
+    pwDots.style.fontSize = '11px';
+    pwDots.style.color = 'var(--mu)';
+    pwDots.style.letterSpacing = '1px';
+
+    const btnEye = document.createElement('button');
+    btnEye.type = 'button';
+    btnEye.className = 'action-btn-eye';
+    btnEye.textContent = '👁';
+    btnEye.title = 'Şifreyi göster / gizle';
+    btnEye.style.background = 'transparent';
+    btnEye.style.border = 'none';
+    btnEye.style.color = 'var(--mu)';
+    btnEye.style.fontSize = '11px';
+    btnEye.style.cursor = 'pointer';
+    btnEye.style.padding = '0';
+    btnEye.style.lineHeight = '1';
+
+    let isRevealed = false;
+    let revealTimer = null;
+    btnEye.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (isRevealed) {
+        isRevealed = false;
+        clearTimeout(revealTimer);
+        pwDots.textContent = '••••••••';
+        pwDots.style.color = 'var(--mu)';
+        btnEye.textContent = '👁';
+        return;
+      }
+      btnEye.textContent = '…';
+      try {
+        const rev = await chrome.runtime.sendMessage({ type: 'fuin-reveal', entryId: m.id, domain: currentDomain });
+        if (rev && rev.password) {
+          isRevealed = true;
+          pwDots.textContent = rev.password;
+          pwDots.style.color = 'var(--text)';
+          btnEye.textContent = '👁‍🗨';
+          clearTimeout(revealTimer);
+          revealTimer = setTimeout(() => {
+            isRevealed = false;
+            pwDots.textContent = '••••••••';
+            pwDots.style.color = 'var(--mu)';
+            btnEye.textContent = '👁';
+          }, 8000);
+        } else {
+          showToast('Şifre alınamadı');
+          btnEye.textContent = '👁';
+        }
+      } catch {
+        showToast('Bağlantı hatası');
+        btnEye.textContent = '👁';
+      }
+    });
+
+    pwRow.appendChild(pwDots);
+    pwRow.appendChild(btnEye);
+
     info.appendChild(user);
     info.appendChild(site);
+    info.appendChild(pwRow);
     card.appendChild(info);
 
     const actions = document.createElement('div');

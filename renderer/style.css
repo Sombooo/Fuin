@@ -379,8 +379,10 @@ body::before {
 .str-dot.medium { background: var(--amber); }
 .str-dot.weak   { background: var(--red); }
 
-.pw-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.pw-actions { display: flex; gap: 4px; opacity: 0.75; transition: opacity .12s; }
 .pw-card:hover .pw-actions { opacity: 1; }
+.pw-dots { cursor: pointer; transition: color 0.15s ease; }
+.pw-dots:hover { color: var(--ac); }
 .act-btn {
   width: 28px; height: 28px; background: var(--bg); border: 1px solid var(--b);
   border-radius: 1px; color: var(--mu); cursor: pointer;

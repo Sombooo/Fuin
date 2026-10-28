@@ -877,7 +877,9 @@ async function openAddModal(id=null, force=false) {
     document.getElementById('f-site').value=e.site;
     sel.value=e.category||'Diğer';
     document.getElementById('f-user').value=e.username;
-    document.getElementById('f-pw').value=await memDecrypt(e.password);
+    const pwEl = document.getElementById('f-pw');
+    pwEl.type = 'password';
+    pwEl.value=await memDecrypt(e.password);
     document.getElementById('f-note').value=e.note||'';
     document.getElementById('f-url').value=e.url||'';
     document.getElementById('f-2fa-toggle').checked=!!e.totp;
@@ -903,6 +905,11 @@ async function openAddModal(id=null, force=false) {
     if (histBtn) histBtn.style.display = 'none';
     document.getElementById('totp-section').style.display='none';
     document.getElementById('zxcvbnWrap').style.display='none';
+  }
+  const btnEye = document.getElementById('btnEyePw');
+  if (btnEye) {
+    btnEye.textContent = '👁';
+    btnEye.style.color = '';
   }
   document.getElementById('addOverlay').classList.add('open');
   setTimeout(()=>document.getElementById('f-site').focus(),80);
@@ -1006,7 +1013,7 @@ async function revealPw(id) {
     } else {
       el.textContent=await memDecrypt(e.password); el.classList.add('pw-reveal');
       clearTimeout(revealT[id]);
-      revealT[id]=setTimeout(()=>{el.textContent='••••••';el.classList.remove('pw-reveal');},3000);
+      revealT[id]=setTimeout(()=>{el.textContent='••••••';el.classList.remove('pw-reveal');},8000);
       const hideOnBlur = () => { el.textContent='••••••'; el.classList.remove('pw-reveal'); clearTimeout(revealT[id]); window.removeEventListener('blur', hideOnBlur); };
       window.addEventListener('blur', hideOnBlur);
     }
@@ -1967,7 +1974,17 @@ async function importCSV() {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────
-function toggleEye(id){const i=document.getElementById(id);i.type=i.type==='password'?'text':'password';}
+function toggleEye(id) {
+  const i = document.getElementById(id);
+  if (!i) return;
+  const isMasked = i.type === 'password';
+  i.type = isMasked ? 'text' : 'password';
+  const btn = document.getElementById('btnEyePw');
+  if (btn && id === 'f-pw') {
+    btn.textContent = isMasked ? '👁‍🗨' : '👁';
+    btn.style.color = isMasked ? 'var(--ac)' : '';
+  }
+}
 
 function genPw(){
   document.getElementById('genOverlay').classList.add('open');
@@ -2116,6 +2133,15 @@ async function checkForUpdates() {
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-action]');
   if (!btn) {
+    const dots = e.target.closest('.pw-dots');
+    if (dots) {
+      const card = dots.closest('.pw-card');
+      const val = card?.getAttribute('data-id');
+      if (val) {
+        revealPw(val);
+        return;
+      }
+    }
     const card = e.target.closest('.pw-card');
     if (card) {
       const val = card.getAttribute('data-id') || card.querySelector('button[data-action="edit-pw"]')?.getAttribute('data-val');

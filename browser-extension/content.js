@@ -676,7 +676,10 @@
     });
     eyeBtn.addEventListener('click', (e) => {
       if (!e.isTrusted) return;
-      pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+      const isMasked = pwInput.type === 'password';
+      pwInput.type = isMasked ? 'text' : 'password';
+      eyeBtn.textContent = isMasked ? '👁‍🗨' : '👁';
+      eyeBtn.style.color = isMasked ? '#6bb382' : '#a69d92';
     });
 
     pwRow.appendChild(pwInput);

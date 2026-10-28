@@ -334,11 +334,19 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
         });
         reply({ id: msg.id, ...result });
       } else if (msg.type === 'save-credential') {
+        if (!msg.domain || !msg.password || typeof msg.password !== 'string') {
+          return reply({ id: msg.id, error: 'invalid-credential' });
+        }
         const result = await relayToRenderer(getMainWindow, 'ext-save-credential-request', {
           domain: msg.domain,
-          username: msg.username,
+          username: msg.username || '',
           password: msg.password,
           updateEntryId: msg.updateEntryId
+        });
+        reply({ id: msg.id, ...result });
+      } else if (msg.type === 'exclude-domain') {
+        const result = await relayToRenderer(getMainWindow, 'ext-exclude-domain-request', {
+          domain: msg.domain || ''
         });
         reply({ id: msg.id, ...result });
       } else {

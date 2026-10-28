@@ -180,8 +180,13 @@ async function unlock() {
           entries = Array.isArray(parsed) ? parsed : (parsed.entries || []);
         }
 
+        let hadCorruptArtifact = false;
         const seenContent = new Set();
         entries = entries.filter(e => {
+           if ((e.site === 'Yeni Hesap' || e.site === 'Bilinmeyen Site') && !e.username && !e.password) {
+             hadCorruptArtifact = true;
+             return false;
+           }
            const key = `${e.site}||${e.username}||${e.password}`;
            if (seenContent.has(key)) return false;
            seenContent.add(key);
@@ -195,6 +200,9 @@ async function unlock() {
            seenIds.add(id);
            return { ...e, id, password: await memEncrypt(e.password), totp: await memEncrypt(e.totp) };
         }));
+        if (hadCorruptArtifact) {
+          setTimeout(() => { if (master) persist().catch(() => {}); }, 200);
+        }
       }
       catch (err) {
         btn.disabled = false; loading.classList.remove('show');
@@ -485,31 +493,92 @@ api.onExtRevealRequest(async (req) => {
   document.getElementById('extRevealOverlay').classList.add('open');
 });
 
+function getExtExcludedDomains() {
+  try {
+    const raw = localStorage.getItem('fuin-ext-excluded-domains');
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function isDomainExcludedFromSave(domain) {
+  const norm = normalizeDomain(domain || '');
+  if (!norm) return false;
+  const list = getExtExcludedDomains();
+  return list.some(ex => norm === ex || norm.endsWith('.' + ex));
+}
+
+api.onExtExcludeDomainRequest?.((req) => {
+  const norm = normalizeDomain(req.domain || '');
+  if (norm) {
+    const list = getExtExcludedDomains();
+    if (!list.includes(norm)) {
+      list.push(norm);
+      try { localStorage.setItem('fuin-ext-excluded-domains', JSON.stringify(list)); } catch {}
+    }
+  }
+  api.extRespond(req.requestId, { ok: true });
+});
+
 api.onExtCheckSaveCandidateRequest?.(async (req) => {
   if (!master) {
     api.extRespond(req.requestId, { error: 'locked' });
     return;
   }
+  if (!req.domain || !req.password || typeof req.password !== 'string') {
+    api.extRespond(req.requestId, { shouldPrompt: false });
+    return;
+  }
+  if (isDomainExcludedFromSave(req.domain)) {
+    api.extRespond(req.requestId, { shouldPrompt: false, excluded: true });
+    return;
+  }
+
   const matchingEntries = entries.filter(e => !e.isDeleted && domainMatches(e, req.domain));
   if (!matchingEntries.length) {
     api.extRespond(req.requestId, { shouldPrompt: true, action: 'save', username: req.username || '' });
     return;
   }
 
-  const userMatch = matchingEntries.find(e => (e.username || '').toLowerCase() === (req.username || '').toLowerCase());
-  if (userMatch) {
-    const existingPw = await memDecrypt(userMatch.password);
-    if (existingPw === req.password) {
-      api.extRespond(req.requestId, { shouldPrompt: false });
+  const reqUserNorm = (req.username || '').trim().toLowerCase();
+  if (reqUserNorm) {
+    const userMatch = matchingEntries.find(e => (e.username || '').trim().toLowerCase() === reqUserNorm);
+    if (userMatch) {
+      const existingPw = await memDecrypt(userMatch.password);
+      if (existingPw === req.password) {
+        api.extRespond(req.requestId, { shouldPrompt: false });
+        return;
+      }
+      api.extRespond(req.requestId, {
+        shouldPrompt: true,
+        action: 'update',
+        entryId: userMatch.id,
+        username: userMatch.username || req.username || ''
+      });
       return;
     }
-    api.extRespond(req.requestId, {
-      shouldPrompt: true,
-      action: 'update',
-      entryId: userMatch.id,
-      username: userMatch.username || req.username || ''
-    });
-    return;
+  } else {
+    // 2 adımlı (split-login) formlarda 2. adımda yalnızca şifre gelebilir:
+    // Bu domain için aynı şifre zaten kayıtlıysa tekrar sorma.
+    for (const m of matchingEntries) {
+      const existingPw = await memDecrypt(m.password);
+      if (existingPw === req.password) {
+        api.extRespond(req.requestId, { shouldPrompt: false });
+        return;
+      }
+    }
+    // Bu domain için tek bir kayıt varsa güncelleme olarak öner
+    if (matchingEntries.length === 1) {
+      api.extRespond(req.requestId, {
+        shouldPrompt: true,
+        action: 'update',
+        entryId: matchingEntries[0].id,
+        username: matchingEntries[0].username || ''
+      });
+      return;
+    }
   }
 
   api.extRespond(req.requestId, { shouldPrompt: true, action: 'save', username: req.username || '' });
@@ -539,31 +608,86 @@ function deduceCategory(domain) {
   return 'Diğer';
 }
 
+function highlightSavedCard(entryId) {
+  curView = 'all';
+  const searchInp = document.getElementById('searchInp');
+  if (searchInp) searchInp.value = '';
+  document.querySelectorAll('.cat-item').forEach(el => el.classList.remove('active'));
+  document.querySelector('.cat-item[data-view="all"]')?.classList.add('active');
+  const viewTitle = document.getElementById('viewTitle');
+  if (viewTitle) viewTitle.textContent = t('viewTitleAll') || 'Tüm Parolalar';
+
+  renderList().then(() => {
+    setTimeout(() => {
+      const cardEl = document.querySelector(`.pw-card[data-id="${entryId}"]`);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        cardEl.style.borderColor = 'var(--ac)';
+        cardEl.style.boxShadow = '0 0 12px rgba(90, 154, 110, 0.4)';
+        setTimeout(() => {
+          cardEl.style.borderColor = '';
+          cardEl.style.boxShadow = '';
+        }, 2500);
+      }
+    }, 80);
+  });
+}
+
 api.onExtSaveCredentialRequest?.(async (req) => {
   if (!master) {
     api.extRespond(req.requestId, { error: 'locked' });
     return;
   }
+  if (!req.domain || !req.password || typeof req.password !== 'string') {
+    api.extRespond(req.requestId, { error: 'invalid-credential' });
+    return;
+  }
+
+  // Eski hatalı boş kayıtları temizle
+  entries = entries.filter(x => !((x.site === 'Yeni Hesap' || x.site === 'Bilinmeyen Site') && !x.username && !x.password));
+
   const now = Date.now();
-  if (req.updateEntryId) {
-    const existing = entries.find(x => x.id === req.updateEntryId && !x.isDeleted);
-    if (existing) {
-      const oldPw = await memDecrypt(existing.password);
-      if (oldPw !== req.password) {
-        let history = Array.isArray(existing.history) ? [...existing.history] : [];
+  const cleanUser = (req.username || '').trim();
+  const reqUserNorm = cleanUser.toLowerCase();
+
+  let existing = req.updateEntryId
+    ? entries.find(x => x.id === req.updateEntryId && !x.isDeleted)
+    : null;
+
+  if (!existing) {
+    existing = entries.find(x =>
+      !x.isDeleted &&
+      domainMatches(x, req.domain) &&
+      (x.username || '').trim().toLowerCase() === reqUserNorm
+    );
+  }
+
+  if (existing) {
+    const oldPw = await memDecrypt(existing.password);
+    if (cleanUser && !existing.username) existing.username = cleanUser;
+    if (!existing.url && req.domain) {
+      existing.url = req.domain.startsWith('http') ? req.domain : 'https://' + req.domain;
+    }
+    if (oldPw !== req.password) {
+      let history = Array.isArray(existing.history) ? [...existing.history] : [];
+      if (existing.password) {
         history.unshift({ password: existing.password, date: now });
         if (history.length > 5) history = history.slice(0, 5);
-        existing.history = history;
-        existing.password = await memEncrypt(req.password);
-        existing.updated = now;
-        existing.updatedAt = now;
-        await persist();
-        renderList();
-        toast(t('toastUpdated') || 'Şifre güncellendi');
-        api.extRespond(req.requestId, { ok: true, action: 'updated', id: existing.id });
-        return;
       }
+      existing.history = history;
+      existing.password = await memEncrypt(req.password);
+      existing.updated = now;
+      existing.updatedAt = now;
+      await persist();
+      highlightSavedCard(existing.id);
+      toast(`${t('toastUpdated') || 'Şifre güncellendi'}: ${existing.site}`);
+      api.extRespond(req.requestId, { ok: true, action: 'updated', id: existing.id });
+      return;
     }
+    await persist();
+    highlightSavedCard(existing.id);
+    api.extRespond(req.requestId, { ok: true, action: 'unchanged', id: existing.id });
+    return;
   }
 
   const site = formatCleanSiteName(req.domain);
@@ -572,7 +696,7 @@ api.onExtSaveCredentialRequest?.(async (req) => {
     id: crypto.randomUUID(),
     site,
     category,
-    username: req.username || '',
+    username: cleanUser,
     password: await memEncrypt(req.password),
     note: '',
     url: req.domain ? (req.domain.startsWith('http') ? req.domain : 'https://' + req.domain) : '',
@@ -589,30 +713,8 @@ api.onExtSaveCredentialRequest?.(async (req) => {
   };
   entries.unshift(newEntry);
   await persist();
-
-  curView = 'all';
-  const searchInp = document.getElementById('searchInp');
-  if (searchInp) searchInp.value = '';
-  document.querySelectorAll('.cat-item').forEach(el => el.classList.remove('active'));
-  document.querySelector('.cat-item[data-view="all"]')?.classList.add('active');
-  const viewTitle = document.getElementById('viewTitle');
-  if (viewTitle) viewTitle.textContent = t('viewTitleAll') || 'Tüm Parolalar';
-
-  await renderList();
+  highlightSavedCard(newEntry.id);
   toast(`${t('toastSaved') || 'Yeni hesap kaydedildi'}: ${site}${newEntry.username ? ' (' + newEntry.username + ')' : ''}`);
-
-  setTimeout(() => {
-    const cardEl = document.querySelector(`.pw-card[data-id="${newEntry.id}"]`);
-    if (cardEl) {
-      cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      cardEl.style.borderColor = 'var(--ac)';
-      cardEl.style.boxShadow = '0 0 12px rgba(90, 154, 110, 0.4)';
-      setTimeout(() => {
-        cardEl.style.borderColor = '';
-        cardEl.style.boxShadow = '';
-      }, 2500);
-    }
-  }, 80);
 
   api.extRespond(req.requestId, { ok: true, action: 'created', id: newEntry.id });
 });

@@ -202,7 +202,13 @@ function renderPendingSaveBanner(item, container) {
   dismissBtn.title = 'Yoksay';
   dismissBtn.addEventListener('click', async (e) => {
     if (!e.isTrusted) return;
-    await chrome.runtime.sendMessage({ type: 'fuin-dismiss-save', tabId: item.tabId });
+    await chrome.runtime.sendMessage({
+      type: 'fuin-dismiss-save',
+      tabId: item.tabId,
+      domain: item.domain,
+      username: item.username,
+      password: item.password
+    });
     banner.remove();
   });
 

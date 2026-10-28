@@ -105,8 +105,23 @@ readMessages((msg) => {
   if (!msg || !msg.type) return writeMessage({ error: 'bad-request' });
   // Güvenlik: İletilen mesajlarda yalnızca bilinen alanları geçir (field whitelist)
   const sanitized = { type: String(msg.type) };
-  if (msg.type === 'lookup') sanitized.domain = String(msg.domain || '');
-  if (msg.type === 'reveal') { sanitized.entryId = String(msg.entryId || ''); sanitized.domain = String(msg.domain || ''); }
+  if (msg.type === 'lookup') {
+    sanitized.domain = String(msg.domain || '');
+  } else if (msg.type === 'reveal') {
+    sanitized.entryId = String(msg.entryId || '');
+    sanitized.domain = String(msg.domain || '');
+  } else if (msg.type === 'check-save-candidate') {
+    sanitized.domain = String(msg.domain || '');
+    sanitized.username = String(msg.username || '');
+    sanitized.password = String(msg.password || '');
+  } else if (msg.type === 'save-credential') {
+    sanitized.domain = String(msg.domain || '');
+    sanitized.username = String(msg.username || '');
+    sanitized.password = String(msg.password || '');
+    if (msg.updateEntryId) sanitized.updateEntryId = String(msg.updateEntryId);
+  } else if (msg.type === 'exclude-domain') {
+    sanitized.domain = String(msg.domain || '');
+  }
   forwardToFuin(sanitized, (result) => writeMessage(result));
 });
 

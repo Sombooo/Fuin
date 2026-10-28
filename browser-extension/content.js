@@ -427,7 +427,10 @@
     }
   }, true);
 
+  const _knownPasswordInputs = new WeakSet();
+
   function scan() {
+    document.querySelectorAll('input[type="password"]').forEach(el => _knownPasswordInputs.add(el));
     findLoginForms().forEach(injectIcon);
   }
 
@@ -439,12 +442,40 @@
   let lastProcessedSubmitTime = 0;
   let _lastTypedUsername = '';
   let _lastTypedPassword = '';
+  let _passwordDirty = false;
+  let _domainExcluded = false;
+  const _dismissedKeys = new Set();
+
+  function makeCredKey(username, password) {
+    return `${String(username || '').trim().toLowerCase()}|${String(password || '')}`;
+  }
+
+  function markLocalDismissed(username, password) {
+    if (password) {
+      _dismissedKeys.add(makeCredKey(username, password));
+      _dismissedKeys.add(makeCredKey('', password));
+    }
+    _passwordDirty = false;
+    _lastTypedPassword = '';
+  }
+
+  function isLocallyDismissed(username, password) {
+    if (_domainExcluded) return true;
+    if (!password) return false;
+    return _dismissedKeys.has(makeCredKey(username, password)) || _dismissedKeys.has(makeCredKey('', password));
+  }
 
   document.addEventListener('input', (e) => {
     const el = e.target;
     if (!el || el.tagName !== 'INPUT') return;
-    if (el.type === 'password') {
-      if (el.value) _lastTypedPassword = el.value;
+    if (el.type === 'password' || _knownPasswordInputs.has(el)) {
+      if (el.type === 'password') _knownPasswordInputs.add(el);
+      if (el.value) {
+        _lastTypedPassword = el.value;
+        _passwordDirty = true;
+      } else {
+        _passwordDirty = false;
+      }
       const uField = findUsernameField(el);
       if (uField && uField.value && uField.value.trim()) {
         _lastTypedUsername = uField.value.trim();
@@ -461,18 +492,34 @@
   document.addEventListener('change', (e) => {
     const el = e.target;
     if (!el || el.tagName !== 'INPUT') return;
-    if (el.type === 'password' && el.value) {
-      _lastTypedPassword = el.value;
+    if (el.type === 'password' || _knownPasswordInputs.has(el)) {
+      if (el.type === 'password') _knownPasswordInputs.add(el);
+      if (el.value) {
+        _lastTypedPassword = el.value;
+        _passwordDirty = true;
+      }
     } else if (el.value && (el.type === 'email' || el.value.includes('@') || /user|login|email/i.test(el.name || ''))) {
       _lastTypedUsername = el.value.trim();
     }
   }, true);
 
   function captureFormCredentials(contextEl) {
-    const allPws = Array.from(document.querySelectorAll('input[type="password"]'));
-    const filledPw = allPws.find(f => f.value && f.value.length > 0) || allPws.find(isVisibleInput) || allPws[0];
-    
-    let password = (filledPw && filledPw.value) ? filledPw.value : _lastTypedPassword;
+    const pwCandidates = Array.from(document.querySelectorAll('input')).filter(
+      el => el.type === 'password' || _knownPasswordInputs.has(el)
+    );
+    const scopeForm = contextEl && contextEl.closest ? contextEl.closest('form') : null;
+    const scopedPws = scopeForm ? pwCandidates.filter(f => scopeForm.contains(f)) : [];
+    const pool = scopedPws.length > 0 ? scopedPws : pwCandidates;
+
+    const filledPw =
+      pool.find(f => isVisibleInput(f) && f.value && f.value.length > 0) ||
+      pool.find(f => f.value && f.value.length > 0) ||
+      pool.find(isVisibleInput) ||
+      pool[0];
+
+    const password = (filledPw && filledPw.value)
+      ? filledPw.value
+      : (_passwordDirty ? _lastTypedPassword : '');
     if (!password || password.length < 2) return null;
 
     let username = '';
@@ -484,7 +531,9 @@
       username = _lastTypedUsername;
     }
     if (!username) {
-      const anyEmailInput = Array.from(document.querySelectorAll('input')).find(i => i.value && (i.value.includes('@') || i.type === 'email'));
+      const anyEmailInput = Array.from(document.querySelectorAll('input')).find(
+        i => isVisibleInput(i) && i.value && (i.value.includes('@') || i.type === 'email')
+      );
       if (anyEmailInput) username = anyEmailInput.value.trim();
     }
     if (!username) {
@@ -497,14 +546,62 @@
     return { username, password };
   }
 
+  function isFuinInternalNode(node) {
+    if (!node || typeof node !== 'object') return false;
+    const tag = (node.tagName || '').toLowerCase();
+    if (tag === 'fuin-save-prompt' || tag === 'fuin-ext-host') return true;
+    if (typeof node.closest === 'function' && node.closest('fuin-save-prompt, fuin-ext-host')) return true;
+    return false;
+  }
+
+  function isLikelySubmitControl(btn) {
+    if (!btn || isFuinInternalNode(btn)) return false;
+    const tag = (btn.tagName || '').toUpperCase();
+    const typeAttr = (btn.getAttribute('type') || '').toLowerCase();
+    if (typeAttr === 'reset' || typeAttr === 'checkbox' || typeAttr === 'radio') return false;
+
+    const labelText = (
+      (btn.textContent || '') + ' ' +
+      (btn.value || '') + ' ' +
+      (btn.getAttribute('aria-label') || '') + ' ' +
+      (btn.getAttribute('title') || '') + ' ' +
+      (btn.id || '') + ' ' +
+      (btn.getAttribute('name') || '') + ' ' +
+      (btn.getAttribute('data-cy') || '') + ' ' +
+      (btn.getAttribute('data-testid') || '')
+    ).replace(/\s+/g, ' ').trim();
+
+    // Göz ikonu / şifre göster-gizle, kapatma, çerez, OAuth veya "şifremi unuttum" butonlarını her zaman hariç tut
+    const nonSubmitRegex = /\b(show|hide|toggle|visibility|reveal|eye|göster|gizle|close|dismiss|kapat|cancel|iptal|vazgeç|cookie|çerez|forgot|unuttum|google|apple|facebook|github|discord|passkey)\b/i;
+    if (nonSubmitRegex.test(labelText)) return false;
+
+    // Açıkça submit tipindeki input veya button (ör. <button type="submit">, <input type="submit">)
+    if (tag === 'INPUT' && typeAttr === 'submit') return true;
+    if (tag === 'BUTTON' && typeAttr === 'submit') return true;
+
+    // Form içindeki varsayılan <button> (type belirtilmemişse HTML standardı submit'tir, ancak boş ikon butonlarını ele)
+    if (tag === 'BUTTON' && !typeAttr && btn.closest('form')) {
+      const visibleLabel = ((btn.textContent || '') + (btn.getAttribute('aria-label') || '')).trim();
+      if (visibleLabel.length > 0) return true;
+    }
+
+    // SPA formlarında (<form> olmadan kullanılan) açık giriş/kayıt/onay semantiği taşıyan butonlar
+    const positiveSubmitRegex = /(log\s*in|sign\s*in|sign\s*up|register|create\s*account|continue|submit|next|confirm|save\s*password|change\s*password|update\s*password|reset\s*password|giriş|oturum\s*aç|kaydol|kayıt\s*ol|hesap\s*oluştur|devam|gönder|onayla|şifreyi\s*güncelle|şifreyi\s*değiştir)/i;
+    return positiveSubmitRegex.test(labelText);
+  }
+
   async function handleCandidateSubmission(target) {
-    if (location.protocol !== 'https:') return;
+    if (location.protocol !== 'https:' || _domainExcluded) return;
+    if (isFuinInternalNode(target)) return;
+
     const creds = captureFormCredentials(target);
     if (!creds || !creds.password || creds.password.length < 2) return;
+    if (isLocallyDismissed(creds.username, creds.password)) return;
 
     const now = Date.now();
     if (now - lastProcessedSubmitTime < 1000) return;
     lastProcessedSubmitTime = now;
+    _passwordDirty = false;
 
     try {
       await chrome.runtime.sendMessage({
@@ -516,6 +613,9 @@
   }
 
   function showSavePrompt(candidate, result) {
+    if (!candidate || !candidate.password) return;
+    if (isLocallyDismissed(candidate.username, candidate.password)) return;
+
     if (activeSaveHost) {
       try { activeSaveHost.remove(); } catch {}
       activeSaveHost = null;
@@ -533,7 +633,7 @@
 
     const card = document.createElement('div');
     Object.assign(card.style, {
-      width: '320px',
+      width: '332px',
       background: '#222019',
       border: '1px solid #3d3830',
       borderRadius: '10px',
@@ -565,6 +665,7 @@
     logoRow.textContent = '⬡ FUIN';
 
     const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
     closeBtn.textContent = '✕';
     Object.assign(closeBtn.style, {
       background: 'transparent',
@@ -575,18 +676,12 @@
       padding: '2px 4px',
       lineHeight: '1'
     });
-    closeBtn.addEventListener('click', (e) => {
-      if (!e.isTrusted) return;
-      host.remove();
-      activeSaveHost = null;
-      try { chrome.runtime.sendMessage({ type: 'fuin-dismiss-save' }); } catch {}
-    });
 
     header.appendChild(logoRow);
     header.appendChild(closeBtn);
     card.appendChild(header);
 
-    const isUpdate = result.action === 'update';
+    const isUpdate = result && result.action === 'update';
     const titleText = document.createElement('div');
     titleText.textContent = isUpdate ? 'Şifre Güncellensin mi?' : 'Hesap Kaydedilsin mi?';
     Object.assign(titleText.style, {
@@ -597,7 +692,7 @@
     });
     card.appendChild(titleText);
 
-    const rawHost = location.hostname.replace(/^www\./i, '');
+    const rawHost = (candidate.domain || location.hostname || '').replace(/^www\./i, '');
     const cleanSite = rawHost ? (rawHost.charAt(0).toUpperCase() + rawHost.slice(1)) : 'Bu Site';
 
     const siteBadge = document.createElement('div');
@@ -726,15 +821,67 @@
 
     card.appendChild(fieldsBox);
 
+    function dismissCurrentPrompt() {
+      const curUser = userInput.value.trim();
+      const curPw = pwInput.value || candidate.password;
+      markLocalDismissed(curUser, curPw);
+      if (host.parentNode) host.remove();
+      activeSaveHost = null;
+      try {
+        chrome.runtime.sendMessage({
+          type: 'fuin-dismiss-save',
+          username: curUser,
+          password: curPw
+        });
+      } catch {}
+    }
+
+    closeBtn.addEventListener('click', (e) => {
+      if (!e.isTrusted) return;
+      dismissCurrentPrompt();
+    });
+
     const btnRow = document.createElement('div');
     Object.assign(btnRow.style, {
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'flex-end',
+      justifyContent: 'space-between',
+      gap: '6px'
+    });
+
+    const neverBtn = document.createElement('button');
+    neverBtn.type = 'button';
+    neverBtn.textContent = 'Bu Sitede Asla';
+    neverBtn.title = 'Bu alan adı için bir daha şifre kaydetme önerisi gösterme';
+    Object.assign(neverBtn.style, {
+      background: 'transparent',
+      border: 'none',
+      color: '#a69d92',
+      fontSize: '11px',
+      fontWeight: '500',
+      padding: '6px 4px',
+      cursor: 'pointer',
+      textDecoration: 'underline',
+      textUnderlineOffset: '2px'
+    });
+    neverBtn.addEventListener('click', (e) => {
+      if (!e.isTrusted) return;
+      _domainExcluded = true;
+      markLocalDismissed(userInput.value.trim(), pwInput.value || candidate.password);
+      if (host.parentNode) host.remove();
+      activeSaveHost = null;
+      try { chrome.runtime.sendMessage({ type: 'fuin-exclude-domain' }); } catch {}
+    });
+
+    const rightBtns = document.createElement('div');
+    Object.assign(rightBtns.style, {
+      display: 'flex',
+      alignItems: 'center',
       gap: '8px'
     });
 
     const notNowBtn = document.createElement('button');
+    notNowBtn.type = 'button';
     notNowBtn.textContent = 'Şimdi Değil';
     Object.assign(notNowBtn.style, {
       background: '#2a2720',
@@ -742,18 +889,17 @@
       color: '#a69d92',
       fontSize: '12px',
       fontWeight: '500',
-      padding: '7px 12px',
+      padding: '7px 11px',
       borderRadius: '5px',
       cursor: 'pointer'
     });
     notNowBtn.addEventListener('click', (e) => {
       if (!e.isTrusted) return;
-      host.remove();
-      activeSaveHost = null;
-      try { chrome.runtime.sendMessage({ type: 'fuin-dismiss-save' }); } catch {}
+      dismissCurrentPrompt();
     });
 
     const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
     saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet';
     Object.assign(saveBtn.style, {
       background: '#5a9a6e',
@@ -761,7 +907,7 @@
       color: '#1a1816',
       fontSize: '12px',
       fontWeight: '600',
-      padding: '7px 16px',
+      padding: '7px 15px',
       borderRadius: '5px',
       cursor: 'pointer'
     });
@@ -780,26 +926,30 @@
           domain: candidate.domain || location.hostname,
           username: finalUsername,
           password: finalPassword,
-          updateEntryId: result.entryId
+          updateEntryId: result ? result.entryId : null
         });
         if (resp && resp.ok) {
+          markLocalDismissed(finalUsername, finalPassword);
           saveBtn.textContent = 'Kaydedildi! ✓';
           saveBtn.style.background = '#6bb382';
           setTimeout(() => {
             if (host.parentNode) host.remove();
             activeSaveHost = null;
-          }, 1200);
+          }, 900);
         } else {
-          saveBtn.textContent = 'Hata';
+          saveBtn.textContent = (resp && resp.error === 'locked') ? 'Kasa kilitli' : 'Hata';
           setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet'; }, 2000);
         }
       } catch {
         saveBtn.textContent = 'Bağlantı hatası';
+        setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet'; }, 2000);
       }
     });
 
-    btnRow.appendChild(notNowBtn);
-    btnRow.appendChild(saveBtn);
+    rightBtns.appendChild(notNowBtn);
+    rightBtns.appendChild(saveBtn);
+    btnRow.appendChild(neverBtn);
+    btnRow.appendChild(rightBtns);
     card.appendChild(btnRow);
 
     shadow.appendChild(card);
@@ -811,22 +961,29 @@
         host.remove();
         activeSaveHost = null;
       }
-    }, 25000);
+    }, 60000);
   }
 
   window.addEventListener('submit', (e) => {
+    if (!e.isTrusted) return;
     handleCandidateSubmission(e.target);
   }, true);
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    if (!e.isTrusted || e.key !== 'Enter') return;
+    if (isFuinInternalNode(e.target)) return;
+    if (e.target && e.target.tagName === 'INPUT') {
       handleCandidateSubmission(e.target);
     }
   }, true);
 
   window.addEventListener('click', (e) => {
-    const btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], [role="button"], a[role="button"], [class*="login"], [class*="submit"], [id*="login"], [id*="submit"]') : null;
-    if (btn) {
+    if (!e.isTrusted) return;
+    if (isFuinInternalNode(e.target)) return;
+    const btn = e.target && e.target.closest
+      ? e.target.closest('button, input[type="submit"], input[type="button"], [role="button"]')
+      : null;
+    if (btn && isLikelySubmitControl(btn)) {
       handleCandidateSubmission(btn);
     }
   }, true);
@@ -841,10 +998,18 @@
     });
   } catch {}
 
-  // ── Background'dan gelen anlık kaydetme bildirimi tetikleyicisi (SPA veya anlık) ──
+  // ── Background'dan gelen anlık kaydetme / kapatma bildirimi tetikleyicisi ──
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'fuin-trigger-save-prompt' && msg.candidate) {
       showSavePrompt(msg.candidate, msg.result);
+      sendResponse?.({ ok: true });
+      return;
+    }
+    if (msg.type === 'fuin-close-save-prompt') {
+      if (activeSaveHost) {
+        try { activeSaveHost.remove(); } catch {}
+        activeSaveHost = null;
+      }
       sendResponse?.({ ok: true });
     }
   });

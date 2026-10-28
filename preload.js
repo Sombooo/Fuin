@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('kekkai', {
   onExtRevealRequest:  (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('ext-reveal-request', h); return () => ipcRenderer.removeListener('ext-reveal-request', h); },
   onExtCheckSaveCandidateRequest: (cb) => { const h = (_, d) => cb(d); ipcRenderer.on('ext-check-save-candidate-request', h); return () => ipcRenderer.removeListener('ext-check-save-candidate-request', h); },
   onExtSaveCredentialRequest: (cb)      => { const h = (_, d) => cb(d); ipcRenderer.on('ext-save-credential-request', h); return () => ipcRenderer.removeListener('ext-save-credential-request', h); },
+  onExtExcludeDomainRequest: (cb)       => { const h = (_, d) => cb(d); ipcRenderer.on('ext-exclude-domain-request', h); return () => ipcRenderer.removeListener('ext-exclude-domain-request', h); },
   extRespond:          (requestId, payload) => ipcRenderer.invoke('ext-response', { requestId, payload }),
 
   exportFile:          (opts)           => ipcRenderer.invoke('export-file', opts),

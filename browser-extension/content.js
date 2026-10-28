@@ -382,25 +382,24 @@
   let lastProcessedSubmitTime = 0;
 
   function captureFormCredentials(contextEl) {
-    const root = (contextEl && contextEl.closest && contextEl.closest('form')) || document;
-    const pwField = root.querySelector('input[type="password"]');
-    if (!pwField || !pwField.value) return null;
+    const allPws = Array.from(document.querySelectorAll('input[type="password"]'));
+    const filledPw = allPws.find(f => f.value && f.value.length > 0) || allPws.find(isVisibleInput) || allPws[0];
+    if (!filledPw || !filledPw.value) return null;
 
-    const userField = findUsernameField(pwField) || findStandaloneUsernameFields()[0];
+    const userField = findUsernameField(filledPw) || findStandaloneUsernameFields()[0];
     const username = userField && userField.value ? userField.value.trim() : '';
-    const password = pwField.value;
+    const password = filledPw.value;
 
     return { username, password };
   }
 
   async function handleCandidateSubmission(target) {
     if (location.protocol !== 'https:') return;
-    const now = Date.now();
-    if (now - lastProcessedSubmitTime < 1500) return; // 1.5s debounce
-
     const creds = captureFormCredentials(target);
     if (!creds || !creds.password || creds.password.length < 2) return;
 
+    const now = Date.now();
+    if (now - lastProcessedSubmitTime < 1000) return;
     lastProcessedSubmitTime = now;
 
     let res;
@@ -410,7 +409,7 @@
         username: creds.username,
         password: creds.password
       });
-    } catch {
+    } catch (err) {
       return;
     }
 
@@ -599,14 +598,15 @@
   }, true);
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') {
-      setTimeout(() => handleCandidateSubmission(e.target), 100);
+    if (e.key === 'Enter') {
+      setTimeout(() => handleCandidateSubmission(e.target), 60);
     }
   }, true);
 
   window.addEventListener('click', (e) => {
-    if (e.target && (e.target.type === 'submit' || (e.target.matches && e.target.matches('button, input[type="submit"], [role="button"]')))) {
-      setTimeout(() => handleCandidateSubmission(e.target), 100);
+    const btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], [role="button"], a[role="button"]') : null;
+    if (btn) {
+      setTimeout(() => handleCandidateSubmission(btn), 60);
     }
   }, true);
 })();

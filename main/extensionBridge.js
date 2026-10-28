@@ -213,6 +213,19 @@ function safeCompare(a, b) {
 let extServer = null;
 const pendingExtRequests = new Map(); // requestId -> { resolve, reject, timer }
 let extRequestCounter = 0;
+let lastBridgeOptions = null;
+let socketWatchdog = null;
+
+function ensureSocketAlive() {
+  if (process.platform === 'win32' || !extServer || !lastBridgeOptions) return;
+  const socketPath = getExtSocketPath(lastBridgeOptions.app);
+  if (!fs.existsSync(socketPath)) {
+    console.warn('[fuin-ext-bridge] Socket file missing while server is active. Recreating listener at:', socketPath);
+    try { extServer.close(); } catch {}
+    extServer = null;
+    startExtensionBridge(lastBridgeOptions);
+  }
+}
 
 function relayToRenderer(getMainWindow, channel, payload, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
@@ -238,6 +251,7 @@ function handleExtResponse(requestId, payload) {
 }
 
 function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity }) {
+  lastBridgeOptions = { app, getMainWindow, getIsUnlocked, onActivity };
   if (extServer) return;
   const token = getOrCreateExtToken(app);
   const socketPath = getExtSocketPath(app);
@@ -272,6 +286,13 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
     }
     console.log('[fuin-ext-bridge] dinliyor:', socketPath);
   });
+
+  if (!socketWatchdog && process.platform !== 'win32') {
+    socketWatchdog = setInterval(ensureSocketAlive, 3000);
+    if (typeof socketWatchdog.unref === 'function') {
+      socketWatchdog.unref();
+    }
+  }
 
   async function handleExtMessage(socket, line) {
     let msg;
@@ -330,6 +351,10 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
 }
 
 function stopExtensionBridge() {
+  if (socketWatchdog) {
+    clearInterval(socketWatchdog);
+    socketWatchdog = null;
+  }
   if (extServer) {
     try { extServer.close(); } catch {}
     extServer = null;

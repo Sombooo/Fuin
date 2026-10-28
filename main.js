@@ -1391,11 +1391,12 @@ function autoInstallNativeMessagingHosts() {
   return extensionBridge.autoInstallNativeMessagingHosts(app, ids);
 }
 
-function startExtensionBridge() {
+function startExtensionBridge(options = {}) {
   return extensionBridge.startExtensionBridge({
     app,
     getMainWindow: () => mainWindow,
     getIsUnlocked: () => isUnlocked,
+    ...options,
   });
 }
 

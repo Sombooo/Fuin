@@ -470,20 +470,13 @@
     if (now - lastProcessedSubmitTime < 1000) return;
     lastProcessedSubmitTime = now;
 
-    let res;
     try {
-      res = await chrome.runtime.sendMessage({
-        type: 'fuin-check-save-candidate',
+      await chrome.runtime.sendMessage({
+        type: 'fuin-form-submitted',
         username: creds.username,
         password: creds.password
       });
-    } catch (err) {
-      return;
-    }
-
-    if (res && res.shouldPrompt) {
-      showSavePrompt(creds, res);
-    }
+    } catch (err) {}
   }
 
   function showSavePrompt(candidate, result) {
@@ -550,6 +543,7 @@
       if (!e.isTrusted) return;
       host.remove();
       activeSaveHost = null;
+      try { chrome.runtime.sendMessage({ type: 'fuin-dismiss-save' }); } catch {}
     });
 
     header.appendChild(logoRow);
@@ -717,6 +711,7 @@
       if (!e.isTrusted) return;
       host.remove();
       activeSaveHost = null;
+      try { chrome.runtime.sendMessage({ type: 'fuin-dismiss-save' }); } catch {}
     });
 
     const saveBtn = document.createElement('button');
@@ -790,9 +785,27 @@
   }, true);
 
   window.addEventListener('click', (e) => {
-    const btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], [role="button"], a[role="button"]') : null;
+    const btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], [role="button"], a[role="button"], [class*="login"], [class*="submit"], [id*="login"], [id*="submit"]') : null;
     if (btn) {
       handleCandidateSubmission(btn);
     }
   }, true);
+
+  // ── Sayfa açılışında bekleyen kaydetme bildirimi kontrolü (Redirect Sonrası) ──
+  try {
+    chrome.runtime.sendMessage({ type: 'fuin-get-pending-save' }, (resp) => {
+      if (chrome.runtime?.lastError) return;
+      if (resp && resp.hasPending && resp.candidate) {
+        showSavePrompt(resp.candidate, resp.result);
+      }
+    });
+  } catch {}
+
+  // ── Background'dan gelen anlık kaydetme bildirimi tetikleyicisi (SPA veya anlık) ──
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'fuin-trigger-save-prompt' && msg.candidate) {
+      showSavePrompt(msg.candidate, msg.result);
+      sendResponse?.({ ok: true });
+    }
+  });
 })();

@@ -40,6 +40,7 @@ function askFuin(payload) {
 }
 
 let pendingReveal = null;
+const pendingSaveByTab = new Map(); // tabId -> { domain, username, password, action, entryId, timestamp }
 
 if (typeof chrome !== 'undefined' && chrome.tabs) {
   if (chrome.tabs.onUpdated) {
@@ -53,11 +54,26 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
           pendingReveal = null;
         }
       }
+
+      // Sayfa yönlendikten / yüklendikten sonra bekleyen kaydetme bildirimi varsa sekmede tetikle
+      if (changeInfo.status === 'complete') {
+        const pending = pendingSaveByTab.get(tabId);
+        if (pending && (Date.now() - pending.timestamp < 120000)) {
+          chrome.tabs.sendMessage(tabId, {
+            type: 'fuin-trigger-save-prompt',
+            candidate: pending,
+            result: { action: pending.action, entryId: pending.entryId, shouldPrompt: true }
+          }, () => {
+            if (chrome.runtime?.lastError) {}
+          });
+        }
+      }
     });
   }
 
   if (chrome.tabs.onRemoved) {
     chrome.tabs.onRemoved.addListener((tabId) => {
+      pendingSaveByTab.delete(tabId);
       if (pendingReveal && pendingReveal.tabId === tabId) {
         pendingReveal.cancelled = true;
         try { pendingReveal.sendResponse({ error: 'navigation-cancelled' }); } catch {}
@@ -107,6 +123,49 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       askFuin({ type: 'open-app' }).then(sendResponse);
       return true;
     }
+    if (msg.type === 'fuin-get-pending-save-popup') {
+      let found = null;
+      for (const [tId, p] of pendingSaveByTab.entries()) {
+        if (msg.domain && (p.domain === msg.domain || p.domain.endsWith('.' + msg.domain) || msg.domain.endsWith('.' + p.domain))) {
+          if (Date.now() - p.timestamp < 120000) {
+            found = { ...p, tabId: tId };
+            break;
+          }
+        }
+      }
+      sendResponse(found ? { hasPending: true, item: found } : { hasPending: false });
+      return true;
+    }
+    if (msg.type === 'fuin-save-credential' && msg.password) {
+      const tabId = msg.tabId;
+      askFuin({
+        type: 'save-credential',
+        domain: msg.domain,
+        username: msg.username || '',
+        password: msg.password,
+        updateEntryId: msg.updateEntryId
+      }).then((res) => {
+        if (res && res.ok && tabId) {
+          pendingSaveByTab.delete(tabId);
+          if (chrome.action?.setBadgeText) {
+            try { chrome.action.setBadgeText({ text: '', tabId }); } catch {}
+          }
+        }
+        sendResponse(res);
+      });
+      return true;
+    }
+    if (msg.type === 'fuin-dismiss-save') {
+      const tabId = msg.tabId;
+      if (tabId) {
+        pendingSaveByTab.delete(tabId);
+        if (chrome.action?.setBadgeText) {
+          try { chrome.action.setBadgeText({ text: '', tabId }); } catch {}
+        }
+      }
+      sendResponse({ ok: true });
+      return true;
+    }
     return;
   }
 
@@ -131,6 +190,67 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     askFuin({ type: 'lookup', domain: actualDomain }).then(sendResponse);
     return true;
   }
+  if (msg.type === 'fuin-get-pending-save') {
+    const tabId = sender.tab?.id;
+    if (tabId && pendingSaveByTab.has(tabId)) {
+      const p = pendingSaveByTab.get(tabId);
+      if (Date.now() - p.timestamp < 120000) {
+        sendResponse({ hasPending: true, candidate: p, result: { action: p.action, entryId: p.entryId, shouldPrompt: true } });
+        return true;
+      } else {
+        pendingSaveByTab.delete(tabId);
+      }
+    }
+    sendResponse({ hasPending: false });
+    return true;
+  }
+  if (msg.type === 'fuin-dismiss-save') {
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      pendingSaveByTab.delete(tabId);
+      if (chrome.action?.setBadgeText) {
+        try { chrome.action.setBadgeText({ text: '', tabId }); } catch {}
+      }
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (msg.type === 'fuin-form-submitted' && msg.password) {
+    const tabId = sender.tab?.id;
+    askFuin({
+      type: 'check-save-candidate',
+      domain: actualDomain,
+      username: msg.username || '',
+      password: msg.password
+    }).then((res) => {
+      if (res && res.shouldPrompt) {
+        const item = {
+          domain: actualDomain,
+          username: msg.username || '',
+          password: msg.password,
+          action: res.action || 'save',
+          entryId: res.entryId || null,
+          timestamp: Date.now()
+        };
+        if (tabId) {
+          pendingSaveByTab.set(tabId, item);
+          if (chrome.action?.setBadgeText) {
+            try {
+              chrome.action.setBadgeText({ text: '1', tabId });
+              chrome.action.setBadgeBackgroundColor({ color: '#5a9a6e', tabId });
+            } catch {}
+          }
+          chrome.tabs.sendMessage(tabId, { type: 'fuin-trigger-save-prompt', candidate: item, result: res }, () => {
+            if (chrome.runtime?.lastError) {}
+          });
+        }
+      }
+      sendResponse(res);
+    }).catch(() => {
+      sendResponse({ shouldPrompt: false });
+    });
+    return true;
+  }
   if (msg.type === 'fuin-check-save-candidate' && msg.password) {
     askFuin({
       type: 'check-save-candidate',
@@ -141,13 +261,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'fuin-save-credential' && msg.password) {
+    const tabId = sender.tab?.id;
     askFuin({
       type: 'save-credential',
       domain: actualDomain,
       username: msg.username || '',
       password: msg.password,
       updateEntryId: msg.updateEntryId
-    }).then(sendResponse);
+    }).then((res) => {
+      if (res && res.ok && tabId) {
+        pendingSaveByTab.delete(tabId);
+        if (chrome.action?.setBadgeText) {
+          try { chrome.action.setBadgeText({ text: '', tabId }); } catch {}
+        }
+      }
+      sendResponse(res);
+    });
     return true;
   }
   if (msg.type === 'fuin-reveal') {

@@ -85,13 +85,94 @@ async function checkStatus() {
     fillBtn.disabled = count === 0;
     if (openAppBtn) openAppBtn.style.display = 'none';
 
+    let pendingSaveRes = null;
+    try {
+      pendingSaveRes = await chrome.runtime.sendMessage({ type: 'fuin-get-pending-save-popup', domain });
+    } catch {}
+
     if (count > 0 && matchesList) {
       renderMatches(currentMatches, matchesList, tab);
       matchesList.style.display = 'flex';
+      if (pendingSaveRes && pendingSaveRes.hasPending && pendingSaveRes.item) {
+        renderPendingSaveBanner(pendingSaveRes.item, matchesList);
+      }
     } else if (matchesList) {
-      matchesList.style.display = 'none';
+      if (pendingSaveRes && pendingSaveRes.hasPending && pendingSaveRes.item) {
+        matchesList.replaceChildren();
+        matchesList.style.display = 'flex';
+        renderPendingSaveBanner(pendingSaveRes.item, matchesList);
+      } else {
+        matchesList.style.display = 'none';
+      }
     }
   }
+}
+
+function renderPendingSaveBanner(item, container) {
+  const banner = document.createElement('div');
+  banner.className = 'match-card';
+  banner.style.borderColor = '#5a9a6e';
+  banner.style.background = 'rgba(90, 154, 110, 0.14)';
+  banner.style.marginBottom = '8px';
+
+  const info = document.createElement('div');
+  info.className = 'match-info';
+
+  const title = document.createElement('div');
+  title.style.fontSize = '11px';
+  title.style.fontWeight = '600';
+  title.style.color = '#6bb382';
+  title.textContent = item.action === 'update' ? '🔄 Şifreyi Güncelle' : '⬡ Yeni Hesap Algılandı';
+
+  const user = document.createElement('div');
+  user.className = 'match-user';
+  user.textContent = item.username || '— (İsimsiz)';
+
+  info.appendChild(title);
+  info.appendChild(user);
+  banner.appendChild(info);
+
+  const actions = document.createElement('div');
+  actions.className = 'match-actions';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn-fill-card';
+  saveBtn.textContent = 'Kaydet';
+  saveBtn.title = "Fuin'e kaydet";
+  saveBtn.addEventListener('click', async (e) => {
+    if (!e.isTrusted) return;
+    saveBtn.disabled = true;
+    saveBtn.textContent = '…';
+    const resp = await chrome.runtime.sendMessage({
+      type: 'fuin-save-credential',
+      domain: item.domain,
+      username: item.username,
+      password: item.password,
+      updateEntryId: item.entryId,
+      tabId: item.tabId
+    });
+    if (resp && resp.ok) {
+      showToast('Hesap Fuin kasanıza kaydedildi! ✓');
+      banner.remove();
+      setTimeout(checkStatus, 500);
+    }
+  });
+
+  const dismissBtn = document.createElement('button');
+  dismissBtn.className = 'btn-copy-card';
+  dismissBtn.textContent = '✕';
+  dismissBtn.title = 'Yoksay';
+  dismissBtn.addEventListener('click', async (e) => {
+    if (!e.isTrusted) return;
+    await chrome.runtime.sendMessage({ type: 'fuin-dismiss-save', tabId: item.tabId });
+    banner.remove();
+  });
+
+  actions.appendChild(saveBtn);
+  actions.appendChild(dismissBtn);
+  banner.appendChild(actions);
+
+  container.prepend(banner);
 }
 
 function renderMatches(matches, container, tab) {

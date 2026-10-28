@@ -99,6 +99,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       askFuin({ type: 'lookup', domain: msg.domain }).then(sendResponse);
       return true;
     }
+    if (msg.type === 'fuin-reveal' && msg.entryId && msg.domain) {
+      askFuin({ type: 'reveal', entryId: msg.entryId, domain: msg.domain }).then(sendResponse);
+      return true;
+    }
+    if (msg.type === 'fuin-open-app') {
+      askFuin({ type: 'open-app' }).then(sendResponse);
+      return true;
+    }
     return;
   }
 

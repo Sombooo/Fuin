@@ -3,29 +3,260 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  body { width: 260px; margin: 0; padding: 14px; font-family: monospace; background: #1f1c18; color: #f5f0e8; }
-  .header { display: flex; align-items: center; justify-content: space-between; margin: 0 0 10px; }
-  h1 { font-size: 13px; letter-spacing: 1px; margin: 0; color: #c8a96e; }
-  .domain-tag { font-size: 10px; color: #9c9286; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .status { display: flex; align-items: center; gap: 8px; padding: 9px 10px; background: #2a2520; border: 1px solid #3a332c; border-radius: 4px; font-size: 12px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #777; flex-shrink: 0; }
-  .dot.ok { background: #4caf70; }
-  .dot.warn { background: #d4943a; }
-  .dot.err { background: #d9534f; }
-  button { width: 100%; margin-top: 10px; padding: 9px; font-family: monospace; font-size: 12px; font-weight: bold; border: 1px solid #c8a96e; background: #c8a96e; color: #1f1c18; border-radius: 4px; cursor: pointer; transition: opacity 0.15s; }
-  button:hover:not(:disabled) { opacity: 0.9; }
-  button:disabled { opacity: 0.4; cursor: not-allowed; border-color: #554c43; background: #3a332c; color: #9c9286; }
-  .hint { font-size: 10px; color: #8c8275; margin-top: 8px; line-height: 1.5; }
+  :root {
+    --bg: #1a1816;
+    --paper: #222019;
+    --card: #2a2720;
+    --b: #3d3830;
+    --b-subtle: #524b40;
+    --text: #e8e2d8;
+    --mu: #a69d92;
+    --ac: #5a9a6e;
+    --ac-bright: #6bb382;
+    --ac-tint: rgba(90, 154, 110, 0.14);
+    --amber: #c88040;
+    --red: #d9534f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    width: 320px;
+    margin: 0;
+    padding: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    user-select: none;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--ac-bright);
+  }
+  .domain-tag {
+    font-size: 11px;
+    color: var(--mu);
+    background: var(--paper);
+    border: 1px solid var(--b);
+    padding: 2px 8px;
+    border-radius: 12px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: monospace;
+  }
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--paper);
+    border: 1px solid var(--b);
+    border-radius: 6px;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #777;
+    flex-shrink: 0;
+  }
+  .dot.ok { background: var(--ac-bright); }
+  .dot.warn { background: var(--amber); }
+  .dot.err { background: var(--red); }
+  #statusText {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--mu);
+  }
+  .btn-open-app {
+    display: none;
+    padding: 4px 10px;
+    background: var(--card);
+    border: 1px solid var(--b);
+    color: var(--text);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-open-app:hover {
+    border-color: var(--ac);
+    color: var(--ac-bright);
+    background: var(--paper);
+  }
+  .matches-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .match-card {
+    background: var(--paper);
+    border: 1px solid var(--b);
+    border-radius: 6px;
+    padding: 9px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .match-card:hover {
+    border-color: var(--b-subtle);
+    background: var(--card);
+  }
+  .match-info {
+    overflow: hidden;
+    flex: 1;
+  }
+  .match-user {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .match-site {
+    font-size: 10px;
+    color: var(--mu);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .match-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .action-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid var(--b);
+    background: var(--card);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.12s ease;
+    padding: 0;
+  }
+  .action-btn:hover {
+    background: var(--paper);
+    border-color: var(--ac);
+    color: var(--ac-bright);
+  }
+  .action-btn.fill-btn {
+    color: var(--ac-bright);
+    background: var(--ac-tint);
+    border-color: rgba(90, 154, 110, 0.4);
+  }
+  .action-btn.fill-btn:hover {
+    background: var(--ac);
+    color: #fff;
+  }
+  .primary-btn {
+    width: 100%;
+    padding: 9px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--ac);
+    background: var(--ac);
+    color: #1a1816;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .primary-btn:hover:not(:disabled) { opacity: 0.9; }
+  .primary-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-color: var(--b);
+    background: var(--paper);
+    color: var(--mu);
+  }
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--b);
+    font-size: 10px;
+    color: var(--mu);
+  }
+  .toast {
+    position: fixed;
+    bottom: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--card);
+    border: 1px solid var(--ac);
+    color: var(--ac-bright);
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
   <div class="header">
-    <h1>⬡ FUIN</h1>
+    <div class="logo">⬡ FUIN</div>
     <span class="domain-tag" id="domainTag">—</span>
   </div>
-  <div class="status"><div class="dot" id="dot"></div><span id="statusText">Kontrol ediliyor...</span></div>
-  <button id="fillBtn" disabled>Bu sayfayı doldur</button>
-  <div class="hint">Fuin masaüstü uygulaması açık ve kilidi açılmış olmalıdır.</div>
+  <div class="status-bar">
+    <div class="dot" id="dot"></div>
+    <span id="statusText">Kontrol ediliyor...</span>
+    <button class="btn-open-app" id="btnOpenApp">Kilidi Aç</button>
+  </div>
+
+  <div class="matches-list" id="matchesList" style="display:none;"></div>
+
+  <button class="primary-btn" id="fillBtn" disabled>
+    <span>Bu sayfayı doldur</span>
+    <span style="font-size:10px;opacity:0.75;font-family:monospace;">(Cmd+Shift+L)</span>
+  </button>
+
+  <div class="footer">
+    <span>Sıfır Bulut & Çevrimdışı</span>
+    <span>v1.0.0-beta.5</span>
+  </div>
+  <div class="toast" id="toast">Kopyalandı!</div>
   <script src="popup.js"></script>
 </body>
 </html>

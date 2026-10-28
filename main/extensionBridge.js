@@ -281,6 +281,15 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
     if (!msg.token || typeof msg.token !== 'string' || !safeCompare(msg.token, token)) {
       return reply({ id: msg.id, error: 'unauthorized' });
     }
+    if (msg.type === 'open-app') {
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+      }
+      return reply({ id: msg.id, ok: true });
+    }
     if (!getIsUnlocked()) {
       return reply({ id: msg.id, error: 'locked' });
     }

@@ -18,6 +18,7 @@
 (function () {
   const PROCESSED = new WeakSet();
   const FIELD_MAP = new WeakMap();
+  let _pendingDirectFillEntryId = null;
 
   function isVisibleInput(el) {
     if (!el || el.disabled || el.readOnly || el.type === 'hidden') return false;
@@ -211,6 +212,14 @@
       return;
     }
     const domain = location.hostname;
+
+    const directEntryId = _pendingDirectFillEntryId;
+    _pendingDirectFillEntryId = null;
+    if (directEntryId) {
+      await requestAndFill(targetField, icon, shadowRoot, directEntryId, domain);
+      return;
+    }
+
     icon.textContent = '…';
     let res;
     try {
@@ -331,6 +340,7 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'fuin-trigger-fill') {
+      if (msg.entryId) _pendingDirectFillEntryId = msg.entryId;
       const activeEl = document.activeElement && document.activeElement.matches && document.activeElement.matches('input') ? document.activeElement : null;
       const pwField = activeEl || document.querySelector('input[type="password"]') || findStandaloneUsernameFields()[0];
       if (pwField) {

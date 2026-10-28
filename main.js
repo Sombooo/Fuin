@@ -1143,6 +1143,7 @@ ipcMain.handle('copy-secure', (_, text, durationMs = 30000) => {
   clipboard.writeText(str);
   lastCopiedHash = crypto.createHash('sha256').update(str).digest('hex');
   if (clipboardTimer) clearTimeout(clipboardTimer);
+  const safeDuration = Math.min(Math.max(Number(durationMs) || 30000, 1000), 120000);
   clipboardTimer = setTimeout(() => {
     try {
       const current = clipboard.readText();
@@ -1154,7 +1155,7 @@ ipcMain.handle('copy-secure', (_, text, durationMs = 30000) => {
     clipboardTimer = null;
     lastCopiedHash = null;
     mainWindow?.webContents.send('clipboard-cleared');
-  }, durationMs);
+  }, safeDuration);
   return true;
 });
 

@@ -44,9 +44,50 @@ const pendingSaveByTab = new Map(); // tabId -> { domain, username, password, ac
 const dismissedFingerprints = new Map(); // key -> timestamp (session suppression for "Not Now" & just-saved)
 const excludedDomainsMemory = new Set(); // normalized domains excluded via "Never for this site"
 const DISMISS_TTL_MS = 60 * 60 * 1000; // 1 saat boyunca aynı şifre için tekrar sorma
+const PENDING_SAVE_TTL_MS = 60 * 1000; // Yönlendirme sonrası en fazla 60 saniye tut
+
+const MULTI_TENANT_SUFFIXES = new Set([
+  'github.io', 'pages.dev', 'vercel.app', 'netlify.app', 'gitlab.io',
+  'herokuapp.com', 'firebaseapp.com', 'fly.dev', 'render.com', 'onrender.com',
+  'workers.dev', 'web.app', 'azurewebsites.net', 'cloudfront.net', 'railway.app',
+  'up.railway.app', 'deno.dev', 'appspot.com', 'surge.sh', 'amplifyapp.com',
+  'elasticbeanstalk.com', 's3.amazonaws.com', 'fastly.net', 'b-cdn.net',
+  'ngrok-free.app', 'ngrok.io', 'glitch.me', 'myshopify.com'
+]);
 
 function normDomainKey(d) {
   return String(d || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split(':')[0].trim();
+}
+
+function isMultiTenantHost(h) {
+  for (const suffix of MULTI_TENANT_SUFFIXES) {
+    if (h === suffix || h.endsWith('.' + suffix)) return true;
+  }
+  return false;
+}
+
+function getBaseSite(h) {
+  const clean = normDomainKey(h);
+  if (!clean) return '';
+  if (clean === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(clean) || clean.includes(':')) return clean;
+  if (isMultiTenantHost(clean)) return clean;
+  const parts = clean.split('.');
+  if (parts.length <= 2) return clean;
+  const twoPartTlds = new Set(['com.tr', 'org.tr', 'net.tr', 'edu.tr', 'gov.tr', 'co.uk', 'org.uk', 'co.jp', 'com.au', 'com.br']);
+  const lastTwo = parts.slice(-2).join('.');
+  if (twoPartTlds.has(lastTwo) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return lastTwo;
+}
+
+function isSameSiteSafe(domainA, domainB) {
+  const a = normDomainKey(domainA);
+  const b = normDomainKey(domainB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (isMultiTenantHost(a) || isMultiTenantHost(b)) return false;
+  return getBaseSite(a) === getBaseSite(b);
 }
 
 function recordDismissedCredential(domain, username, password) {
@@ -77,7 +118,12 @@ function isCredentialDismissed(domain, username, password) {
 
 function clearPendingForTab(tabId, notifyClose = false) {
   if (!tabId) return;
-  pendingSaveByTab.delete(tabId);
+  const existing = pendingSaveByTab.get(tabId);
+  if (existing) {
+    existing.password = '';
+    existing.username = '';
+    pendingSaveByTab.delete(tabId);
+  }
   if (chrome.action?.setBadgeText) {
     try { chrome.action.setBadgeText({ text: '', tabId }); } catch {}
   }
@@ -103,11 +149,40 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
         }
       }
 
-      // Sayfa yönlendikten / yüklendikten sonra bekleyen kaydetme bildirimi varsa sekmede tetikle
+      // Güvenlik: Sekme farklı bir siteye veya HTTP'ye geçerse bekleyen şifreyi anında bellekten sil (Site Isolation koruması)
+      const candidateUrl = changeInfo.url || tab?.url;
+      if (candidateUrl && pendingSaveByTab.has(tabId)) {
+        const pending = pendingSaveByTab.get(tabId);
+        let keep = false;
+        try {
+          const parsed = new URL(candidateUrl);
+          if (parsed.protocol === 'https:' && isSameSiteSafe(parsed.hostname, pending.domain)) {
+            keep = true;
+          }
+        } catch {}
+        if (!keep) {
+          clearPendingForTab(tabId, false);
+          return;
+        }
+      }
+
+      // Sayfa yönlendikten / yüklendikten sonra yalnızca aynı sitedeyse bekleyen kaydetme bildirimini tetikle
       if (changeInfo.status === 'complete') {
         const pending = pendingSaveByTab.get(tabId);
         if (pending) {
-          if (Date.now() - pending.timestamp < 120000 && !isCredentialDismissed(pending.domain, pending.username, pending.password)) {
+          let tabMatchesOrigin = false;
+          try {
+            if (tab?.url) {
+              const u = new URL(tab.url);
+              tabMatchesOrigin = u.protocol === 'https:' && isSameSiteSafe(u.hostname, pending.domain);
+            }
+          } catch {}
+
+          if (
+            tabMatchesOrigin &&
+            Date.now() - pending.timestamp < PENDING_SAVE_TTL_MS &&
+            !isCredentialDismissed(pending.domain, pending.username, pending.password)
+          ) {
             chrome.tabs.sendMessage(tabId, {
               type: 'fuin-trigger-save-prompt',
               candidate: pending,
@@ -125,7 +200,7 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
 
   if (chrome.tabs.onRemoved) {
     chrome.tabs.onRemoved.addListener((tabId) => {
-      pendingSaveByTab.delete(tabId);
+      clearPendingForTab(tabId, false);
       if (pendingReveal && pendingReveal.tabId === tabId) {
         pendingReveal.cancelled = true;
         try { pendingReveal.sendResponse({ error: 'navigation-cancelled' }); } catch {}
@@ -171,6 +246,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       askFuin({ type: 'reveal', entryId: msg.entryId, domain: msg.domain }).then(sendResponse);
       return true;
     }
+    if (msg.type === 'fuin-copy-secure' && msg.entryId && msg.domain) {
+      askFuin({
+        type: 'copy-secure',
+        entryId: msg.entryId,
+        domain: msg.domain,
+        field: msg.field === 'username' ? 'username' : 'password'
+      }).then(sendResponse);
+      return true;
+    }
     if (msg.type === 'fuin-open-app') {
       askFuin({ type: 'open-app' }).then(sendResponse);
       return true;
@@ -178,8 +262,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'fuin-get-pending-save-popup') {
       let found = null;
       for (const [tId, p] of pendingSaveByTab.entries()) {
-        if (msg.domain && (p.domain === msg.domain || p.domain.endsWith('.' + msg.domain) || msg.domain.endsWith('.' + p.domain))) {
-          if (Date.now() - p.timestamp < 120000 && !isCredentialDismissed(p.domain, p.username, p.password)) {
+        if (msg.domain && isSameSiteSafe(p.domain, msg.domain)) {
+          if (Date.now() - p.timestamp < PENDING_SAVE_TTL_MS && !isCredentialDismissed(p.domain, p.username, p.password)) {
             found = { ...p, tabId: tId };
             break;
           }
@@ -245,7 +329,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const tabId = sender.tab?.id;
     if (tabId && pendingSaveByTab.has(tabId)) {
       const p = pendingSaveByTab.get(tabId);
-      if (Date.now() - p.timestamp < 120000 && !isCredentialDismissed(p.domain, p.username, p.password)) {
+      if (
+        isSameSiteSafe(actualDomain, p.domain) &&
+        Date.now() - p.timestamp < PENDING_SAVE_TTL_MS &&
+        !isCredentialDismissed(p.domain, p.username, p.password)
+      ) {
         sendResponse({ hasPending: true, candidate: p, result: { action: p.action, entryId: p.entryId, shouldPrompt: true } });
         return true;
       } else {
@@ -333,7 +421,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'fuin-save-credential' && msg.password) {
     const tabId = sender.tab?.id;
     const pendingItem = tabId ? pendingSaveByTab.get(tabId) : null;
-    const saveDomain = pendingItem?.domain || actualDomain;
+    const saveDomain = (pendingItem && isSameSiteSafe(actualDomain, pendingItem.domain))
+      ? pendingItem.domain
+      : actualDomain;
     askFuin({
       type: 'save-credential',
       domain: saveDomain,

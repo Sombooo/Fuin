@@ -281,7 +281,8 @@
 
             <div style="margin-top:14px;padding:12px;background:var(--paper);border:1px solid var(--b);border-radius:6px;font-size:12px;line-height:1.5;">
               <div style="margin-bottom:8px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;">
-                <span>🌐 Chrome / Brave / Edge Bağlantısı</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span>Chrome / Brave / Edge Bağlantısı</span>
               </div>
               <div style="color:var(--mu);margin-bottom:10px;">
                 Geliştirici modundaki eklentinin 32 karakterlik ID'sini yapıştırıp "Bağla" butonuna basın:
@@ -302,7 +303,7 @@
             </div>
 
             <div style="margin-top:10px;font-size:11px;color:var(--mu);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-              <span>🦊 Firefox: Hazır (<code style="color:var(--ac)">fuin-app@sombo.dev</code>)</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Firefox: Hazır (<code style="color:var(--ac)">fuin-app@sombo.dev</code>)</span>
               <span>Kısayol: <b style="color:var(--text)">Cmd+Shift+L</b> / <b style="color:var(--text)">Ctrl+Shift+L</b></span>
             </div>
           </div>
@@ -365,8 +366,12 @@
         <div class="pw-row">
           <input class="fi" id="f-pw" type="password" placeholder="••••••••">
           <div class="pw-row-btns">
-            <button type="button" class="icon-btn" id="btnEyePw" data-i18n-title="showPwTitle" title="Göster / Gizle">👁</button>
-            <button type="button" class="icon-btn" id="btnCopyModalPw" title="Şifreyi Kopyala">📋</button>
+            <button type="button" class="icon-btn" id="btnEyePw" data-i18n-title="showPwTitle" title="Göster / Gizle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button type="button" class="icon-btn" id="btnCopyModalPw" title="Şifreyi Kopyala">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
             <button class="icon-btn" id="btnGenPw" data-i18n-title="genPwTitle" title="Üret">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m2 21 9.6-9.6"/>

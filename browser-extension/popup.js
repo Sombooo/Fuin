@@ -3,6 +3,57 @@
 let currentMatches = [];
 let currentDomain = '';
 
+function createPopupSvg(name, size = 14) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.style.display = 'block';
+  svg.style.flexShrink = '0';
+
+  const el = (tag, attrs) => {
+    const node = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  };
+
+  if (name === 'eye') {
+    svg.appendChild(el('path', { d: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' }));
+    svg.appendChild(el('circle', { cx: '12', cy: '12', r: '3' }));
+  } else if (name === 'eyeOff') {
+    svg.appendChild(el('path', { d: 'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24' }));
+    svg.appendChild(el('line', { x1: '1', y1: '1', x2: '23', y2: '23' }));
+  } else if (name === 'fill') {
+    svg.appendChild(el('path', { d: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4' }));
+    svg.appendChild(el('polyline', { points: '10 17 15 12 10 7' }));
+    svg.appendChild(el('line', { x1: '15', y1: '12', x2: '3', y2: '12' }));
+  } else if (name === 'user') {
+    svg.appendChild(el('path', { d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' }));
+    svg.appendChild(el('circle', { cx: '12', cy: '7', r: '4' }));
+  } else if (name === 'key') {
+    svg.appendChild(el('path', { d: 'm2 21 9.6-9.6' }));
+    svg.appendChild(el('path', { d: 'm7.5 15.5 2.3 2.3a1 1 0 0 1 0 1.4l-2.1 2.1a1 1 0 0 1-1.4 0L4 19' }));
+    svg.appendChild(el('circle', { cx: '15.5', cy: '7.5', r: '5.5' }));
+  } else if (name === 'refresh') {
+    svg.appendChild(el('polyline', { points: '23 4 23 10 17 10' }));
+    svg.appendChild(el('path', { d: 'M20.49 15a9 9 0 1 1-2.12-9.36L23 10' }));
+  } else if (name === 'hex') {
+    svg.appendChild(el('polygon', { points: '12 2 20.66 7 20.66 17 12 22 3.34 17 3.34 7 12 2' }));
+  } else if (name === 'close') {
+    svg.appendChild(el('line', { x1: '18', y1: '6', x2: '6', y2: '18' }));
+    svg.appendChild(el('line', { x1: '6', y1: '6', x2: '18', y2: '18' }));
+  } else if (name === 'check') {
+    svg.appendChild(el('polyline', { points: '20 6 9 17 4 12' }));
+  }
+  return svg;
+}
+
 function showToast(text) {
   const t = document.getElementById('toast');
   if (!t) return;
@@ -65,7 +116,8 @@ async function checkStatus() {
     fillBtn.disabled = true;
     if (openAppBtn) {
       openAppBtn.style.display = 'block';
-      openAppBtn.onclick = () => {
+      openAppBtn.onclick = (e) => {
+        if (!e.isTrusted) return;
         chrome.runtime.sendMessage({ type: 'fuin-open-app' });
         window.close();
       };
@@ -122,7 +174,13 @@ function renderPendingSaveBanner(item, container) {
   title.style.fontSize = '11px';
   title.style.fontWeight = '600';
   title.style.color = '#6bb382';
-  title.textContent = item.action === 'update' ? '🔄 Şifreyi Güncelle' : '⬡ Yeni Hesap Algılandı';
+  title.style.display = 'flex';
+  title.style.alignItems = 'center';
+  title.style.gap = '5px';
+  title.appendChild(createPopupSvg(item.action === 'update' ? 'refresh' : 'hex', 11));
+  const titleLabel = document.createElement('span');
+  titleLabel.textContent = item.action === 'update' ? 'Şifreyi Güncelle' : 'Yeni Hesap Algılandı';
+  title.appendChild(titleLabel);
 
   const user = document.createElement('div');
   user.className = 'match-user';
@@ -143,23 +201,25 @@ function renderPendingSaveBanner(item, container) {
 
   const pwEye = document.createElement('button');
   pwEye.type = 'button';
-  pwEye.textContent = '👁';
+  pwEye.appendChild(createPopupSvg('eye', 12));
   pwEye.title = 'Algılanan şifreyi gör / gizle';
   pwEye.style.background = 'transparent';
   pwEye.style.border = 'none';
   pwEye.style.color = 'var(--mu)';
-  pwEye.style.fontSize = '11px';
+  pwEye.style.display = 'flex';
+  pwEye.style.alignItems = 'center';
   pwEye.style.cursor = 'pointer';
-  pwEye.style.padding = '0';
-  pwEye.style.lineHeight = '1';
+  pwEye.style.padding = '2px';
 
   let bannerPwShown = false;
   pwEye.addEventListener('click', (e) => {
+    if (!e.isTrusted) return;
     e.stopPropagation();
     bannerPwShown = !bannerPwShown;
     pwDots.textContent = bannerPwShown ? (item.password || '—') : '••••••••';
     pwDots.style.color = bannerPwShown ? 'var(--text)' : 'var(--mu)';
-    pwEye.textContent = bannerPwShown ? '👁‍🗨' : '👁';
+    pwEye.replaceChildren(createPopupSvg(bannerPwShown ? 'eyeOff' : 'eye', 12));
+    pwEye.style.color = bannerPwShown ? 'var(--ac-bright)' : 'var(--mu)';
   });
 
   pwRow.appendChild(pwDots);
@@ -174,7 +234,7 @@ function renderPendingSaveBanner(item, container) {
   actions.className = 'match-actions';
 
   const saveBtn = document.createElement('button');
-  saveBtn.className = 'btn-fill-card';
+  saveBtn.className = 'btn-save-banner';
   saveBtn.textContent = 'Kaydet';
   saveBtn.title = "Fuin'e kaydet";
   saveBtn.addEventListener('click', async (e) => {
@@ -190,15 +250,15 @@ function renderPendingSaveBanner(item, container) {
       tabId: item.tabId
     });
     if (resp && resp.ok) {
-      showToast('Hesap Fuin kasanıza kaydedildi! ✓');
+      showToast('Hesap Fuin kasasına kaydedildi');
       banner.remove();
       setTimeout(checkStatus, 500);
     }
   });
 
   const dismissBtn = document.createElement('button');
-  dismissBtn.className = 'btn-copy-card';
-  dismissBtn.textContent = '✕';
+  dismissBtn.className = 'btn-dismiss-banner';
+  dismissBtn.appendChild(createPopupSvg('close', 12));
   dismissBtn.title = 'Yoksay';
   dismissBtn.addEventListener('click', async (e) => {
     if (!e.isTrusted) return;
@@ -255,50 +315,56 @@ function renderMatches(matches, container, tab) {
     const btnEye = document.createElement('button');
     btnEye.type = 'button';
     btnEye.className = 'action-btn-eye';
-    btnEye.textContent = '👁';
+    btnEye.appendChild(createPopupSvg('eye', 12));
     btnEye.title = 'Şifreyi göster / gizle';
     btnEye.style.background = 'transparent';
     btnEye.style.border = 'none';
     btnEye.style.color = 'var(--mu)';
-    btnEye.style.fontSize = '11px';
+    btnEye.style.display = 'flex';
+    btnEye.style.alignItems = 'center';
     btnEye.style.cursor = 'pointer';
-    btnEye.style.padding = '0';
-    btnEye.style.lineHeight = '1';
+    btnEye.style.padding = '2px';
 
     let isRevealed = false;
     let revealTimer = null;
     btnEye.addEventListener('click', async (e) => {
+      if (!e.isTrusted) return;
       e.stopPropagation();
       if (isRevealed) {
         isRevealed = false;
         clearTimeout(revealTimer);
         pwDots.textContent = '••••••••';
         pwDots.style.color = 'var(--mu)';
-        btnEye.textContent = '👁';
+        btnEye.replaceChildren(createPopupSvg('eye', 12));
+        btnEye.style.color = 'var(--mu)';
         return;
       }
-      btnEye.textContent = '…';
+      btnEye.style.opacity = '0.5';
       try {
         const rev = await chrome.runtime.sendMessage({ type: 'fuin-reveal', entryId: m.id, domain: currentDomain });
+        btnEye.style.opacity = '1';
         if (rev && rev.password) {
           isRevealed = true;
           pwDots.textContent = rev.password;
           pwDots.style.color = 'var(--text)';
-          btnEye.textContent = '👁‍🗨';
+          btnEye.replaceChildren(createPopupSvg('eyeOff', 12));
+          btnEye.style.color = 'var(--ac-bright)';
           clearTimeout(revealTimer);
           revealTimer = setTimeout(() => {
             isRevealed = false;
             pwDots.textContent = '••••••••';
             pwDots.style.color = 'var(--mu)';
-            btnEye.textContent = '👁';
+            btnEye.replaceChildren(createPopupSvg('eye', 12));
+            btnEye.style.color = 'var(--mu)';
           }, 8000);
         } else {
           showToast('Şifre alınamadı');
-          btnEye.textContent = '👁';
+          btnEye.replaceChildren(createPopupSvg('eye', 12));
         }
       } catch {
+        btnEye.style.opacity = '1';
         showToast('Bağlantı hatası');
-        btnEye.textContent = '👁';
+        btnEye.replaceChildren(createPopupSvg('eye', 12));
       }
     });
 
@@ -317,45 +383,77 @@ function renderMatches(matches, container, tab) {
     const btnFill = document.createElement('button');
     btnFill.className = 'action-btn fill-btn';
     btnFill.title = 'Bu hesabı sayfaya doldur';
-    btnFill.textContent = '🪄';
-    btnFill.onclick = async () => {
+    btnFill.appendChild(createPopupSvg('fill', 14));
+    btnFill.onclick = async (e) => {
+      if (!e.isTrusted) return;
       if (tab?.id) {
         await chrome.tabs.sendMessage(tab.id, { type: 'fuin-trigger-fill', entryId: m.id });
         window.close();
       }
     };
 
-    // Kullanıcı adı kopyala
+    // Kullanıcı adı kopyala (30 sn otomatik pano temizlemeli)
     const btnCopyUser = document.createElement('button');
     btnCopyUser.className = 'action-btn';
     btnCopyUser.title = 'Kullanıcı adını kopyala';
-    btnCopyUser.textContent = '👤';
-    btnCopyUser.onclick = async () => {
-      if (m.username) {
+    btnCopyUser.appendChild(createPopupSvg('user', 13));
+    btnCopyUser.onclick = async (e) => {
+      if (!e.isTrusted || !m.username) return;
+      const res = await chrome.runtime.sendMessage({
+        type: 'fuin-copy-secure',
+        entryId: m.id,
+        domain: currentDomain,
+        field: 'username'
+      });
+      if (res && res.ok) {
+        btnCopyUser.replaceChildren(createPopupSvg('check', 13));
+        showToast('Kullanıcı adı kopyalandı (30 sn)');
+        setTimeout(() => btnCopyUser.replaceChildren(createPopupSvg('user', 13)), 1200);
+      } else {
         await navigator.clipboard.writeText(m.username);
-        showToast('Kullanıcı adı kopyalandı! ✓');
+        showToast('Kullanıcı adı kopyalandı');
       }
     };
 
-    // Şifre kopyala
+    // Şifre kopyala (Fuin masaüstü 30 sn güvenli pano temizlemeli)
     const btnCopyPw = document.createElement('button');
     btnCopyPw.className = 'action-btn';
-    btnCopyPw.title = 'Şifreyi kopyala';
-    btnCopyPw.textContent = '🔑';
-    btnCopyPw.onclick = async () => {
-      btnCopyPw.textContent = '…';
+    btnCopyPw.title = 'Şifreyi kopyala (30 sn sonra silinir)';
+    btnCopyPw.appendChild(createPopupSvg('key', 13));
+    btnCopyPw.onclick = async (e) => {
+      if (!e.isTrusted) return;
+      btnCopyPw.style.opacity = '0.5';
       try {
-        const rev = await chrome.runtime.sendMessage({ type: 'fuin-reveal', entryId: m.id, domain: currentDomain });
-        if (rev && rev.password) {
-          await navigator.clipboard.writeText(rev.password);
-          showToast('Şifre kopyalandı! ✓');
+        const secRes = await chrome.runtime.sendMessage({
+          type: 'fuin-copy-secure',
+          entryId: m.id,
+          domain: currentDomain,
+          field: 'password'
+        });
+        if (secRes && secRes.ok) {
+          btnCopyPw.style.opacity = '1';
+          btnCopyPw.replaceChildren(createPopupSvg('check', 13));
+          showToast('Şifre kopyalandı (30 sn sonra temizlenir)');
+          setTimeout(() => btnCopyPw.replaceChildren(createPopupSvg('key', 13)), 1200);
+          return;
+        }
+        if (secRes && secRes.error === 'approval-required') {
+          const rev = await chrome.runtime.sendMessage({ type: 'fuin-reveal', entryId: m.id, domain: currentDomain });
+          if (rev && rev.password) {
+            await navigator.clipboard.writeText(rev.password);
+            btnCopyPw.replaceChildren(createPopupSvg('check', 13));
+            showToast('Şifre kopyalandı');
+            setTimeout(() => btnCopyPw.replaceChildren(createPopupSvg('key', 13)), 1200);
+          } else {
+            showToast('Onay reddedildi veya şifre alınamadı');
+          }
         } else {
           showToast('Hata: Şifre alınamadı');
         }
       } catch {
         showToast('Hata: Bağlantı başarısız');
       }
-      btnCopyPw.textContent = '🔑';
+      btnCopyPw.style.opacity = '1';
     };
 
     actions.appendChild(btnFill);
@@ -367,7 +465,8 @@ function renderMatches(matches, container, tab) {
   });
 }
 
-document.getElementById('fillBtn').addEventListener('click', async () => {
+document.getElementById('fillBtn').addEventListener('click', async (e) => {
+  if (!e.isTrusted) return;
   const tab = await currentTab();
   if (!tab || !tab.id) return;
   try {

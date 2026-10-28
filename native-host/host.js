@@ -101,26 +101,46 @@ function forwardToFuin(request, cb) {
   socket.setTimeout(32000);
 }
 
+const ALLOWED_TYPES = new Set([
+  'lookup',
+  'reveal',
+  'open-app',
+  'check-save-candidate',
+  'save-credential',
+  'exclude-domain',
+  'copy-secure'
+]);
+
+function clampField(val, maxLen) {
+  return String(val || '').slice(0, maxLen);
+}
+
 readMessages((msg) => {
-  if (!msg || !msg.type) return writeMessage({ error: 'bad-request' });
-  // Güvenlik: İletilen mesajlarda yalnızca bilinen alanları geçir (field whitelist)
-  const sanitized = { type: String(msg.type) };
+  if (!msg || typeof msg.type !== 'string') return writeMessage({ error: 'bad-request' });
+  if (!ALLOWED_TYPES.has(msg.type)) return writeMessage({ error: 'unknown-type' });
+
+  // Güvenlik: İletilen mesajlarda yalnızca bilinen alanları ve güvenli uzunluk sınırlarını geçir
+  const sanitized = { type: msg.type };
   if (msg.type === 'lookup') {
-    sanitized.domain = String(msg.domain || '');
+    sanitized.domain = clampField(msg.domain, 253);
   } else if (msg.type === 'reveal') {
-    sanitized.entryId = String(msg.entryId || '');
-    sanitized.domain = String(msg.domain || '');
+    sanitized.entryId = clampField(msg.entryId, 128);
+    sanitized.domain = clampField(msg.domain, 253);
+  } else if (msg.type === 'copy-secure') {
+    sanitized.entryId = clampField(msg.entryId, 128);
+    sanitized.domain = clampField(msg.domain, 253);
+    sanitized.field = msg.field === 'username' ? 'username' : 'password';
   } else if (msg.type === 'check-save-candidate') {
-    sanitized.domain = String(msg.domain || '');
-    sanitized.username = String(msg.username || '');
-    sanitized.password = String(msg.password || '');
+    sanitized.domain = clampField(msg.domain, 253);
+    sanitized.username = clampField(msg.username, 512);
+    sanitized.password = clampField(msg.password, 1024);
   } else if (msg.type === 'save-credential') {
-    sanitized.domain = String(msg.domain || '');
-    sanitized.username = String(msg.username || '');
-    sanitized.password = String(msg.password || '');
-    if (msg.updateEntryId) sanitized.updateEntryId = String(msg.updateEntryId);
+    sanitized.domain = clampField(msg.domain, 253);
+    sanitized.username = clampField(msg.username, 512);
+    sanitized.password = clampField(msg.password, 1024);
+    if (msg.updateEntryId) sanitized.updateEntryId = clampField(msg.updateEntryId, 128);
   } else if (msg.type === 'exclude-domain') {
-    sanitized.domain = String(msg.domain || '');
+    sanitized.domain = clampField(msg.domain, 253);
   }
   forwardToFuin(sanitized, (result) => writeMessage(result));
 });

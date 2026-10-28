@@ -176,7 +176,36 @@
   }
   .action-btn.fill-btn:hover {
     background: var(--ac);
-    color: #fff;
+    color: #1a1816;
+  }
+  .btn-save-banner {
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--ac);
+    background: var(--ac);
+    color: #1a1816;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.12s ease;
+  }
+  .btn-save-banner:hover { opacity: 0.9; }
+  .btn-dismiss-banner {
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    border: 1px solid var(--b);
+    background: var(--card);
+    color: var(--mu);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .btn-dismiss-banner:hover {
+    border-color: var(--b-subtle);
+    color: var(--text);
   }
   .primary-btn {
     width: 100%;
@@ -236,7 +265,10 @@
 </head>
 <body>
   <div class="header">
-    <div class="logo">⬡ FUIN</div>
+    <div class="logo">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 20.66 7 20.66 17 12 22 3.34 17 3.34 7 12 2"/></svg>
+      <span>FUIN</span>
+    </div>
     <span class="domain-tag" id="domainTag">—</span>
   </div>
   <div class="status-bar">
@@ -248,6 +280,7 @@
   <div class="matches-list" id="matchesList" style="display:none;"></div>
 
   <button class="primary-btn" id="fillBtn" disabled>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
     <span>Bu sayfayı doldur</span>
     <span style="font-size:10px;opacity:0.75;font-family:monospace;">(Cmd+Shift+L)</span>
   </button>

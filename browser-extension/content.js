@@ -104,13 +104,52 @@
     return visibleCandidates[0] || allInputs[0] || null;
   }
 
+  function createExtSvg(name, size = 14) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.style.display = 'block';
+    svg.style.flexShrink = '0';
+
+    const el = (tag, attrs) => {
+      const node = document.createElementNS(ns, tag);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+      return node;
+    };
+
+    if (name === 'hex') {
+      svg.appendChild(el('polygon', { points: '12 2 20.66 7 20.66 17 12 22 3.34 17 3.34 7 12 2' }));
+    } else if (name === 'globe') {
+      svg.appendChild(el('circle', { cx: '12', cy: '12', r: '10' }));
+      svg.appendChild(el('line', { x1: '2', y1: '12', x2: '22', y2: '12' }));
+      svg.appendChild(el('path', { d: 'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z' }));
+    } else if (name === 'eye') {
+      svg.appendChild(el('path', { d: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' }));
+      svg.appendChild(el('circle', { cx: '12', cy: '12', r: '3' }));
+    } else if (name === 'eyeOff') {
+      svg.appendChild(el('path', { d: 'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24' }));
+      svg.appendChild(el('line', { x1: '1', y1: '1', x2: '23', y2: '23' }));
+    } else if (name === 'close') {
+      svg.appendChild(el('line', { x1: '18', y1: '6', x2: '6', y2: '18' }));
+      svg.appendChild(el('line', { x1: '6', y1: '6', x2: '18', y2: '18' }));
+    }
+    return svg;
+  }
+
   function formatRevealError(err) {
-    if (err === 'locked') return '🔒 Fuin kilitli — önce masaüstü uygulamasını açın';
-    if (err === 'busy') return '⏳ Fuin şu an başka bir onay bekliyor';
-    if (err === 'timeout') return '⏱ Onay süresi doldu — tekrar deneyin';
-    if (err === 'domain-mismatch') return '⚠ Alan adı eşleşmedi';
-    if (err === 'not-found') return '⚠ Kayıt bulunamadı';
-    return '⚠ Fuin bağlantısı başarısız (' + err + ')';
+    if (err === 'locked') return 'Fuin kilitli — önce masaüstü uygulamasını açın';
+    if (err === 'busy') return 'Fuin şu an başka bir onay bekliyor';
+    if (err === 'timeout') return 'Onay süresi doldu — tekrar deneyin';
+    if (err === 'domain-mismatch') return 'Alan adı eşleşmedi';
+    if (err === 'not-found') return 'Kayıt bulunamadı';
+    return 'Fuin bağlantısı başarısız (' + err + ')';
   }
 
   function injectIcon(pwField) {
@@ -173,7 +212,7 @@
   async function handleFillClick(targetField, icon, shadowRoot) {
     if (!shadowRoot) return;
     if (location.protocol === 'http:') {
-      showMenu(icon, shadowRoot, ['⚠ Güvenli olmayan bağlantı — Fuin bu sayfada şifre doldurmaz']);
+      showMenu(icon, shadowRoot, ['Güvenli olmayan bağlantı (HTTP) — Fuin bu sayfada şifre doldurmaz']);
       return;
     }
     const domain = location.hostname;
@@ -192,8 +231,8 @@
       res = { error: 'native-host-unreachable' };
     }
 
-    if (!res || res.error === 'locked') return showMenu(icon, shadowRoot, ['🔒 Fuin kilitli — önce açın']);
-    if (res.error)                      return showMenu(icon, shadowRoot, ['⚠ Fuin masaüstü uygulamasına ulaşılamıyor']);
+    if (!res || res.error === 'locked') return showMenu(icon, shadowRoot, ['Fuin kilitli — önce masaüstü kilidini açın']);
+    if (res.error)                      return showMenu(icon, shadowRoot, ['Fuin masaüstü uygulamasına ulaşılamıyor']);
     if (!res.matches || !res.matches.length) return showMenu(icon, shadowRoot, ['Bu site için kayıtlı şifre yok']);
 
     // Tek eşleşme varsa seçim menüsünü atla, direkt izin iste
@@ -362,8 +401,10 @@
 
   // Sayfa içi klavye kısayolu dinleyicisi:
   // Cmd+Shift+L (macOS) veya Ctrl+Shift+L (Windows/Linux)
-  // capture: true ile sayfa scriptlerinin event'i yutması engellenir.
+  // Güvenlik: Yalnızca gerçek kullanıcı tuş vuruşları (e.isTrusted) kabul edilir;
+  // zararlı sayfa betiklerinin sentetik KeyboardEvent ile şifre çalması engellenir.
   window.addEventListener('keydown', (e) => {
+    if (!e.isTrusted) return;
     const hasModifier = e.metaKey || e.ctrlKey;
     const isKeyL = e.key === 'l' || e.key === 'L' || e.code === 'KeyL';
 
@@ -412,6 +453,7 @@
   }
 
   document.addEventListener('input', (e) => {
+    if (!e.isTrusted) return;
     const el = e.target;
     if (!el || el.tagName !== 'INPUT') return;
     if (el.type === 'password' || _knownPasswordInputs.has(el)) {
@@ -436,6 +478,7 @@
   }, true);
 
   document.addEventListener('change', (e) => {
+    if (!e.isTrusted) return;
     const el = e.target;
     if (!el || el.tagName !== 'INPUT') return;
     if (el.type === 'password' || _knownPasswordInputs.has(el)) {
@@ -457,11 +500,10 @@
     const scopedPws = scopeForm ? pwCandidates.filter(f => scopeForm.contains(f)) : [];
     const pool = scopedPws.length > 0 ? scopedPws : pwCandidates;
 
-    const filledPw =
-      pool.find(f => isVisibleInput(f) && f.value && f.value.length > 0) ||
-      pool.find(f => f.value && f.value.length > 0) ||
-      pool.find(isVisibleInput) ||
-      pool[0];
+    // Güvenlik: Gizli (görünmeyen) şifre alanları yalnızca kullanıcı gerçekten klavyeden yazdıysa (_passwordDirty) okunur
+    const visibleFilledPw = pool.find(f => isVisibleInput(f) && f.value && f.value.length > 0);
+    const hiddenDirtyPw = _passwordDirty ? pool.find(f => f.value && f.value.length > 0) : null;
+    const filledPw = visibleFilledPw || hiddenDirtyPw || null;
 
     const password = (filledPw && filledPw.value)
       ? filledPw.value
@@ -605,22 +647,28 @@
       gap: '6px',
       fontSize: '12px',
       fontWeight: '700',
+      letterSpacing: '0.8px',
       color: '#5a9a6e',
       fontFamily: 'monospace'
     });
-    logoRow.textContent = '⬡ FUIN';
+    logoRow.appendChild(createExtSvg('hex', 13));
+    const logoLabel = document.createElement('span');
+    logoLabel.textContent = 'FUIN';
+    logoRow.appendChild(logoLabel);
 
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
-    closeBtn.textContent = '✕';
+    closeBtn.appendChild(createExtSvg('close', 14));
     Object.assign(closeBtn.style, {
       background: 'transparent',
       border: 'none',
       color: '#a69d92',
-      fontSize: '13px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
       cursor: 'pointer',
-      padding: '2px 4px',
-      lineHeight: '1'
+      padding: '3px',
+      borderRadius: '4px'
     });
 
     header.appendChild(logoRow);
@@ -634,7 +682,7 @@
       fontSize: '14px',
       fontWeight: '600',
       color: '#e8e2d8',
-      marginBottom: '4px'
+      marginBottom: '6px'
     });
     card.appendChild(titleText);
 
@@ -649,13 +697,16 @@
       background: '#1a1816',
       border: '1px solid #3d3830',
       borderRadius: '4px',
-      padding: '3px 8px',
+      padding: '4px 8px',
       fontSize: '11px',
       color: '#6bb382',
       fontWeight: '500',
       marginBottom: '12px'
     });
-    siteBadge.textContent = '🌐 ' + cleanSite;
+    siteBadge.appendChild(createExtSvg('globe', 12));
+    const siteBadgeText = document.createElement('span');
+    siteBadgeText.textContent = cleanSite;
+    siteBadge.appendChild(siteBadgeText);
     card.appendChild(siteBadge);
 
     const fieldsBox = document.createElement('div');
@@ -738,24 +789,25 @@
 
     const eyeBtn = document.createElement('button');
     eyeBtn.type = 'button';
-    eyeBtn.textContent = '👁';
+    eyeBtn.appendChild(createExtSvg('eye', 14));
     eyeBtn.title = 'Şifreyi göster / gizle';
     Object.assign(eyeBtn.style, {
       position: 'absolute',
-      right: '6px',
+      right: '7px',
       background: 'transparent',
       border: 'none',
       color: '#a69d92',
-      fontSize: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
       cursor: 'pointer',
-      padding: '2px',
-      lineHeight: '1'
+      padding: '3px'
     });
     eyeBtn.addEventListener('click', (e) => {
       if (!e.isTrusted) return;
       const isMasked = pwInput.type === 'password';
       pwInput.type = isMasked ? 'text' : 'password';
-      eyeBtn.textContent = isMasked ? '👁‍🗨' : '👁';
+      eyeBtn.replaceChildren(createExtSvg(isMasked ? 'eyeOff' : 'eye', 14));
       eyeBtn.style.color = isMasked ? '#6bb382' : '#a69d92';
     });
 

@@ -214,13 +214,131 @@ check('6.3 HIBP check specifies cache: "no-store" to prevent disk cache hash ret
   }
 });
 
-// ── FINAL SUMMARY ──────────────────────────────────────────────────────────
-console.log('\n══════════════════════════════════════════════════════════════════════════════');
-console.log(`TOTAL SECURITY CHECKS: ${totalTests} | PASSED: ${passedTests} | FAILED: ${failedTests}`);
-console.log('══════════════════════════════════════════════════════════════════════════════');
+// ── 7. ADVERSARIAL AUTOFILL, SITE ISOLATION & BRIDGE HARDENING AUDIT ─────────
+console.log('\n[7. Adversarial Autofill, Site Isolation & Bridge Hardening Audit]');
 
-if (failedTests > 0) {
-  process.exit(1);
-} else {
-  console.log('\nALL EXTENSION & API PRIVACY SECURITY AUDIT CHECKS PASSED (100%)!\n');
+check('7.1 content.js blocks zero-click synthetic KeyboardEvent autofill & synthetic input events', () => {
+  const keydownIdx = contentJs.indexOf("window.addEventListener('keydown', (e) => {");
+  assert.ok(keydownIdx !== -1, 'Shortcut keydown listener must exist');
+  const keydownSlice = contentJs.slice(keydownIdx, keydownIdx + 180);
+  assert.ok(keydownSlice.includes('if (!e.isTrusted) return;'), 'Shortcut keydown listener MUST verify e.isTrusted');
+
+  const inputIdx = contentJs.indexOf("document.addEventListener('input', (e) => {");
+  assert.ok(inputIdx !== -1 && contentJs.slice(inputIdx, inputIdx + 120).includes('if (!e.isTrusted) return;'),
+    'Document input listener MUST verify e.isTrusted');
+});
+
+check('7.2 content.js blocks hidden password trap when user has not typed (_passwordDirty guard)', () => {
+  assert.ok(contentJs.includes('const hiddenDirtyPw = _passwordDirty ?'),
+    'captureFormCredentials must guard hidden password fields behind _passwordDirty');
+});
+
+check('7.3 renderer/app.js enforces domainMatches on updateEntryId, reprompt guard, and zero username leak', () => {
+  assert.ok(appJs.includes('Boolean(entry.reprompt)'), 'onExtRevealRequest must enforce approval on reprompt entries');
+  assert.ok(appJs.includes("if (!domainMatches(byId, req.domain))"), 'onExtSaveCredentialRequest must enforce domainMatches on updateEntryId');
+  assert.ok(appJs.includes("error: 'reprompt-protected'"), 'onExtSaveCredentialRequest must protect reprompt entries from silent overwrite');
+  assert.ok(!appJs.includes('username: matchingEntries[0].username'), 'onExtCheckSaveCandidateRequest must never leak vault username on empty input');
+});
+
+check('7.4 extensionBridge.js & native-host/host.js enforce rate limits, type allowlist, and length caps', () => {
+  const extBridgeJs = fs.readFileSync(path.join(__dirname, 'main/extensionBridge.js'), 'utf8');
+  const hostJs = fs.readFileSync(path.join(__dirname, 'native-host/host.js'), 'utf8');
+  assert.ok(extBridgeJs.includes('function checkRateLimit(') && extBridgeJs.includes("error: 'rate-limited'"),
+    'extensionBridge.js must enforce sliding-window rate limiting');
+  assert.ok(hostJs.includes('ALLOWED_TYPES') && hostJs.includes('clampField('),
+    'native-host/host.js must enforce strict message type allowlist and field length clamping');
+});
+
+check('7.5 Extension UI uses crisp createElementNS vector SVGs with zero cartoon emojis', () => {
+  const popupHtml = fs.readFileSync(path.join(__dirname, 'browser-extension/popup.html'), 'utf8');
+  for (const [name, code] of [['content.js', contentJs], ['popup.js', popupJs], ['popup.html', popupHtml]]) {
+    const nonCommentLines = code.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+    assert.ok(!/[\u{1F300}-\u{1FAFF}]/u.test(nonCommentLines), `${name} must not contain cartoon emojis`);
+  }
+  assert.ok(contentJs.includes("createElementNS(ns, 'svg')") && popupJs.includes("createElementNS(ns, 'svg')"),
+    'Extension scripts must build vector SVGs via safe createElementNS');
+});
+
+async function runAsyncSiteIsolationAudit() {
+  let onMsg = null;
+  let onTabUpd = null;
+  const tabMessages = [];
+
+  const sb = {
+    console, URL, Date, Map, Set, Promise, setTimeout, clearTimeout,
+    chrome: {
+      runtime: {
+        id: 'abcdefghijklmnopabcdefghijklmnop',
+        lastError: null,
+        sendNativeMessage: (_h, payload, cb) => {
+          if (payload.type === 'check-save-candidate') {
+            cb({ shouldPrompt: true, action: 'save', username: payload.username });
+          } else {
+            cb({ ok: true });
+          }
+        },
+        onMessage: { addListener: (fn) => { onMsg = fn; } }
+      },
+      tabs: {
+        onUpdated: { addListener: (fn) => { onTabUpd = fn; } },
+        onRemoved: { addListener: () => {} },
+        query: () => {},
+        sendMessage: (tabId, msg, cb) => { tabMessages.push({ tabId, msg }); if (cb) cb(); }
+      },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      commands: { onCommand: { addListener: () => {} } }
+    }
+  };
+
+  vm.runInNewContext(backgroundJs, sb);
+
+  const sendFromTab = (url, msg, tabId = 99) => new Promise((resolve) => {
+    onMsg(msg, { id: 'abcdefghijklmnopabcdefghijklmnop', frameId: 0, url, tab: { id: tabId, url } }, resolve);
+  });
+
+  // Scenario A: Submit on mybank.com, then same tab navigates to evil-news.com -> MUST scrub & block!
+  await sendFromTab('https://login.mybank.com/auth', { type: 'fuin-form-submitted', username: 'kadir', password: 'TopSecretBankPassword!' }, 99);
+  tabMessages.length = 0;
+  onTabUpd(99, { status: 'complete', url: 'https://evil-news.com/' }, { id: 99, url: 'https://evil-news.com/' });
+  const leakCheck1 = await sendFromTab('https://evil-news.com/', { type: 'fuin-get-pending-save' }, 99);
+
+  check('7.6 Cross-site navigation scrubs pending credential (zero Site Isolation leak to evil-news.com)', () => {
+    assert.strictEqual(tabMessages.length, 0, 'Must NOT push save prompt to cross-site tab');
+    assert.strictEqual(leakCheck1.hasPending, false, 'evil-news.com must NOT read mybank.com pending credential');
+  });
+
+  // Scenario B: Multi-tenant isolation (alice.github.io -> bob.github.io in same tab) -> MUST scrub & block!
+  await sendFromTab('https://alice.github.io/login', { type: 'fuin-form-submitted', username: 'alice', password: 'AliceTenantSecret!' }, 101);
+  tabMessages.length = 0;
+  onTabUpd(101, { status: 'complete', url: 'https://bob.github.io/' }, { id: 101, url: 'https://bob.github.io/' });
+  const leakCheck2 = await sendFromTab('https://bob.github.io/', { type: 'fuin-get-pending-save' }, 101);
+
+  check('7.7 Multi-tenant navigation scrubs pending credential (alice.github.io -> bob.github.io isolated)', () => {
+    assert.strictEqual(tabMessages.length, 0, 'Must NOT push save prompt across github.io tenants');
+    assert.strictEqual(leakCheck2.hasPending, false, 'bob.github.io must NOT read alice.github.io pending credential');
+  });
+
+  // Scenario C: Legitimate post-login redirect on same site (login.chess.com -> www.chess.com/home) -> preserved!
+  await sendFromTab('https://login.chess.com/', { type: 'fuin-form-submitted', username: 'gm', password: 'ValidRedirectPassword!' }, 102);
+  const legitRedirect = await sendFromTab('https://www.chess.com/home', { type: 'fuin-get-pending-save' }, 102);
+
+  check('7.8 Legitimate same-site redirect (login.chess.com -> www.chess.com) preserves pending save', () => {
+    assert.strictEqual(legitRedirect.hasPending, true, 'Same-site HTTPS redirect must preserve save prompt');
+  });
+
+  // ── FINAL SUMMARY ──────────────────────────────────────────────────────────
+  console.log('\n══════════════════════════════════════════════════════════════════════════════');
+  console.log(`TOTAL SECURITY CHECKS: ${totalTests} | PASSED: ${passedTests} | FAILED: ${failedTests}`);
+  console.log('══════════════════════════════════════════════════════════════════════════════');
+
+  if (failedTests > 0) {
+    process.exit(1);
+  } else {
+    console.log('\nALL EXTENSION & API PRIVACY SECURITY AUDIT CHECKS PASSED (100%)!\n');
+  }
 }
+
+runAsyncSiteIsolationAudit().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

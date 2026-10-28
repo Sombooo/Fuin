@@ -474,8 +474,8 @@ api.onExtRevealRequest(async (req) => {
   }
 
   // Bitwarden & 1Password tarzı kesintisiz anında otomatik doldurma (Seamless Autofill):
-  // Kasa açıkken ve alan adı tam eşleştiğinde ekrandan onay istemeden şifreyi doğrudan doldur.
-  const requirePrompt = localStorage.getItem('fuin-ext-prompt-approval') === 'true';
+  // Kasa açıkken ve alan adı tam eşleştiğinde doldurur; ancak reprompt (yüksek güvenlikli) kayıtlar her zaman masaüstü onayı ister.
+  const requirePrompt = Boolean(entry.reprompt) || localStorage.getItem('fuin-ext-prompt-approval') === 'true';
   if (!requirePrompt) {
     try {
       api.extRespond(req.requestId, { username: entry.username, password: await memDecrypt(entry.password) });
@@ -491,6 +491,39 @@ api.onExtRevealRequest(async (req) => {
   document.getElementById('extRevealUser').textContent = entry.username || '—';
   document.getElementById('extRevealDomain').textContent = req.domain || '—';
   document.getElementById('extRevealOverlay').classList.add('open');
+});
+
+api.onExtCopySecureRequest?.(async (req) => {
+  if (!master) {
+    api.extRespond(req.requestId, { error: 'locked' });
+    return;
+  }
+  const entry = entries.find(e => e.id === req.entryId && !e.isDeleted);
+  if (!entry) {
+    api.extRespond(req.requestId, { error: 'not-found' });
+    return;
+  }
+  if (!domainMatches(entry, req.domain)) {
+    api.extRespond(req.requestId, { error: 'domain-mismatch' });
+    return;
+  }
+  if (req.field === 'username') {
+    await copySecure(entry.username || '', t('toastCopiedDefault') || 'Kullanıcı adı', 30000);
+    api.extRespond(req.requestId, { ok: true });
+    return;
+  }
+  const requirePrompt = Boolean(entry.reprompt) || localStorage.getItem('fuin-ext-prompt-approval') === 'true';
+  if (requirePrompt) {
+    api.extRespond(req.requestId, { error: 'approval-required' });
+    return;
+  }
+  try {
+    const pw = await memDecrypt(entry.password);
+    await copySecure(pw, t('toastPwCopied') || 'Şifre kopyalandı', 30000);
+    api.extRespond(req.requestId, { ok: true });
+  } catch {
+    api.extRespond(req.requestId, { error: 'internal-error' });
+  }
 });
 
 function getExtExcludedDomains() {
@@ -569,13 +602,13 @@ api.onExtCheckSaveCandidateRequest?.(async (req) => {
         return;
       }
     }
-    // Bu domain için tek bir kayıt varsa güncelleme olarak öner
+    // Bu domain için tek bir kayıt varsa güncelleme olarak öner (ancak kasadaki gizli kullanıcı adını içerik betiğine sızdırma)
     if (matchingEntries.length === 1) {
       api.extRespond(req.requestId, {
         shouldPrompt: true,
         action: 'update',
         entryId: matchingEntries[0].id,
-        username: matchingEntries[0].username || ''
+        username: ''
       });
       return;
     }
@@ -638,7 +671,10 @@ api.onExtSaveCredentialRequest?.(async (req) => {
     api.extRespond(req.requestId, { error: 'locked' });
     return;
   }
-  if (!req.domain || !req.password || typeof req.password !== 'string') {
+  if (
+    !req.domain || typeof req.domain !== 'string' || req.domain.length > 253 ||
+    !req.password || typeof req.password !== 'string' || req.password.length > 1024
+  ) {
     api.extRespond(req.requestId, { error: 'invalid-credential' });
     return;
   }
@@ -647,12 +683,21 @@ api.onExtSaveCredentialRequest?.(async (req) => {
   entries = entries.filter(x => !((x.site === 'Yeni Hesap' || x.site === 'Bilinmeyen Site') && !x.username && !x.password));
 
   const now = Date.now();
-  const cleanUser = (req.username || '').trim();
+  const cleanUser = (req.username || '').trim().slice(0, 512);
   const reqUserNorm = cleanUser.toLowerCase();
 
-  let existing = req.updateEntryId
-    ? entries.find(x => x.id === req.updateEntryId && !x.isDeleted)
-    : null;
+  let existing = null;
+  if (req.updateEntryId) {
+    const byId = entries.find(x => x.id === req.updateEntryId && !x.isDeleted);
+    if (byId) {
+      // Güvenlik: updateEntryId verilse bile alan adı eşleşmesi (domainMatches) zorunludur
+      if (!domainMatches(byId, req.domain)) {
+        api.extRespond(req.requestId, { error: 'domain-mismatch' });
+        return;
+      }
+      existing = byId;
+    }
+  }
 
   if (!existing) {
     existing = entries.find(x =>
@@ -663,6 +708,10 @@ api.onExtSaveCredentialRequest?.(async (req) => {
   }
 
   if (existing) {
+    if (existing.reprompt) {
+      api.extRespond(req.requestId, { error: 'reprompt-protected' });
+      return;
+    }
     const oldPw = await memDecrypt(existing.password);
     if (cleanUser && !existing.username) existing.username = cleanUser;
     if (!existing.url && req.domain) {
@@ -1010,7 +1059,7 @@ async function openAddModal(id=null, force=false) {
   }
   const btnEye = document.getElementById('btnEyePw');
   if (btnEye) {
-    btnEye.textContent = '👁';
+    setEyeIconSvg(btnEye, false);
     btnEye.style.color = '';
   }
   document.getElementById('addOverlay').classList.add('open');
@@ -2074,6 +2123,37 @@ async function importCSV() {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────
+function setEyeIconSvg(btn, shown) {
+  if (!btn) return;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  if (shown) {
+    const p1 = document.createElementNS(ns, 'path');
+    p1.setAttribute('d', 'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24');
+    const l1 = document.createElementNS(ns, 'line');
+    l1.setAttribute('x1', '1'); l1.setAttribute('y1', '1');
+    l1.setAttribute('x2', '23'); l1.setAttribute('y2', '23');
+    svg.appendChild(p1);
+    svg.appendChild(l1);
+  } else {
+    const p1 = document.createElementNS(ns, 'path');
+    p1.setAttribute('d', 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z');
+    const c1 = document.createElementNS(ns, 'circle');
+    c1.setAttribute('cx', '12'); c1.setAttribute('cy', '12'); c1.setAttribute('r', '3');
+    svg.appendChild(p1);
+    svg.appendChild(c1);
+  }
+  btn.replaceChildren(svg);
+}
+
 function toggleEye(id) {
   const i = document.getElementById(id);
   if (!i) return;
@@ -2081,7 +2161,7 @@ function toggleEye(id) {
   i.type = isMasked ? 'text' : 'password';
   const btn = document.getElementById('btnEyePw');
   if (btn && id === 'f-pw') {
-    btn.textContent = isMasked ? '👁‍🗨' : '👁';
+    setEyeIconSvg(btn, isMasked);
     btn.style.color = isMasked ? 'var(--ac)' : '';
   }
 }

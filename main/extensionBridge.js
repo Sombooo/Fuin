@@ -294,6 +294,19 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
     }
   }
 
+  const rateBuckets = new Map();
+  function checkRateLimit(key, maxCount, windowMs) {
+    const now = Date.now();
+    const arr = (rateBuckets.get(key) || []).filter(ts => now - ts < windowMs);
+    if (arr.length >= maxCount) {
+      rateBuckets.set(key, arr);
+      return false;
+    }
+    arr.push(now);
+    rateBuckets.set(key, arr);
+    return true;
+  }
+
   async function handleExtMessage(socket, line) {
     let msg;
     try { msg = JSON.parse(line); } catch { return; }
@@ -301,6 +314,9 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
 
     if (!msg.token || typeof msg.token !== 'string' || !safeCompare(msg.token, token)) {
       return reply({ id: msg.id, error: 'unauthorized' });
+    }
+    if (!checkRateLimit('global', 80, 10000)) {
+      return reply({ id: msg.id, error: 'rate-limited' });
     }
     if (msg.type === 'open-app') {
       const win = getMainWindow();
@@ -321,32 +337,56 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
 
     try {
       if (msg.type === 'lookup') {
-        const matches = await relayToRenderer(getMainWindow, 'ext-lookup-request', { domain: msg.domain });
+        const domain = String(msg.domain || '').slice(0, 253);
+        const matches = await relayToRenderer(getMainWindow, 'ext-lookup-request', { domain });
         reply({ id: msg.id, matches });
       } else if (msg.type === 'reveal') {
-        const result = await relayToRenderer(getMainWindow, 'ext-reveal-request', { entryId: msg.entryId, domain: msg.domain });
+        const result = await relayToRenderer(getMainWindow, 'ext-reveal-request', {
+          entryId: String(msg.entryId || '').slice(0, 128),
+          domain: String(msg.domain || '').slice(0, 253)
+        });
+        reply({ id: msg.id, ...result });
+      } else if (msg.type === 'copy-secure') {
+        const result = await relayToRenderer(getMainWindow, 'ext-copy-secure-request', {
+          entryId: String(msg.entryId || '').slice(0, 128),
+          domain: String(msg.domain || '').slice(0, 253),
+          field: msg.field === 'username' ? 'username' : 'password'
+        });
         reply({ id: msg.id, ...result });
       } else if (msg.type === 'check-save-candidate') {
+        if (!checkRateLimit('check-save', 30, 60000)) {
+          return reply({ id: msg.id, error: 'rate-limited', shouldPrompt: false });
+        }
         const result = await relayToRenderer(getMainWindow, 'ext-check-save-candidate-request', {
-          domain: msg.domain,
-          username: msg.username,
-          password: msg.password
+          domain: String(msg.domain || '').slice(0, 253),
+          username: String(msg.username || '').slice(0, 512),
+          password: String(msg.password || '').slice(0, 1024)
         });
         reply({ id: msg.id, ...result });
       } else if (msg.type === 'save-credential') {
-        if (!msg.domain || !msg.password || typeof msg.password !== 'string') {
+        if (!checkRateLimit('save-cred', 10, 60000)) {
+          return reply({ id: msg.id, error: 'rate-limited' });
+        }
+        if (
+          !msg.domain || typeof msg.domain !== 'string' || msg.domain.length > 253 ||
+          !msg.password || typeof msg.password !== 'string' || msg.password.length > 1024 ||
+          (msg.username && String(msg.username).length > 512)
+        ) {
           return reply({ id: msg.id, error: 'invalid-credential' });
         }
         const result = await relayToRenderer(getMainWindow, 'ext-save-credential-request', {
-          domain: msg.domain,
-          username: msg.username || '',
+          domain: msg.domain.slice(0, 253),
+          username: String(msg.username || '').slice(0, 512),
           password: msg.password,
-          updateEntryId: msg.updateEntryId
+          updateEntryId: msg.updateEntryId ? String(msg.updateEntryId).slice(0, 128) : undefined
         });
         reply({ id: msg.id, ...result });
       } else if (msg.type === 'exclude-domain') {
+        if (!checkRateLimit('exclude-dom', 20, 60000)) {
+          return reply({ id: msg.id, error: 'rate-limited' });
+        }
         const result = await relayToRenderer(getMainWindow, 'ext-exclude-domain-request', {
-          domain: msg.domain || ''
+          domain: String(msg.domain || '').slice(0, 253)
         });
         reply({ id: msg.id, ...result });
       } else {

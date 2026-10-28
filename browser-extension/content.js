@@ -64,55 +64,49 @@
 
   function findUsernameField(pwField) {
     const form = pwField ? (pwField.closest('form') || document) : document;
-    const candidates = Array.from(form.querySelectorAll(
-      'input[type="text"], input[type="email"], input[type="tel"], input[autocomplete*="user"], input[autocomplete*="email"], input:not([type])'
-    )).filter(c => c !== pwField && isVisibleInput(c));
+    // Form veya document içindeki tüm olası kullanıcı adı inputlarını tara (gizli veya disabled olanlar da dahil)
+    const allInputs = Array.from(form.querySelectorAll(
+      'input[type="text"], input[type="email"], input[type="tel"], input[autocomplete*="user"], input[autocomplete*="email"], input:not([type]), input[name*="user"], input[name*="login"], input[name*="email"], input[id*="user"], input[id*="login"], input[id*="email"]'
+    )).filter(c => c !== pwField && c.type !== 'password' && c.type !== 'hidden' && c.type !== 'checkbox' && c.type !== 'radio' && c.type !== 'submit');
 
     const idNameRegex = /(?:user(?:name)?|login|email|identifier|auth|account|eposta|kullanici)/i;
 
-    // 1. Değeri dolu ve meta bilgisi kullanıcı adına uyan alanlar
-    const withVal = candidates.filter(c => c.value && c.value.trim().length > 0);
+    // 1. Değeri dolu ve meta bilgisi kullanıcı adına uyan alanlar (En yüksek doğruluk)
+    const withVal = allInputs.filter(c => c.value && c.value.trim().length > 0);
     const namedWithVal = withVal.find(c => {
-      const meta = ((c.name || '') + ' ' + (c.id || '') + ' ' + (c.getAttribute('autocomplete') || '') + ' ' + (c.placeholder || '')).toLowerCase();
+      const meta = ((c.name || '') + ' ' + (c.id || '') + ' ' + (c.getAttribute('autocomplete') || '') + ' ' + (c.placeholder || '') + ' ' + (c.getAttribute('aria-label') || '')).toLowerCase();
       return c.type === 'email' || idNameRegex.test(meta) || (c.value && c.value.includes('@'));
     });
     if (namedWithVal) return namedWithVal;
 
-    // 2. Değeri dolu herhangi bir alan (şifreden hemen önceki)
-    if (withVal.length > 0 && pwField) {
-      const all = Array.from(document.querySelectorAll('input'));
-      const pwIdx = all.indexOf(pwField);
-      let best = null, bestDist = Infinity;
-      for (const c of withVal) {
-        const idx = all.indexOf(c);
-        if (idx < pwIdx && (pwIdx - idx) < bestDist) {
-          bestDist = pwIdx - idx;
-          best = c;
+    // 2. Değeri dolu herhangi bir aday (şifreye en yakın olan)
+    if (withVal.length > 0) {
+      if (pwField) {
+        const all = Array.from(document.querySelectorAll('input'));
+        const pwIdx = all.indexOf(pwField);
+        let best = null, bestDist = Infinity;
+        for (const c of withVal) {
+          const idx = all.indexOf(c);
+          const dist = Math.abs(pwIdx - idx);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = c;
+          }
         }
+        if (best) return best;
       }
-      if (best) return best;
       return withVal[0];
     }
 
-    // 3. Şifreden önceki en yakın input
-    const all = Array.from(document.querySelectorAll('input'));
-    const pwIdx = pwField ? all.indexOf(pwField) : -1;
+    // 3. Değeri henüz dolu değilse (görünür alanlara öncelik ver)
+    const visibleCandidates = allInputs.filter(isVisibleInput);
+    const visibleNamed = visibleCandidates.find(c => {
+      const meta = ((c.name || '') + ' ' + (c.id || '') + ' ' + (c.getAttribute('autocomplete') || '') + ' ' + (c.placeholder || '') + ' ' + (c.getAttribute('aria-label') || '')).toLowerCase();
+      return c.type === 'email' || idNameRegex.test(meta);
+    });
+    if (visibleNamed) return visibleNamed;
 
-    let bestBefore = null, bestBeforeDist = Infinity;
-    let bestAny = null, bestAnyDist = Infinity;
-    for (const c of candidates) {
-      const idx = all.indexOf(c);
-      const dist = Math.abs(pwIdx - idx);
-      if (pwIdx >= 0 && idx < pwIdx && (pwIdx - idx) < bestBeforeDist) {
-        bestBeforeDist = pwIdx - idx;
-        bestBefore = c;
-      }
-      if (dist < bestAnyDist) {
-        bestAnyDist = dist;
-        bestAny = c;
-      }
-    }
-    return bestBefore || bestAny || candidates[0] || null;
+    return visibleCandidates[0] || allInputs[0] || null;
   }
 
   function formatRevealError(err) {
@@ -449,9 +443,15 @@
     const userField = filledPw ? findUsernameField(filledPw) : null;
     if (userField && userField.value && userField.value.trim()) {
       username = userField.value.trim();
-    } else if (_lastTypedUsername) {
+    }
+    if (!username && _lastTypedUsername) {
       username = _lastTypedUsername;
-    } else {
+    }
+    if (!username) {
+      const anyEmailInput = Array.from(document.querySelectorAll('input')).find(i => i.value && (i.value.includes('@') || i.type === 'email'));
+      if (anyEmailInput) username = anyEmailInput.value.trim();
+    }
+    if (!username) {
       const standalone = findStandaloneUsernameFields()[0];
       if (standalone && standalone.value && standalone.value.trim()) {
         username = standalone.value.trim();
@@ -738,6 +738,7 @@
       try {
         const resp = await chrome.runtime.sendMessage({
           type: 'fuin-save-credential',
+          domain: candidate.domain || location.hostname,
           username: finalUsername,
           password: finalPassword,
           updateEntryId: result.entryId

@@ -589,8 +589,31 @@ api.onExtSaveCredentialRequest?.(async (req) => {
   };
   entries.unshift(newEntry);
   await persist();
-  renderList();
+
+  curView = 'all';
+  const searchInp = document.getElementById('searchInp');
+  if (searchInp) searchInp.value = '';
+  document.querySelectorAll('.cat-item').forEach(el => el.classList.remove('active'));
+  document.querySelector('.cat-item[data-view="all"]')?.classList.add('active');
+  const viewTitle = document.getElementById('viewTitle');
+  if (viewTitle) viewTitle.textContent = t('viewTitleAll') || 'Tüm Parolalar';
+
+  await renderList();
   toast(`${t('toastSaved') || 'Yeni hesap kaydedildi'}: ${site}${newEntry.username ? ' (' + newEntry.username + ')' : ''}`);
+
+  setTimeout(() => {
+    const cardEl = document.querySelector(`.pw-card[data-id="${newEntry.id}"]`);
+    if (cardEl) {
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      cardEl.style.borderColor = 'var(--ac)';
+      cardEl.style.boxShadow = '0 0 12px rgba(90, 154, 110, 0.4)';
+      setTimeout(() => {
+        cardEl.style.borderColor = '';
+        cardEl.style.boxShadow = '';
+      }, 2500);
+    }
+  }, 80);
+
   api.extRespond(req.requestId, { ok: true, action: 'created', id: newEntry.id });
 });
 
@@ -772,7 +795,7 @@ async function renderList() {
   const dotClass = s => s>=3?'strong':s>=2?'medium':'weak';
 
   wrap.innerHTML = list.map((e,i) => `
-    <div class="pw-card" style="animation-delay:${i*15}ms">
+    <div class="pw-card" data-id="${esc(e.id)}" style="animation-delay:${i*15}ms">
       <div class="pw-icon">${esc(e.site.slice(0,2).toUpperCase())}</div>
       <div class="pw-info">
         <div class="pw-site">${e.fav ? `<span class="fav-star" title="${t('navFav') || 'Favori'}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}<span class="pw-site-name">${esc(e.site)}</span>${e.reprompt ? `<span class="reprompt-badge" title="${esc(t('badgeReprompt'))}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>` : ''}${e.url && /^http:\/\//i.test(e.url.trim()) ? `<span class="insecure-http-badge" title="${esc(t('warnInsecureHttp'))}">HTTP</span>` : ''}</div>
@@ -2095,8 +2118,7 @@ document.addEventListener('click', (e) => {
   if (!btn) {
     const card = e.target.closest('.pw-card');
     if (card) {
-      const editBtn = card.querySelector('button[data-action="edit-pw"]');
-      const val = editBtn ? editBtn.getAttribute('data-val') : null;
+      const val = card.getAttribute('data-id') || card.querySelector('button[data-action="edit-pw"]')?.getAttribute('data-val');
       if (val) openAddModal(val);
     }
     return;

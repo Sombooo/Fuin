@@ -59,14 +59,51 @@
       const v = await window.kekkai?.getAppVersion?.();
       if (v) return v;
     } catch {}
-    return '1.0.0-beta.5';
+    return '1.0.0-beta.6';
+  }
+
+  const GITHUB_RELEASES_URL = 'https://api.github.com/repos/Sombooo/Fuin/releases';
+  const UPDATE_FETCH_TIMEOUT_MS = 8000;
+
+  function isTrustedFuinReleaseUrl(rawUrl) {
+    if (typeof rawUrl !== 'string' || !rawUrl.trim()) return false;
+    try {
+      const parsed = new URL(rawUrl.trim());
+      return (
+        parsed.protocol === 'https:' &&
+        parsed.hostname === 'github.com' &&
+        parsed.pathname.startsWith('/Sombooo/Fuin/')
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  async function fetchReleasesWithTimeout() {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => {
+      try { controller.abort(); } catch {}
+    }, UPDATE_FETCH_TIMEOUT_MS) : null;
+    try {
+      const res = await fetch(GITHUB_RELEASES_URL, {
+        cache: 'no-store',
+        redirect: 'error',
+        headers: { Accept: 'application/vnd.github+json' },
+        signal: controller ? controller.signal : undefined
+      });
+      if (!res.ok) throw new Error('API error (' + res.status + ')');
+      if (res.url && !res.url.startsWith('https://api.github.com/')) {
+        throw new Error('Untrusted API response origin');
+      }
+      return await res.json();
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   async function silentCheckForUpdates() {
     try {
-      const res = await fetch('https://api.github.com/repos/Sombooo/Fuin/releases', { cache: 'no-store' });
-      if (!res.ok) return;
-      const releases = await res.json();
+      const releases = await fetchReleasesWithTimeout();
       if (!Array.isArray(releases) || releases.length === 0) return;
       const latestRelease = releases.find(r => !r.draft) || releases[0];
       const latestVersion = latestRelease?.tag_name;
@@ -95,9 +132,7 @@
         subEl.textContent = `${t('sysUpdateCheckSub') || "Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin."} (Mevcut: v${normalizeVersion(currentVersion)})`;
       }
 
-      const res = await fetch('https://api.github.com/repos/Sombooo/Fuin/releases', { cache: 'no-store' });
-      if (!res.ok) throw new Error('API error (' + res.status + ')');
-      const releases = await res.json();
+      const releases = await fetchReleasesWithTimeout();
       if (!Array.isArray(releases) || releases.length === 0) {
         msg.textContent = 'Henüz yayınlanmış bir sürüm bulunamadı.';
         return;
@@ -112,13 +147,14 @@
         vSpan.style.color = 'var(--green)';
         vSpan.textContent = `Yeni sürüm mevcut: ${latestVersion}`;
         msg.appendChild(vSpan);
-        // Güvenlik: URL'yi doğrula — sadece github.com domaininden kabul et
-        if (latestRelease.html_url && latestRelease.html_url.startsWith('https://github.com/')) {
+        // Güvenlik: URL'yi doğrula — yalnızca resmi Sombooo/Fuin GitHub deposunu kabul et
+        if (isTrustedFuinReleaseUrl(latestRelease.html_url)) {
+          const safeHref = new URL(latestRelease.html_url.trim()).href;
           const link = document.createElement('a');
           link.href = '#';
           link.textContent = 'İndir';
           link.style.cssText = 'color:var(--text);text-decoration:underline;margin-left:8px;cursor:pointer';
-          link.addEventListener('click', (ev) => { ev.preventDefault(); window.kekkai?.openUrl(latestRelease.html_url); });
+          link.addEventListener('click', (ev) => { ev.preventDefault(); window.kekkai?.openUrl(safeHref); });
           msg.appendChild(link);
         }
       } else {

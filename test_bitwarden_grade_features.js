@@ -238,6 +238,45 @@ test('6. Desktop index.html and style.css contain reprompt and history UI struct
   assert.ok(css.includes('.pw-history-item'), 'style.css must have .pw-history-item');
 });
 
+// ── 7. API, Reprompt, XSS & Pipe Security Regression Guard ─────────
+test('7. API boundaries, TOTP reprompt, Emergency Kit escaping, and extension pipe hardening', () => {
+  const appJs = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
+  const updateMgr = fs.readFileSync(path.join(__dirname, 'renderer', 'modules', 'updateManager.js'), 'utf8');
+  const healthScan = fs.readFileSync(path.join(__dirname, 'renderer', 'modules', 'healthScanner.js'), 'utf8');
+  const extBridge = fs.readFileSync(path.join(__dirname, 'main', 'extensionBridge.js'), 'utf8');
+  const nativeHost = fs.readFileSync(path.join(__dirname, 'native-host', 'host.js'), 'utf8');
+
+  // Emergency Kit XSS escaping check
+  const match = appJs.match(/function generateEmergencyKitHtml\([^)]*\)\s*\{[\s\S]*?\n\}/);
+  const fn = new Function('recoveryKey', 'dateStr', `
+    const document = { documentElement: { lang: 'tr' } };
+    ${match[0]}
+    return generateEmergencyKitHtml(recoveryKey, dateStr);
+  `);
+  const xssHtml = fn('<img src=x onerror=alert(1)>', '<script>evil()</script>');
+  assert.ok(!xssHtml.includes('<img src=x'), 'Emergency Kit must escape HTML tags in recoveryKey');
+  assert.ok(!xssHtml.includes('<script>evil()'), 'Emergency Kit must escape HTML tags in dateStr');
+
+  // TOTP reprompt & secure generator copy check
+  assert.ok(
+    /async function showTOTP\(id,\s*force\s*=\s*false\)[\s\S]{0,220}requireReprompt/.test(appJs),
+    'showTOTP must enforce requireReprompt on reprompt-protected entries'
+  );
+  assert.ok(!appJs.includes('copyToClipboard('), 'app.js must use copySecure instead of non-existent copyToClipboard');
+
+  // External API hardening (GitHub Releases & HIBP k-Anonymity)
+  assert.ok(updateMgr.includes("redirect: 'error'"), 'updateManager must disallow HTTP redirects');
+  assert.ok(updateMgr.includes('AbortController'), 'updateManager must enforce fetch timeout');
+  assert.ok(updateMgr.includes("parsed.hostname === 'github.com'") && updateMgr.includes("parsed.pathname.startsWith('/Sombooo/Fuin/')"), 'updateManager must strictly validate Sombooo/Fuin release URLs');
+  assert.ok(healthScan.includes("redirect: 'error'"), 'healthScanner must disallow HTTP redirects');
+  assert.ok(healthScan.includes('HIBP_MAX_RESPONSE_CHARS'), 'healthScanner must bound HIBP response size');
+
+  // Extension bridge & native host pipe anti-squatting parity
+  assert.ok(extBridge.includes('fuin-win32-pipe-v1'), 'extensionBridge must derive per-token HMAC Windows pipe name');
+  assert.ok(nativeHost.includes('fuin-win32-pipe-v1'), 'native-host must derive matching HMAC Windows pipe name');
+  assert.ok(extBridge.includes('getKnownExtensionIds(app)'), 'autoInstallNativeMessagingHosts must pass app to getKnownExtensionIds');
+});
+
 console.log('═'.repeat(75));
 console.log(`TOTAL PASSES: ${passes}`);
 console.log(`TOTAL FAILURES: ${failures}`);

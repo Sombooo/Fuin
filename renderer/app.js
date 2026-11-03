@@ -1179,8 +1179,12 @@ function toggle2FA() {
     document.getElementById('f-2fa-toggle').checked ? 'block' : 'none';
 }
 
-async function showTOTP(id) {
+async function showTOTP(id, force = false) {
   const e=entries.find(x=>x.id===id); if(!e?.totp)return;
+  if (e.reprompt && !force) {
+    requireReprompt(id, () => showTOTP(id, true));
+    return;
+  }
   document.getElementById('totpSiteName').textContent=e.site.toUpperCase();
   document.getElementById('totpOverlay').classList.add('open');
   closeTOTPTimer();
@@ -1398,6 +1402,7 @@ async function openPwHistory() {
 
 // ── EMERGENCY KIT (.html) ──────────────────────────────────────────
 function generateEmergencyKitHtml(recoveryKey, dateStr) {
+  const safeEsc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
   const isEn = document.documentElement.lang === 'en';
   const title = isEn ? 'FUIN EMERGENCY KIT' : 'FUIN ACİL DURUM KİTİ';
   const subtitle = isEn 
@@ -1607,14 +1612,14 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
       <p>${subtitle}</p>
     </div>
     <div class="meta-tag">
-      ${isEn ? 'Exported' : 'Tarih'}: ${dateStr}
+      ${isEn ? 'Exported' : 'Tarih'}: ${safeEsc(dateStr)}
     </div>
   </div>
 
   <div class="kit-card">
     <h2>🔑 ${recoveryTitle}</h2>
     <p>${recoveryDesc}</p>
-    <div class="key-box">${recoveryKey || '________________________________________'}</div>
+    <div class="key-box">${safeEsc(recoveryKey || '________________________________________')}</div>
   </div>
 
   <div class="kit-card">
@@ -1736,20 +1741,32 @@ async function checkPwned(pw) {
   if (window.FuinHealthScanner && typeof window.FuinHealthScanner.checkPwned === 'function') {
     return window.FuinHealthScanner.checkPwned(pw, sha1hex);
   }
-  const h=await sha1hex(pw);
-  const pre=h.slice(0,5),suf=h.slice(5);
+  const h = String(await sha1hex(pw)).toUpperCase();
+  const pre = h.slice(0, 5), suf = h.slice(5);
+  if (!/^[0-9A-F]{5}$/.test(pre)) return -1;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => { try { controller.abort(); } catch {} }, 8000) : null;
   try {
     const r = await fetch(`https://api.pwnedpasswords.com/range/${pre}`, {
       cache: 'no-store',
-      headers: { 'Add-Padding': 'true' }
+      redirect: 'error',
+      headers: { 'Add-Padding': 'true' },
+      signal: controller ? controller.signal : undefined
     });
-    if(!r.ok)return -1;
-    for(const line of (await r.text()).split('\n')){
-      const [hh,c]=line.trim().split(':');
-      if(hh===suf)return parseInt(c,10);
+    if (!r.ok) return -1;
+    if (r.url && !r.url.startsWith('https://api.pwnedpasswords.com/')) return -1;
+    const text = await r.text();
+    if (typeof text !== 'string' || text.length > 262144) return -1;
+    for (const line of text.split('\n')) {
+      const [hh, c] = line.trim().split(':');
+      if (hh === suf) {
+        const parsed = parseInt(c, 10);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : -1;
+      }
     }
     return 0;
   } catch { return -1; }
+  finally { if (timer) clearTimeout(timer); }
 }
 
 async function runHIBPScan() {
@@ -1760,6 +1777,7 @@ async function runHIBPScan() {
   el.innerHTML=`<div style="margin-bottom:14px"><div class="scan-bar-wrap"><div class="scan-bar" id="scanBar" style="width:0%"></div></div><div class="scan-status" id="scanSt">0 / ${entries.length}</div></div>`;
   const breached=[],errors=[];
   for(let i=0;i<entries.length;i++){
+    if (!master || !sessionKey) return;
     const e=entries[i];
     const sb=document.getElementById('scanBar');
     const ss=document.getElementById('scanSt');
@@ -2299,7 +2317,7 @@ function isNewerVersion(latest, current) {
 }
 
 async function getLocalAppVersion() {
-  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.5';
+  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.6';
 }
 
 async function silentCheckForUpdates() {
@@ -2482,11 +2500,10 @@ function initAppListeners() {
     btn.classList.add('spin-anim');
     generateAdvancedPw();
   });
-  document.getElementById('btnGenAdvCopy')?.addEventListener('click', () => {
+  document.getElementById('btnGenAdvCopy')?.addEventListener('click', async () => {
     const pw = document.getElementById('genPwResult').value;
     if (pw) {
-      window.kekkai?.copyToClipboard(pw);
-      toast(t('toastPwCopied') || 'Kopyalandı');
+      await copySecure(pw, t('toastPwCopied') || 'Kopyalandı', 30000);
     }
   });
   document.getElementById('genLen')?.addEventListener('input', (e) => {

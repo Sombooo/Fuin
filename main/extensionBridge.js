@@ -16,7 +16,11 @@ function loadSavedChromeOrigins(app) {
     const f = getChromeOriginsFilePath(app);
     if (f && fs.existsSync(f)) {
       const data = JSON.parse(fs.readFileSync(f, 'utf8'));
-      if (Array.isArray(data)) return data.filter(s => typeof s === 'string' && s.startsWith('chrome-extension://'));
+      if (Array.isArray(data)) {
+        return data
+          .filter(s => typeof s === 'string' && /^chrome-extension:\/\/[a-p]{32}\/$/.test(s))
+          .slice(0, 16);
+      }
     }
   } catch {}
   return [];
@@ -27,7 +31,7 @@ function saveChromeOrigins(app, origins) {
     const f = getChromeOriginsFilePath(app);
     if (f) {
       fs.mkdirSync(path.dirname(f), { recursive: true });
-      fs.writeFileSync(f, JSON.stringify(origins, null, 2), { mode: 0o600, encoding: 'utf8' });
+      fs.writeFileSync(f, JSON.stringify(origins.slice(0, 16), null, 2), { mode: 0o600, encoding: 'utf8' });
     }
   } catch {}
 }
@@ -62,6 +66,7 @@ function registerChromeOrigin(app, extensionId) {
   const origin = `chrome-extension://${cleanId}/`;
   const saved = loadSavedChromeOrigins(app);
   if (!saved.includes(origin)) {
+    if (saved.length >= 16) saved.shift();
     saved.push(origin);
     saveChromeOrigins(app, saved);
   }
@@ -74,10 +79,17 @@ function getExtTokenPath(app) {
   return path.join(app.getPath('userData'), 'fuin.ext-token');
 }
 
+function deriveWin32PipePath(token) {
+  const pipeTag = crypto.createHmac('sha256', String(token)).update('fuin-win32-pipe-v1').digest('hex').slice(0, 24);
+  return `\\\\.\\pipe\\fuin-ext-${pipeTag}`;
+}
+
 function getExtSocketPath(app) {
-  return process.platform === 'win32'
-    ? '\\\\.\\pipe\\fuin-ext-bridge'
-    : path.join(app.getPath('userData'), 'fuin-ext.sock');
+  if (process.platform === 'win32') {
+    const token = getOrCreateExtToken(app);
+    return deriveWin32PipePath(token);
+  }
+  return path.join(app.getPath('userData'), 'fuin-ext.sock');
 }
 
 function getNativeHostJsPath(app) {
@@ -132,7 +144,7 @@ function registerWindowsRegistryKey(subKey, manifestPath) {
 }
 
 function autoInstallNativeMessagingHosts(app, knownExtensionIds) {
-  const ids = knownExtensionIds || getKnownExtensionIds();
+  const ids = knownExtensionIds || getKnownExtensionIds(app);
   const home = app.getPath('home');
   const userData = app.getPath('userData');
   const results = [];
@@ -230,7 +242,8 @@ function ensureSocketAlive() {
 function relayToRenderer(getMainWindow, channel, payload, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const mainWindow = getMainWindow();
-    if (!mainWindow) return reject(new Error('no-window'));
+    if (!mainWindow || mainWindow.isDestroyed?.()) return reject(new Error('no-window'));
+    if (pendingExtRequests.size >= 64) return reject(new Error('busy'));
     const requestId = `ext-${++extRequestCounter}-${Date.now()}`;
     const timer = setTimeout(() => {
       pendingExtRequests.delete(requestId);
@@ -393,7 +406,8 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
         reply({ id: msg.id, error: 'unknown-type' });
       }
     } catch (e) {
-      reply({ id: msg.id, error: e.message === 'timeout' ? 'timeout' : 'internal-error' });
+      const code = (e.message === 'timeout' || e.message === 'busy') ? e.message : 'internal-error';
+      reply({ id: msg.id, error: code });
     }
   }
 }
@@ -403,9 +417,20 @@ function stopExtensionBridge() {
     clearInterval(socketWatchdog);
     socketWatchdog = null;
   }
+  for (const [, pending] of pendingExtRequests.entries()) {
+    clearTimeout(pending.timer);
+    try { pending.reject(new Error('stopped')); } catch {}
+  }
+  pendingExtRequests.clear();
   if (extServer) {
     try { extServer.close(); } catch {}
     extServer = null;
+  }
+  if (process.platform !== 'win32' && lastBridgeOptions?.app) {
+    try {
+      const sock = getExtSocketPath(lastBridgeOptions.app);
+      if (sock && fs.existsSync(sock)) fs.unlinkSync(sock);
+    } catch {}
   }
 }
 

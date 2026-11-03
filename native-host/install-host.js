@@ -53,7 +53,7 @@ function ensureWrapper() {
   }
   const shPath = path.join(__dirname, 'host.sh');
   fs.writeFileSync(shPath, `#!/bin/sh\nexec "${nodePath}" "${HOST_JS}" "$@"\n`);
-  fs.chmodSync(shPath, 0o755);
+  fs.chmodSync(shPath, 0o700);
   console.log('  (node yolu sabitlendi:', nodePath, ')');
   return shPath;
 }
@@ -74,7 +74,12 @@ function writeManifest(targetPath, allowedKey, allowedValue) {
 const home = os.homedir();
 
 if (chromeExtId) {
-  const origin = `chrome-extension://${chromeExtId}/`;
+  const cleanChromeId = String(chromeExtId).trim().toLowerCase();
+  if (!/^[a-p]{32}$/.test(cleanChromeId)) {
+    console.error('Hata: Geçersiz Chrome eklenti kimliği (32 adet a-p küçük harf bekleniyor).');
+    process.exit(1);
+  }
+  const origin = `chrome-extension://${cleanChromeId}/`;
   const targets = {
     darwin: path.join(home, 'Library/Application Support/Google/Chrome/NativeMessagingHosts', `${HOST_NAME}.json`),
     linux:  path.join(home, '.config/google-chrome/NativeMessagingHosts', `${HOST_NAME}.json`),
@@ -102,6 +107,11 @@ Windows: aşağıdaki registry anahtarını elle (veya bir .reg dosyasıyla) ekl
 }
 
 if (firefoxExtId) {
+  const cleanFirefoxId = String(firefoxExtId).trim();
+  if (!/^[a-zA-Z0-9._@-]{3,128}$/.test(cleanFirefoxId)) {
+    console.error('Hata: Geçersiz Firefox eklenti kimliği.');
+    process.exit(1);
+  }
   // Zen Browser Firefox çekirdekli ama bilinen bir hatası var: native
   // messaging host manifestini kendi profil klasörü yerine Mozilla'nın
   // klasöründen okuyor (bkz. zen-browser/desktop #10622, #13214).
@@ -118,7 +128,7 @@ if (firefoxExtId) {
   };
   if (process.platform === 'win32') {
     const manifestPath = path.join(__dirname, `${HOST_NAME}-firefox.json`);
-    writeManifest(manifestPath, 'allowed_extensions', firefoxExtId);
+    writeManifest(manifestPath, 'allowed_extensions', cleanFirefoxId);
     console.log(`
 Windows (Zen/Firefox): aşağıdaki registry anahtarını ekle:
   [HKEY_CURRENT_USER\\Software\\Mozilla\\NativeMessagingHosts\\${HOST_NAME}]
@@ -127,7 +137,7 @@ Windows (Zen/Firefox): aşağıdaki registry anahtarını ekle:
 `);
   } else {
     for (const t of (targetsByPlatform[process.platform] || [])) {
-      writeManifest(t, 'allowed_extensions', firefoxExtId);
+      writeManifest(t, 'allowed_extensions', cleanFirefoxId);
     }
   }
 }

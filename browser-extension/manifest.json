@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fuin — Password Autofill",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Autofill credentials from your local Fuin password manager.",
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self';"

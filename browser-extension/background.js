@@ -39,6 +39,48 @@ function askFuin(payload) {
   });
 }
 
+function sendTabMessage(tabId, message) {
+  if (!tabId) return Promise.resolve(null);
+  if (typeof browser !== 'undefined' && browser.tabs && browser.tabs.sendMessage) {
+    return browser.tabs.sendMessage(tabId, message).catch(() => null);
+  }
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, message, (resp) => {
+        if (chrome.runtime?.lastError) {}
+        resolve(resp);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function getActiveTab() {
+  if (typeof browser !== 'undefined' && browser.tabs && browser.tabs.query) {
+    try {
+      const tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+      if (tabs && tabs[0]) return tabs[0];
+      const fallback = await browser.tabs.query({ active: true, currentWindow: true });
+      return fallback?.[0] || null;
+    } catch {
+      return null;
+    }
+  }
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+        if (tabs?.[0]) return resolve(tabs[0]);
+        chrome.tabs.query({ active: true, currentWindow: true }, (fallbackTabs) => {
+          resolve(fallbackTabs?.[0] || null);
+        });
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
 let pendingReveal = null;
 const pendingSaveByTab = new Map(); // tabId -> { domain, username, password, action, entryId, timestamp }
 const dismissedFingerprints = new Map(); // key -> timestamp (session suppression for "Not Now" & just-saved)
@@ -140,11 +182,9 @@ function clearPendingForTab(tabId, notifyClose = false) {
   if (chrome.action?.setBadgeText) {
     try { chrome.action.setBadgeText({ text: '', tabId }); } catch {}
   }
-  if (notifyClose && chrome.tabs?.sendMessage) {
+  if (notifyClose) {
     try {
-      chrome.tabs.sendMessage(tabId, { type: 'fuin-close-save-prompt' }, () => {
-        if (chrome.runtime?.lastError) {}
-      });
+      sendTabMessage(tabId, { type: 'fuin-close-save-prompt' });
     } catch {}
   }
 }
@@ -212,12 +252,10 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
             Date.now() - pending.timestamp < PENDING_SAVE_TTL_MS &&
             !isCredentialDismissed(pending.domain, pending.username, pending.password)
           ) {
-            chrome.tabs.sendMessage(tabId, {
+            sendTabMessage(tabId, {
               type: 'fuin-trigger-save-prompt',
               candidate: pending,
               result: { action: pending.action, entryId: pending.entryId, shouldPrompt: true }
-            }, () => {
-              if (chrome.runtime?.lastError) {}
             });
           } else {
             clearPendingForTab(tabId, false);
@@ -240,25 +278,12 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
 }
 
 if (typeof chrome !== 'undefined' && chrome.commands?.onCommand) {
-  chrome.commands.onCommand.addListener((command) => {
+  chrome.commands.onCommand.addListener(async (command) => {
     if (command === 'autofill-credential') {
-      const api = typeof browser !== 'undefined' && browser.tabs ? browser : chrome;
-      api.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-        const tab = tabs?.[0];
-        if (tab?.id) {
-          api.tabs.sendMessage(tab.id, { type: 'fuin-trigger-fill' }, () => {
-            if (chrome.runtime?.lastError) { /* tab might not have content script injected */ }
-          });
-        } else {
-          api.tabs.query({ active: true, currentWindow: true }, (fallbackTabs) => {
-            if (fallbackTabs?.[0]?.id) {
-              api.tabs.sendMessage(fallbackTabs[0].id, { type: 'fuin-trigger-fill' }, () => {
-                if (chrome.runtime?.lastError) {}
-              });
-            }
-          });
-        }
-      });
+      const tab = await getActiveTab();
+      if (tab?.id) {
+        await sendTabMessage(tab.id, { type: 'fuin-trigger-fill' });
+      }
     }
   });
 }
@@ -436,9 +461,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               chrome.action.setBadgeBackgroundColor({ color: '#5a9a6e', tabId });
             } catch {}
           }
-          chrome.tabs.sendMessage(tabId, { type: 'fuin-trigger-save-prompt', candidate: item, result: res }, () => {
-            if (chrome.runtime?.lastError) {}
-          });
+          sendTabMessage(tabId, { type: 'fuin-trigger-save-prompt', candidate: item, result: res });
         }
       }
       sendResponse(res);

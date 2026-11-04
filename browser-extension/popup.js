@@ -63,8 +63,38 @@ function showToast(text) {
 }
 
 async function currentTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
+  if (typeof browser !== 'undefined' && browser.tabs && browser.tabs.query) {
+    try {
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      if (tabs && tabs[0]) return tabs[0];
+    } catch {}
+  }
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        resolve(tabs?.[0]);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+function sendTabMsg(tabId, message) {
+  if (!tabId) return Promise.resolve(null);
+  if (typeof browser !== 'undefined' && browser.tabs && browser.tabs.sendMessage) {
+    return browser.tabs.sendMessage(tabId, message).catch(() => null);
+  }
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, message, (resp) => {
+        if (chrome.runtime?.lastError) {}
+        resolve(resp);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 async function checkStatus() {
@@ -387,7 +417,7 @@ function renderMatches(matches, container, tab) {
     btnFill.onclick = async (e) => {
       if (!e.isTrusted) return;
       if (tab?.id) {
-        await chrome.tabs.sendMessage(tab.id, { type: 'fuin-trigger-fill', entryId: m.id });
+        await sendTabMsg(tab.id, { type: 'fuin-trigger-fill', entryId: m.id });
         window.close();
       }
     };
@@ -470,7 +500,7 @@ document.getElementById('fillBtn').addEventListener('click', async (e) => {
   const tab = await currentTab();
   if (!tab || !tab.id) return;
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'fuin-trigger-fill' });
+    await sendTabMsg(tab.id, { type: 'fuin-trigger-fill' });
   } catch {}
   window.close();
 });

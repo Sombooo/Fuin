@@ -59,7 +59,7 @@
       const v = await window.kekkai?.getAppVersion?.();
       if (v) return v;
     } catch {}
-    return '1.0.0-beta.6';
+    return '1.0.0-beta.7';
   }
 
   const GITHUB_RELEASES_URL = 'https://api.github.com/repos/Sombooo/Fuin/releases';
@@ -76,6 +76,57 @@
       );
     } catch {
       return false;
+    }
+  }
+
+  function isTrustedFuinDownloadUrl(rawUrl) {
+    if (typeof rawUrl !== 'string' || !rawUrl.trim()) return false;
+    try {
+      const parsed = new URL(rawUrl.trim());
+      return (
+        parsed.protocol === 'https:' &&
+        parsed.hostname === 'github.com' &&
+        parsed.pathname.startsWith('/Sombooo/Fuin/releases/download/')
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function findPlatformAsset(release) {
+    if (!release || !Array.isArray(release.assets)) return null;
+    const platform = window.kekkai?.platform || 'darwin';
+    let matchers = [];
+    if (platform === 'darwin') {
+      matchers = [
+        a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.dmg'),
+        a => typeof a.name === 'string' && (a.name.toLowerCase().endsWith('-mac.zip') || a.name.toLowerCase().endsWith('.zip'))
+      ];
+    } else if (platform === 'win32') {
+      matchers = [
+        a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.exe')
+      ];
+    } else {
+      matchers = [
+        a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.appimage'),
+        a => typeof a.name === 'string' && a.name.toLowerCase().endsWith('.deb')
+      ];
+    }
+
+    for (const matcher of matchers) {
+      const found = release.assets.find(matcher);
+      if (found && isTrustedFuinDownloadUrl(found.browser_download_url)) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  function isAutoUpdateCheckEnabled() {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem('fuin-auto-update-check') !== 'false';
+    } catch {
+      return true;
     }
   }
 
@@ -102,6 +153,7 @@
   }
 
   async function silentCheckForUpdates() {
+    if (!isAutoUpdateCheckEnabled()) return;
     try {
       const releases = await fetchReleasesWithTimeout();
       if (!Array.isArray(releases) || releases.length === 0) return;
@@ -145,15 +197,74 @@
         msg.textContent = '';
         const vSpan = document.createElement('span');
         vSpan.style.color = 'var(--green)';
+        vSpan.style.fontWeight = '600';
         vSpan.textContent = `Yeni sürüm mevcut: ${latestVersion}`;
         msg.appendChild(vSpan);
+
+        const asset = findPlatformAsset(latestRelease);
+        if (asset && window.kekkai?.downloadUpdate) {
+          const dlBtn = document.createElement('button');
+          dlBtn.className = 'btn-io pri';
+          dlBtn.style.cssText = 'margin-left:10px;padding:4px 10px;font-size:11px;cursor:pointer;';
+          dlBtn.textContent = t('sysUpdateDownloadBtn') || 'Uygulama İçinden İndir & Güncelle';
+
+          const progressWrap = document.createElement('div');
+          progressWrap.style.cssText = 'display:none;margin-top:8px;width:100%;max-width:320px;';
+          progressWrap.innerHTML = `
+            <div style="font-size:11px;color:var(--mu);margin-bottom:4px;" class="dl-status-text">${t('sysUpdateDownloading') || 'İndiriliyor'}...</div>
+            <div class="update-progress-wrap"><div class="update-progress-bar" style="width:0%;"></div></div>
+          `;
+
+          let unregProgress = null;
+          dlBtn.addEventListener('click', async () => {
+            dlBtn.disabled = true;
+            progressWrap.style.display = 'block';
+            const statusText = progressWrap.querySelector('.dl-status-text');
+            const pBar = progressWrap.querySelector('.update-progress-bar');
+
+            if (window.kekkai?.onUpdateDownloadProgress) {
+              unregProgress = window.kekkai.onUpdateDownloadProgress(({ percent, received, total }) => {
+                pBar.style.width = Math.min(100, Math.max(0, percent)) + '%';
+                const recMB = (received / 1048576).toFixed(1);
+                const totMB = total > 0 ? (total / 1048576).toFixed(1) : '?';
+                statusText.textContent = `${t('sysUpdateDownloading') || 'İndiriliyor'}: %${percent} (${recMB} MB / ${totMB} MB)`;
+              });
+            }
+
+            try {
+              const res = await window.kekkai.downloadUpdate({
+                url: asset.browser_download_url,
+                filename: asset.name
+              });
+              if (res && res.filePath) {
+                statusText.textContent = t('sysUpdateDownloaded') || 'İndirme tamamlandı! Yükleyici hazır.';
+                pBar.style.width = '100%';
+                dlBtn.className = 'btn-io pri';
+                dlBtn.textContent = t('sysUpdateInstallBtn') || 'Kurulumu Başlat';
+                dlBtn.disabled = false;
+                dlBtn.onclick = async () => {
+                  await window.kekkai?.installUpdate?.({ filePath: res.filePath });
+                };
+              }
+            } catch (err) {
+              statusText.textContent = `${t('sysUpdateFailed') || 'İndirme başarısız oldu'}: ${err.message || 'Hata'}`;
+              dlBtn.disabled = false;
+            } finally {
+              if (unregProgress) unregProgress();
+            }
+          });
+
+          msg.appendChild(dlBtn);
+          msg.appendChild(progressWrap);
+        }
+
         // Güvenlik: URL'yi doğrula — yalnızca resmi Sombooo/Fuin GitHub deposunu kabul et
         if (isTrustedFuinReleaseUrl(latestRelease.html_url)) {
           const safeHref = new URL(latestRelease.html_url.trim()).href;
           const link = document.createElement('a');
           link.href = '#';
-          link.textContent = 'İndir';
-          link.style.cssText = 'color:var(--text);text-decoration:underline;margin-left:8px;cursor:pointer';
+          link.textContent = t('sysUpdateViewRelease') || 'GitHub Sürüm Notları';
+          link.style.cssText = 'color:var(--mu);text-decoration:underline;margin-left:8px;font-size:11px;cursor:pointer;';
           link.addEventListener('click', (ev) => { ev.preventDefault(); window.kekkai?.openUrl(safeHref); });
           msg.appendChild(link);
         }
@@ -174,6 +285,9 @@
     getLocalAppVersion,
     silentCheckForUpdates,
     checkForUpdates,
+    isAutoUpdateCheckEnabled,
+    findPlatformAsset,
+    isTrustedFuinDownloadUrl,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

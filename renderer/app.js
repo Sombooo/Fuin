@@ -473,7 +473,7 @@ api.onExtRevealRequest(async (req) => {
     return;
   }
 
-  // Bitwarden & 1Password tarzı kesintisiz anında otomatik doldurma (Seamless Autofill):
+  // Kesintisiz anında otomatik doldurma (Seamless Autofill):
   // Kasa açıkken ve alan adı tam eşleştiğinde doldurur; ancak reprompt (yüksek güvenlikli) kayıtlar her zaman masaüstü onayı ister.
   const requirePrompt = Boolean(entry.reprompt) || localStorage.getItem('fuin-ext-prompt-approval') === 'true';
   if (!requirePrompt) {
@@ -2317,7 +2317,7 @@ function isNewerVersion(latest, current) {
 }
 
 async function getLocalAppVersion() {
-  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.6';
+  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.7';
 }
 
 async function silentCheckForUpdates() {
@@ -2461,6 +2461,14 @@ function initAppListeners() {
   document.getElementById('btnImportCSV')?.addEventListener('click', importCSV);
   document.getElementById('updateBtn')?.addEventListener('click', checkForUpdates);
   document.getElementById('btnBackupFolder')?.addEventListener('click', () => window.kekkai?.openBackupFolder());
+
+  const toggleAutoUpdate = document.getElementById('toggleAutoUpdateCheck');
+  if (toggleAutoUpdate) {
+    toggleAutoUpdate.checked = localStorage.getItem('fuin-auto-update-check') !== 'false';
+    toggleAutoUpdate.addEventListener('change', (e) => {
+      localStorage.setItem('fuin-auto-update-check', e.target.checked ? 'true' : 'false');
+    });
+  }
 
   const touchIdToggle = document.getElementById('touchIdSettingToggle');
   if (touchIdToggle) {

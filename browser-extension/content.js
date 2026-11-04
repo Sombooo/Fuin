@@ -2,7 +2,7 @@
 // ═══════════════════════════════════════════════════════════════════
 // FUIN BROWSER EXTENSION — CONTENT SCRIPT
 //
-// Bitwarden tarzı sade otomatik doldurma (input içine ikon gömmeden,
+// Sade ve kesintisiz otomatik doldurma (input içine ikon gömmeden,
 // sayfadaki şifre göster/gizle 👁 ikonlarını kapatmadan çalışır):
 // 1. Eklenti araç çubuğu menüsünden ("Doldur") veya klavye kısayoluyla
 //    (Cmd+Shift+L / Ctrl+Shift+L) standart ve bölünmüş (Split Login)
@@ -160,7 +160,7 @@
       pointerEvents: 'none', zIndex: '2147483647'
     });
     const shadow = host.attachShadow({ mode: 'closed' });
-    // Bitwarden varsayılanı gibi input içine görünür ikon gömülmez (göz ikonlarını kapatmamak için).
+    // Fuin tasarım prensibi: input içine görünür ikon gömülmez (göz ikonlarını kapatmamak için).
     // Yalnızca Cmd+Shift+L çoklu hesap seçim menüsü için kapalı Shadow DOM çapa referansı tutulur.
     const icon = document.createElement('div');
     icon.className = 'fuin-ext-anchor';
@@ -823,6 +823,8 @@
       const curUser = userInput.value.trim();
       const curPw = pwInput.value || candidate.password;
       markLocalDismissed(curUser, curPw);
+      userInput.value = '';
+      pwInput.value = '';
       if (host.parentNode) host.remove();
       activeSaveHost = null;
       try {
@@ -866,6 +868,8 @@
       if (!e.isTrusted) return;
       _domainExcluded = true;
       markLocalDismissed(userInput.value.trim(), pwInput.value || candidate.password);
+      userInput.value = '';
+      pwInput.value = '';
       if (host.parentNode) host.remove();
       activeSaveHost = null;
       try { chrome.runtime.sendMessage({ type: 'fuin-exclude-domain' }); } catch {}
@@ -930,6 +934,8 @@
           markLocalDismissed(finalUsername, finalPassword);
           saveBtn.textContent = 'Kaydedildi! ✓';
           saveBtn.style.background = '#6bb382';
+          userInput.value = '';
+          pwInput.value = '';
           setTimeout(() => {
             if (host.parentNode) host.remove();
             activeSaveHost = null;
@@ -956,6 +962,8 @@
 
     setTimeout(() => {
       if (activeSaveHost === host && host.parentNode) {
+        userInput.value = '';
+        pwInput.value = '';
         host.remove();
         activeSaveHost = null;
       }

@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('kekkai', {
   openUrl:             (url)            => ipcRenderer.send('open-url', url),
   openBackupFolder:    ()               => ipcRenderer.invoke('open-backup-folder'),
   getAppVersion:       ()               => ipcRenderer.invoke('get-app-version'),
+  downloadUpdate:      (opts)           => ipcRenderer.invoke('download-update', opts),
+  installUpdate:       (opts)           => ipcRenderer.invoke('install-update', opts),
+  onUpdateDownloadProgress: (cb)        => { const h = (_, d) => cb(d); ipcRenderer.on('update-download-progress', h); return () => ipcRenderer.removeListener('update-download-progress', h); },
 
   encrypt:             (data, password) => ipcRenderer.invoke('encrypt', { data, password }),
   decrypt:             (b64, password)  => ipcRenderer.invoke('decrypt', { b64, password }),

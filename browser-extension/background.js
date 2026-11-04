@@ -149,6 +149,22 @@ function clearPendingForTab(tabId, notifyClose = false) {
   }
 }
 
+function sweepExpiredMemory() {
+  const now = Date.now();
+  for (const [tabId, item] of pendingSaveByTab.entries()) {
+    if (now - item.timestamp > PENDING_SAVE_TTL_MS) {
+      item.password = '';
+      item.username = '';
+      pendingSaveByTab.delete(tabId);
+    }
+  }
+  for (const [key, ts] of dismissedFingerprints.entries()) {
+    if (now - ts > DISMISS_TTL_MS) {
+      dismissedFingerprints.delete(key);
+    }
+  }
+}
+
 if (typeof chrome !== 'undefined' && chrome.tabs) {
   if (chrome.tabs.onUpdated) {
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -248,22 +264,25 @@ if (typeof chrome !== 'undefined' && chrome.commands?.onCommand) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Güvenlik: Yalnızca Fuin uzantısının kendi ID'sinden gelen mesajları kabul et
+  if (sender.id !== chrome.runtime.id) return;
+
   const isInternalExtension = sender.id === chrome.runtime.id && !sender.tab;
   
   if (isInternalExtension) {
     if (msg.type === 'fuin-lookup' && msg.domain) {
-      askFuin({ type: 'lookup', domain: msg.domain }).then(sendResponse);
+      askFuin({ type: 'lookup', domain: String(msg.domain).slice(0, 253) }).then(sendResponse);
       return true;
     }
     if (msg.type === 'fuin-reveal' && msg.entryId && msg.domain) {
-      askFuin({ type: 'reveal', entryId: msg.entryId, domain: msg.domain }).then(sendResponse);
+      askFuin({ type: 'reveal', entryId: String(msg.entryId).slice(0, 128), domain: String(msg.domain).slice(0, 253) }).then(sendResponse);
       return true;
     }
     if (msg.type === 'fuin-copy-secure' && msg.entryId && msg.domain) {
       askFuin({
         type: 'copy-secure',
-        entryId: msg.entryId,
-        domain: msg.domain,
+        entryId: String(msg.entryId).slice(0, 128),
+        domain: String(msg.domain).slice(0, 253),
         field: msg.field === 'username' ? 'username' : 'password'
       }).then(sendResponse);
       return true;
@@ -286,13 +305,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     if (msg.type === 'fuin-save-credential' && msg.password) {
+      if (typeof msg.password !== 'string' || msg.password.length > 1024) return;
       const tabId = msg.tabId;
       askFuin({
         type: 'save-credential',
-        domain: msg.domain,
-        username: msg.username || '',
+        domain: String(msg.domain || '').slice(0, 253),
+        username: String(msg.username || '').slice(0, 512),
         password: msg.password,
-        updateEntryId: msg.updateEntryId
+        updateEntryId: msg.updateEntryId ? String(msg.updateEntryId).slice(0, 128) : undefined
       }).then((res) => {
         if (res && res.ok) {
           recordDismissedCredential(msg.domain, msg.username, msg.password);
@@ -327,12 +347,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   let actualDomain;
   try {
     const parsedTabUrl = new URL(sender.tab.url);
+    if (parsedTabUrl.protocol !== 'https:') return;
     if (sender.url) {
       const parsedSenderUrl = new URL(sender.url);
-      if (parsedSenderUrl.origin !== parsedTabUrl.origin) return;
+      if (parsedSenderUrl.protocol !== 'https:' || parsedSenderUrl.origin !== parsedTabUrl.origin) return;
     }
     actualDomain = parsedTabUrl.hostname;
   } catch { return; }
+
+  if (!actualDomain || typeof actualDomain !== 'string' || actualDomain.length > 253) return;
 
   if (msg.type === 'fuin-lookup') {
     askFuin({ type: 'lookup', domain: actualDomain }).then(sendResponse);
@@ -373,7 +396,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const tabId = sender.tab?.id;
     const existing = tabId ? pendingSaveByTab.get(tabId) : null;
     const targetDom = normDomainKey(existing?.domain || actualDomain);
-    if (targetDom) {
+    if (targetDom && targetDom.length <= 253) {
       excludedDomainsMemory.add(targetDom);
       askFuin({ type: 'exclude-domain', domain: targetDom }).catch(() => {});
     }
@@ -382,19 +405,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'fuin-form-submitted' && msg.password) {
+    if (typeof msg.password !== 'string' || msg.password.length > 1024 || msg.password.length < 2) return;
+    const cleanUser = typeof msg.username === 'string' ? msg.username.slice(0, 512) : '';
     const tabId = sender.tab?.id;
-    if (isCredentialDismissed(actualDomain, msg.username, msg.password)) {
+    if (isCredentialDismissed(actualDomain, cleanUser, msg.password)) {
       sendResponse({ shouldPrompt: false, dismissed: true });
       return true;
     }
     askFuin({
       type: 'check-save-candidate',
       domain: actualDomain,
-      username: msg.username || '',
+      username: cleanUser,
       password: msg.password
     }).then((res) => {
-      if (res && res.shouldPrompt && !isCredentialDismissed(actualDomain, msg.username, msg.password)) {
-        const finalUser = res.username || msg.username || '';
+      if (res && res.shouldPrompt && !isCredentialDismissed(actualDomain, cleanUser, msg.password)) {
+        const finalUser = res.username || cleanUser || '';
         const item = {
           domain: actualDomain,
           username: finalUser,
@@ -423,15 +448,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'fuin-check-save-candidate' && msg.password) {
+    if (typeof msg.password !== 'string' || msg.password.length > 1024) return;
     askFuin({
       type: 'check-save-candidate',
       domain: actualDomain,
-      username: msg.username || '',
+      username: typeof msg.username === 'string' ? msg.username.slice(0, 512) : '',
       password: msg.password
     }).then(sendResponse);
     return true;
   }
   if (msg.type === 'fuin-save-credential' && msg.password) {
+    if (typeof msg.password !== 'string' || msg.password.length > 1024 || msg.password.length < 2) return;
+    const cleanUser = typeof msg.username === 'string' ? msg.username.slice(0, 512) : '';
+    const cleanUpdateId = typeof msg.updateEntryId === 'string' ? msg.updateEntryId.slice(0, 128) : undefined;
     const tabId = sender.tab?.id;
     const pendingItem = tabId ? pendingSaveByTab.get(tabId) : null;
     const saveDomain = (pendingItem && isSameSiteSafe(actualDomain, pendingItem.domain))
@@ -440,12 +469,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     askFuin({
       type: 'save-credential',
       domain: saveDomain,
-      username: msg.username || '',
+      username: cleanUser,
       password: msg.password,
-      updateEntryId: msg.updateEntryId
+      updateEntryId: cleanUpdateId
     }).then((res) => {
       if (res && res.ok) {
-        recordDismissedCredential(saveDomain, msg.username, msg.password);
+        recordDismissedCredential(saveDomain, cleanUser, msg.password);
         clearPendingForTab(tabId, false);
       }
       sendResponse(res);
@@ -453,6 +482,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'fuin-reveal') {
+    if (!msg.entryId || typeof msg.entryId !== 'string' || msg.entryId.length > 128) {
+      sendResponse({ error: 'invalid-entry-id' });
+      return;
+    }
     if (pendingReveal !== null) {
       sendResponse({ error: 'busy' });
       return;

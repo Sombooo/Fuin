@@ -62,7 +62,11 @@ function createWindow() {
     width: 1100, height: 750, minWidth: 860, minHeight: 600,
     frame: false, backgroundColor: '#f5f0e8',
     webPreferences: {
-      nodeIntegration: false, contextIsolation: true, sandbox: true,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
@@ -71,6 +75,7 @@ function createWindow() {
   const allowDevScreenshots = process.argv.includes('--dev-allow-screenshots') || process.env.FUIN_DEV_SCREENSHOTS === '1';
   mainWindow.setContentProtection(!allowDevScreenshots);
   mainWindow.webContents?.on?.('will-navigate', (e) => e.preventDefault());
+  mainWindow.webContents?.on?.('will-attach-webview', (e) => e.preventDefault());
   mainWindow.webContents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   
@@ -86,7 +91,7 @@ function createWindow() {
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
-      // Pencere kapatıldığında arka planda sessizce açık kalır (Bitwarden/1Password gibi);
+      // Pencere kapatıldığında arka planda sessizce açık kalır;
       // kasa yalnızca boşta kalma süresi (idle) dolunca veya ekran kilitlenince kilitlenir.
       mainWindow.hide();
     }
@@ -99,11 +104,21 @@ function createWindow() {
 
 app.whenReady().then(() => {
   const { session } = require('electron');
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+  // Ek Güvenlik: Kamera, mikrofon, bildirim, konum gibi cihaz izinlerini tamamen reddet
+  if (typeof session?.defaultSession?.setPermissionRequestHandler === 'function') {
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      callback(false);
+    });
+  }
+  if (typeof session?.defaultSession?.setPermissionCheckHandler === 'function') {
+    session.defaultSession.setPermissionCheckHandler(() => false);
+  }
+
+  session.defaultSession?.webRequest?.onHeadersReceived?.((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://api.github.com https://api.pwnedpasswords.com;"]
+        'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://api.github.com https://api.pwnedpasswords.com; object-src 'none'; base-uri 'self';"]
       }
     });
   });
@@ -850,7 +865,9 @@ ipcMain.on('open-url', (e, url) => {
   try {
     const parsed = new URL(url);
     if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
-      shell.openExternal(parsed.href);
+      if (!parsed.username && !parsed.password) {
+        shell.openExternal(parsed.href);
+      }
     }
   } catch { /* geçersiz URL — yoksay */ }
 });
@@ -1322,21 +1339,139 @@ ipcMain.handle('full-reset', () => {
 // ── IPC: Yedek Klasörü ─────────────────────────────────────────────
 ipcMain.handle('open-backup-folder', async () => {
   const backupDir = path.join(app.getPath('userData'), 'backups');
-  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
   await shell.openPath(backupDir);
   return true;
 });
 
 // ── IPC: Dosya dialogları ─────────────────────────────────────────
 ipcMain.handle('export-file', async (_, { content, defaultName, filters }) => {
+  if (typeof content !== 'string' || content.length > 100 * 1024 * 1024) return false;
   const { filePath } = await dialog.showSaveDialog(mainWindow, { defaultPath: defaultName, filters });
-  if (filePath) { fs.writeFileSync(filePath, content, 'utf8'); return true; }
+  if (filePath) {
+    fs.writeFileSync(filePath, content, { encoding: 'utf8', mode: 0o600 });
+    return true;
+  }
   return false;
 });
 ipcMain.handle('import-file', async (_, { filters }) => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, { filters, properties: ['openFile'] });
-  if (filePaths?.[0]) return fs.readFileSync(filePaths[0], 'utf8');
+  if (filePaths?.[0]) {
+    try {
+      const stat = fs.statSync(filePaths[0]);
+      if (!stat.isFile()) return null;
+      if (stat.size > 50 * 1024 * 1024) throw new Error('File exceeds maximum size limit');
+      return fs.readFileSync(filePaths[0], 'utf8');
+    } catch {
+      return null;
+    }
+  }
   return null;
+});
+
+// ── IPC: Uygulama İçi Güncelleme Yöneticisi ────────────────────────
+ipcMain.handle('download-update', async (event, { url, filename }) => {
+  if (!url || typeof url !== 'string') throw new Error('Invalid download URL');
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error('Malformed download URL');
+  }
+  if (
+    parsedUrl.protocol !== 'https:' ||
+    parsedUrl.hostname !== 'github.com' ||
+    !parsedUrl.pathname.startsWith('/Sombooo/Fuin/releases/download/')
+  ) {
+    throw new Error('Unauthorized download source');
+  }
+
+  const safeFilename = path.basename(filename || '').replace(/[^a-zA-Z0-9_.-]/g, '');
+  if (!safeFilename || safeFilename !== filename) {
+    throw new Error('Invalid download filename');
+  }
+  const validExts = ['.dmg', '.zip', '.exe', '.appimage', '.deb', '.rpm', '.tar.gz'];
+  if (!validExts.some(ext => safeFilename.toLowerCase().endsWith(ext))) {
+    throw new Error('Unsupported installer format');
+  }
+
+  const updatesDir = path.join(app.getPath('temp'), 'fuin-updates');
+  if (!fs.existsSync(updatesDir)) {
+    fs.mkdirSync(updatesDir, { recursive: true, mode: 0o700 });
+  }
+  const destinationPath = path.join(updatesDir, safeFilename);
+
+  const controller = new AbortController();
+  const res = await fetch(parsedUrl.href, {
+    signal: controller.signal,
+    headers: { 'User-Agent': 'Fuin-Desktop-Updater' }
+  });
+
+  if (!res.ok) throw new Error(`Download HTTP error ${res.status}`);
+
+  const finalUrl = new URL(res.url);
+  const trustedHosts = ['github.com', 'objects.githubusercontent.com'];
+  const isTrustedHost = trustedHosts.includes(finalUrl.hostname) || finalUrl.hostname.endsWith('.amazonaws.com');
+  if (finalUrl.protocol !== 'https:' || !isTrustedHost) {
+    throw new Error('Untrusted redirect host during update download');
+  }
+
+  const totalBytes = parseInt(res.headers.get('content-length') || '0', 10);
+  const MAX_UPDATE_SIZE = 300 * 1024 * 1024;
+  if (totalBytes > MAX_UPDATE_SIZE) {
+    throw new Error('Update package exceeds maximum allowed size');
+  }
+
+  let receivedBytes = 0;
+  const fileStream = fs.createWriteStream(destinationPath, { mode: 0o700 });
+
+  const reader = res.body.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    receivedBytes += value.length;
+    if (receivedBytes > MAX_UPDATE_SIZE) {
+      fileStream.close();
+      try { fs.unlinkSync(destinationPath); } catch {}
+      throw new Error('Downloaded file exceeded size limit');
+    }
+    fileStream.write(Buffer.from(value));
+
+    const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
+    try {
+      event.sender.send('update-download-progress', {
+        percent,
+        received: receivedBytes,
+        total: totalBytes
+      });
+    } catch {}
+  }
+
+  await new Promise((resolve, reject) => {
+    fileStream.end((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  return { success: true, filePath: destinationPath };
+});
+
+ipcMain.handle('install-update', async (_, { filePath }) => {
+  if (!filePath || typeof filePath !== 'string') return false;
+  const updatesDir = path.join(app.getPath('temp'), 'fuin-updates');
+  const resolvedPath = path.resolve(filePath);
+  if (!resolvedPath.startsWith(updatesDir + path.sep)) {
+    throw new Error('Unauthorized installer path');
+  }
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error('Installer file not found');
+  }
+  const stat = fs.statSync(resolvedPath);
+  if (!stat.isFile()) throw new Error('Not a valid file');
+
+  await shell.openPath(resolvedPath);
+  return true;
 });
 
 // ═══════════════════════════════════════════════════════════════════

@@ -1,7 +1,8 @@
 {
   "name": "fuin",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.7",
   "description": "Offline-first password manager",
+  "license": "AGPL-3.0-or-later",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

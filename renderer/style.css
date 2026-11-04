@@ -623,6 +623,15 @@ select.fi option { background: var(--paper); }
   font-family: var(--mono); font-size: 11px; color: var(--amber); line-height: 1.7;
 }
 
+.update-progress-wrap {
+  height: 4px; background: var(--b); border-radius: 2px;
+  overflow: hidden; margin-top: 4px;
+}
+.update-progress-bar {
+  height: 100%; background: var(--ac); width: 0%;
+  transition: width .2s ease; border-radius: 2px;
+}
+
 /* ── FORGOT PASSWORD ── */
 .forgot-msg {
   font-family: var(--mono); font-size: 12px; line-height: 1.7;
@@ -733,15 +742,36 @@ select.fi option { background: var(--paper); }
 .zen-switch input:checked + .zen-slider-btn { background-color: var(--ac); }
 .zen-switch input:checked + .zen-slider-btn:before { transform: translateX(20px); }
 
-/* ── ZEN FOOTER ── */
-.zen-footer { margin-top: 8px; }
+/* ── ZEN MODAL & FOOTER ── */
+.zen-modal {
+  border-radius: 4px;
+  overflow: hidden;
+}
+.zen-modal .zen-body {
+  padding: 18px 22px 14px;
+}
+.zen-modal .zen-panel {
+  margin-bottom: 0;
+}
+.zen-footer {
+  margin-top: 0;
+  padding: 0;
+  width: 100%;
+}
 .zen-btn-primary {
   width: 100%; padding: 14px; background: var(--ac); color: var(--bg); border: none;
-  border-radius: 10px; font-size: 14px; font-weight: 600; letter-spacing: 1px;
-  cursor: pointer; transition: transform 0.2s, filter 0.2s;
+  border-radius: 4px; font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 1px;
+  cursor: pointer; transition: all .12s; text-align: center;
 }
-.zen-btn-primary:hover { filter: brightness(1.08); transform: translateY(-2px); }
-.zen-btn-primary:active { transform: translateY(0); }
+.zen-btn-primary:hover { filter: brightness(1.08); }
+.zen-btn-primary:active { filter: brightness(0.96); }
+
+/* Zen modal docked bottom action button: flush with corners, zero gap */
+.zen-modal .zen-footer .zen-btn-primary {
+  border-radius: 0 0 3px 3px;
+  border-top: 1px solid var(--b);
+  display: block;
+}
 
 
 

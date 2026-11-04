@@ -297,7 +297,7 @@
             <div style="margin-top:10px;padding:8px 12px;background:var(--paper);border:1px solid var(--b);border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
               <div>
                 <div style="font-size:12px;font-weight:500;color:var(--text);" data-i18n="extPromptApprovalTitle">Şifre Doldururken Onay İste</div>
-                <div style="font-size:11px;color:var(--mu);" data-i18n="extPromptApprovalSub">Kapalıyken (önerilen) Bitwarden gibi anında doldurur; açıkken her doldurmada masaüstünden onay sorar.</div>
+                <div style="font-size:11px;color:var(--mu);" data-i18n="extPromptApprovalSub">Kapalıyken (önerilen) anında ve kesintisiz doldurur; açıkken her doldurmada masaüstünden onay sorar.</div>
               </div>
               <input type="checkbox" id="toggleExtPromptApproval" style="cursor:pointer;accent-color:var(--ac);width:16px;height:16px;">
             </div>
@@ -317,9 +317,16 @@
               <span data-i18n="sysUpdateCheckTitle">Sürüm Kontrolü</span>
             </div>
             <div class="io-sub" id="sysUpdateCheckSub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.</div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
               <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
-              <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text)"></span>
+              <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text);display:flex;align-items:center;flex-wrap:wrap;gap:6px;"></span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--b);">
+              <div>
+                <div style="font-size:12px;font-weight:500;color:var(--text);" data-i18n="sysAutoUpdateCheckTitle">Açılışta Otomatik Denetle</div>
+                <div style="font-size:11px;color:var(--mu);" data-i18n="sysAutoUpdateCheckSub">Yeni sürüm olup olmadığını kasa açıldığında sessizce denetler.</div>
+              </div>
+              <input type="checkbox" id="toggleAutoUpdateCheck" style="cursor:pointer;accent-color:var(--ac);width:16px;height:16px;">
             </div>
           </div>
           <div class="io-card">

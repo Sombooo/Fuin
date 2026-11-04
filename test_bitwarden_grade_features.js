@@ -277,6 +277,48 @@ test('7. API boundaries, TOTP reprompt, Emergency Kit escaping, and extension pi
   assert.ok(extBridge.includes('getKnownExtensionIds(app)'), 'autoInstallNativeMessagingHosts must pass app to getKnownExtensionIds');
 });
 
+// ── 8. In-App Updates, Setting Controls & Clean UI Branding Verification ─────────
+test('8. In-app update settings, asset resolver, download validation & clean UI', () => {
+  const i18nJs = fs.readFileSync(path.join(__dirname, 'renderer', 'i18n.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
+  const updateMgr = require('./renderer/modules/updateManager.js');
+  const mainJs = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+
+  // 8.1 No third-party corporate mentions in autofill UI
+  assert.ok(!indexHtml.includes('Bitwarden gibi'), 'index.html must not mention Bitwarden in autofill settings');
+  assert.ok(!i18nJs.includes('Bitwarden gibi'), 'i18n.js must not mention Bitwarden in autofill translations');
+  assert.ok(indexHtml.includes('kesintisiz doldurur'), 'index.html must use seamless autofill wording');
+
+  // 8.2 In-app update setting toggle presence
+  assert.ok(indexHtml.includes('id="toggleAutoUpdateCheck"'), 'index.html must include toggleAutoUpdateCheck');
+  assert.ok(typeof updateMgr.isAutoUpdateCheckEnabled === 'function', 'updateManager must export isAutoUpdateCheckEnabled');
+
+  // 8.3 Download URL validation strictly enforces official GitHub release origin
+  assert.ok(updateMgr.isTrustedFuinDownloadUrl('https://github.com/Sombooo/Fuin/releases/download/v1.0.0/Fuin-1.0.0.dmg'));
+  assert.ok(!updateMgr.isTrustedFuinDownloadUrl('https://evil.com/Sombooo/Fuin/releases/download/v1.0.0/Fuin.dmg'));
+  assert.ok(!updateMgr.isTrustedFuinDownloadUrl('http://github.com/Sombooo/Fuin/releases/download/v1.0.0/Fuin.dmg'));
+  assert.ok(!updateMgr.isTrustedFuinDownloadUrl('https://github.com/OtherUser/Fuin/releases/download/v1.0.0/Fuin.dmg'));
+
+  // 8.4 Platform asset finder
+  const dummyRelease = {
+    assets: [
+      { name: 'Fuin-1.0.0.dmg', browser_download_url: 'https://github.com/Sombooo/Fuin/releases/download/v1.0.0/Fuin-1.0.0.dmg' },
+      { name: 'Fuin-Setup-1.0.0.exe', browser_download_url: 'https://github.com/Sombooo/Fuin/releases/download/v1.0.0/Fuin-Setup-1.0.0.exe' },
+      { name: 'Fuin-1.0.0.AppImage', browser_download_url: 'https://github.com/Sombooo/Fuin/releases/download/v1.0.0/Fuin-1.0.0.AppImage' }
+    ]
+  };
+  const matchedAsset = updateMgr.findPlatformAsset(dummyRelease);
+  assert.ok(matchedAsset, 'findPlatformAsset must locate an installer asset');
+  assert.ok(matchedAsset.browser_download_url.startsWith('https://github.com/Sombooo/Fuin/releases/download/'));
+
+  // 8.5 Security hardening in main.js
+  assert.ok(mainJs.includes('setPermissionRequestHandler'), 'main.js must handle session permission requests');
+  assert.ok(mainJs.includes('setPermissionCheckHandler'), 'main.js must deny session permission checks');
+  assert.ok(mainJs.includes('will-attach-webview'), 'main.js must prevent unauthorized webview attachment');
+  assert.ok(mainJs.includes("ipcMain.handle('download-update'"), 'main.js must provide secure download-update IPC');
+  assert.ok(mainJs.includes("ipcMain.handle('install-update'"), 'main.js must provide secure install-update IPC');
+});
+
 console.log('═'.repeat(75));
 console.log(`TOTAL PASSES: ${passes}`);
 console.log(`TOTAL FAILURES: ${failures}`);

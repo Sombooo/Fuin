@@ -181,12 +181,13 @@
     try {
       const currentVersion = await getLocalAppVersion();
       if (subEl) {
-        subEl.textContent = `${t('sysUpdateCheckSub') || "Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin."} (Mevcut: v${normalizeVersion(currentVersion)})`;
+        const curLabel = t('sysUpdateCurrent', { v: normalizeVersion(currentVersion) }) || `(v${normalizeVersion(currentVersion)})`;
+        subEl.textContent = `${t('sysUpdateCheckSub') || "Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin."} ${curLabel}`;
       }
 
       const releases = await fetchReleasesWithTimeout();
       if (!Array.isArray(releases) || releases.length === 0) {
-        msg.textContent = 'Henüz yayınlanmış bir sürüm bulunamadı.';
+        msg.textContent = t('sysUpdateNoReleases') || 'Henüz yayınlanmış bir sürüm bulunamadı.';
         return;
       }
 
@@ -198,7 +199,7 @@
         const vSpan = document.createElement('span');
         vSpan.style.color = 'var(--green)';
         vSpan.style.fontWeight = '600';
-        vSpan.textContent = `Yeni sürüm mevcut: ${latestVersion}`;
+        vSpan.textContent = t('sysUpdateNewAvailable', { v: latestVersion }) || `Yeni sürüm mevcut: ${latestVersion}`;
         msg.appendChild(vSpan);
 
         const asset = findPlatformAsset(latestRelease);
@@ -227,7 +228,9 @@
                 pBar.style.width = Math.min(100, Math.max(0, percent)) + '%';
                 const recMB = (received / 1048576).toFixed(1);
                 const totMB = total > 0 ? (total / 1048576).toFixed(1) : '?';
-                statusText.textContent = `${t('sysUpdateDownloading') || 'İndiriliyor'}: %${percent} (${recMB} MB / ${totMB} MB)`;
+                const isEn = typeof document !== 'undefined' && document.documentElement && document.documentElement.lang === 'en';
+                const pctStr = isEn ? `${percent}%` : `%${percent}`;
+                statusText.textContent = `${t('sysUpdateDownloading') || 'İndiriliyor'}: ${pctStr} (${recMB} MB / ${totMB} MB)`;
               });
             }
 
@@ -247,7 +250,7 @@
                 };
               }
             } catch (err) {
-              statusText.textContent = `${t('sysUpdateFailed') || 'İndirme başarısız oldu'}: ${err.message || 'Hata'}`;
+              statusText.textContent = `${t('sysUpdateFailed') || 'İndirme başarısız oldu'}: ${err.message || 'Error'}`;
               dlBtn.disabled = false;
             } finally {
               if (unregProgress) unregProgress();
@@ -269,10 +272,10 @@
           msg.appendChild(link);
         }
       } else {
-        msg.textContent = `En güncel sürümü kullanıyorsunuz (v${normalizeVersion(currentVersion)}).`;
+        msg.textContent = t('sysUpdateLatest', { v: normalizeVersion(currentVersion) }) || `En güncel sürümü kullanıyorsunuz (v${normalizeVersion(currentVersion)}).`;
       }
     } catch (err) {
-      msg.textContent = 'Kontrol edilemedi. İnternet bağlantısını kontrol edin veya depo adresini ayarlayın.';
+      msg.textContent = t('sysUpdateCheckFailed') || 'Kontrol edilemedi. İnternet bağlantısını kontrol edin veya depo adresini ayarlayın.';
     } finally {
       btn.disabled = false;
       btn.textContent = t('sysUpdateBtn') || 'Şimdi Denetle';

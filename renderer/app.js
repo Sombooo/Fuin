@@ -2292,6 +2292,9 @@ document.addEventListener('keydown',e=>{
 // ── i18n.js tarafından dil değiştiğinde çağrılır — data-i18n
 // özniteliğiyle kapsanmayan, JS içinde dinamik üretilen metinleri günceller
 function refreshDynamicI18nLabels() {
+  if (window.FuinWhatsNewController && typeof window.FuinWhatsNewController.onLanguageChanged === 'function') {
+    window.FuinWhatsNewController.onLanguageChanged();
+  }
   if (!master) return; // kilit ekranındayken dinamik liste/kategori yok
   renderCategoryNav();
   if (curView === 'all' || curView === 'fav') {

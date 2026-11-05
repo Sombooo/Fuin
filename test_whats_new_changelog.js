@@ -111,6 +111,26 @@ check('style.css defines .whatsnew-tab, .whatsnew-card, and 120ms transitions', 
   assert.ok(css.includes('transition: all .12s;'), 'Missing 120ms transition');
 });
 
+// 5. Dynamic Language Reactivity & Controller Contracts
+console.log('\n[5. Dynamic Language Reactivity & Controller Contracts]');
+const wnc = require('./renderer/modules/whatsNewController.js');
+const appJs = fs.readFileSync(path.join(ROOT, 'renderer', 'app.js'), 'utf8');
+
+check('whatsNewController exports onLanguageChanged function', () => {
+  assert.strictEqual(typeof wnc.onLanguageChanged, 'function');
+});
+
+check('app.js calls window.FuinWhatsNewController?.onLanguageChanged in refreshDynamicI18nLabels', () => {
+  assert.ok(appJs.includes('window.FuinWhatsNewController.onLanguageChanged()'));
+});
+
+check('i18n.js defines settingConnDevicesTitle and sysUpdate keys for EN and TR parity', () => {
+  assert.ok(i18nFile.includes('settingConnDevicesTitle:'));
+  assert.ok(i18nFile.includes('sysUpdateLatest:'));
+  assert.ok(i18nFile.includes('sysUpdateNewAvailable:'));
+  assert.ok(i18nFile.includes('sysUpdateCheckFailed:'));
+});
+
 console.log('\n═══════════════════════════════════════════════════════════════════');
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
 console.log('═══════════════════════════════════════════════════════════════════');

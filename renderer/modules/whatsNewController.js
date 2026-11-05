@@ -10,7 +10,13 @@
   let currentSelectedVersion = null;
 
   function getLang() {
-    return (localStorage.getItem('fuin-lang') || 'tr').toLowerCase();
+    if (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) {
+      return document.documentElement.lang.toLowerCase();
+    }
+    if (typeof localStorage !== 'undefined') {
+      return (localStorage.getItem('fuin-lang') || 'tr').toLowerCase();
+    }
+    return 'tr';
   }
 
   function getIconSvg(iconName) {
@@ -155,6 +161,14 @@
     overlay.classList.add('open');
   }
 
+  function onLanguageChanged() {
+    const entries = window.FuinChangelog?.CHANGELOG_ENTRIES || [];
+    const targetVer = currentSelectedVersion || (entries[0] ? entries[0].version : '1.0.0-beta.7');
+    renderTabs(entries, targetVer);
+    const entry = window.FuinChangelog?.getEntryByVersion(targetVer) || entries[0];
+    if (entry) renderContent(entry);
+  }
+
   function closeModal() {
     const overlay = document.getElementById('whatsNewOverlay');
     if (overlay) {
@@ -225,7 +239,8 @@
     closeModal,
     markSeen,
     checkOnUnlock,
-    selectVersion
+    selectVersion,
+    onLanguageChanged
   };
 
   if (typeof module !== 'undefined' && module.exports) {

@@ -183,6 +183,11 @@ const TRANSLATIONS = {
     sysUpdateInstallBtn: 'Kurulumu Başlat',
     sysUpdateFailed: 'İndirme başarısız oldu',
     sysUpdateViewRelease: 'GitHub Sürüm Notları',
+    sysUpdateCurrent: '(Mevcut: v{v})',
+    sysUpdateNoReleases: 'Henüz yayınlanmış bir sürüm bulunamadı.',
+    sysUpdateLatest: 'En güncel sürümü kullanıyorsunuz (v{v}).',
+    sysUpdateNewAvailable: 'Yeni sürüm mevcut: {v}',
+    sysUpdateCheckFailed: 'Kontrol edilemedi. İnternet bağlantısını kontrol edin veya depo adresini ayarlayın.',
     sysBackupTitle: 'Yedekleme Klasörü',
     sysBackupSub: 'Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.',
     sysBackupBtn: 'Klasörü Aç',
@@ -295,6 +300,7 @@ const TRANSLATIONS = {
     syncModeAirgapTitle: 'Hava Boşluğu (QR)',
     syncModeAirgapDesc: 'Tamamen çevrimdışı, ağ bağlantısı gerektirmeyen dinamik animasyonlu QR kod aktarımı.',
     syncBadgeAirgap: 'İzole Mod',
+    settingConnDevicesTitle: 'CİHAZLAR & EKLENTİLER',
     settingPairedDevicesTitle: 'Eşleşmiş Cihazlar',
     settingPairedDevicesSub: 'Yerel ağda şifreli eşitleme yapabilecek yetkilendirilmiş mobil cihazlar.',
     settingExtTitle: 'Tarayıcı Eklentisi & Autofill',
@@ -506,6 +512,11 @@ const TRANSLATIONS = {
     sysUpdateInstallBtn: 'Launch Installer',
     sysUpdateFailed: 'Download failed',
     sysUpdateViewRelease: 'GitHub Release Notes',
+    sysUpdateCurrent: '(Current: v{v})',
+    sysUpdateNoReleases: 'No published releases found yet.',
+    sysUpdateLatest: 'You are using the latest version (v{v}).',
+    sysUpdateNewAvailable: 'New version available: {v}',
+    sysUpdateCheckFailed: 'Could not check for updates. Check internet connection or repository URL.',
     sysBackupTitle: 'Backup Folder',
     sysBackupSub: 'Access your automatically generated vault backups (.bak files).',
     sysBackupBtn: 'Open Folder',
@@ -618,6 +629,7 @@ const TRANSLATIONS = {
     syncModeAirgapTitle: 'Air-Gap (QR)',
     syncModeAirgapDesc: 'Fully offline, dynamic animated QR code transfer without any network connection.',
     syncBadgeAirgap: 'Isolated',
+    settingConnDevicesTitle: 'DEVICES & EXTENSIONS',
     settingPairedDevicesTitle: 'Paired Devices',
     settingPairedDevicesSub: 'Authorized mobile devices allowed for encrypted local network sync.',
     settingExtTitle: 'Browser Extension & Autofill',
@@ -662,9 +674,15 @@ const TRANSLATIONS = {
   }
 };
 
-function t(key) {
-  const lang = document.documentElement.lang === 'en' ? 'en' : 'tr';
-  return TRANSLATIONS[lang][key] ?? TRANSLATIONS.tr[key] ?? key;
+function t(key, vars) {
+  const lang = (document.documentElement && document.documentElement.lang === 'en') ? 'en' : 'tr';
+  let str = TRANSLATIONS[lang]?.[key] ?? TRANSLATIONS.tr?.[key] ?? key;
+  if (vars && typeof vars === 'object') {
+    for (const [k, val] of Object.entries(vars)) {
+      str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(val));
+    }
+  }
+  return str;
 }
 
 // Güvenlik: Yalnızca bilinen HTML içeren anahtarlar için innerHTML kullan

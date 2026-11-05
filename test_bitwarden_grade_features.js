@@ -317,6 +317,8 @@ test('8. In-app update settings, asset resolver, download validation & clean UI'
   assert.ok(mainJs.includes('will-attach-webview'), 'main.js must prevent unauthorized webview attachment');
   assert.ok(mainJs.includes("ipcMain.handle('download-update'"), 'main.js must provide secure download-update IPC');
   assert.ok(mainJs.includes("ipcMain.handle('install-update'"), 'main.js must provide secure install-update IPC');
+  assert.ok(mainJs.includes("finalUrl.hostname.endsWith('.githubusercontent.com')"), 'main.js must permit GitHub release assets CDN');
+  assert.ok(mainJs.includes("finalUrl.hostname.endsWith('.blob.core.windows.net')"), 'main.js must permit GitHub Azure blob backend');
 });
 
 console.log('═'.repeat(75));

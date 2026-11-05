@@ -1410,8 +1410,13 @@ ipcMain.handle('download-update', async (event, { url, filename }) => {
   if (!res.ok) throw new Error(`Download HTTP error ${res.status}`);
 
   const finalUrl = new URL(res.url);
-  const trustedHosts = ['github.com', 'objects.githubusercontent.com'];
-  const isTrustedHost = trustedHosts.includes(finalUrl.hostname) || finalUrl.hostname.endsWith('.amazonaws.com');
+  const isTrustedHost =
+    finalUrl.hostname === 'github.com' ||
+    finalUrl.hostname.endsWith('.github.com') ||
+    finalUrl.hostname === 'githubusercontent.com' ||
+    finalUrl.hostname.endsWith('.githubusercontent.com') ||
+    finalUrl.hostname.endsWith('.amazonaws.com') ||
+    finalUrl.hostname.endsWith('.blob.core.windows.net');
   if (finalUrl.protocol !== 'https:' || !isTrustedHost) {
     throw new Error('Untrusted redirect host during update download');
   }

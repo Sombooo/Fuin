@@ -317,7 +317,7 @@
               <span data-i18n="sysUpdateCheckTitle">Sürüm Kontrolü</span>
             </div>
             <div class="io-sub" id="sysUpdateCheckSub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.</div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;flex-wrap:wrap;">
               <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
               <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text);display:flex;align-items:center;flex-wrap:wrap;gap:6px;"></span>
             </div>
@@ -335,7 +335,7 @@
               <span data-i18n="sysBackupTitle">Yedekleme Klasörü</span>
             </div>
             <div class="io-sub" id="sysBackupSub" data-i18n="sysBackupSub">Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.</div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;">
               <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
             </div>
           </div>
@@ -345,7 +345,7 @@
               <span data-i18n="whatsNewTitle">Neler Yeni?</span>
             </div>
             <div class="io-sub" data-i18n="whatsNewSub">Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.</div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;">
               <button class="btn-io" id="btnOpenWhatsNew" data-i18n="whatsNewBtn">Yama Notlarını Gör</button>
             </div>
           </div>
@@ -653,7 +653,7 @@
 
 <!-- WHAT'S NEW / CHANGELOG MODAL -->
 <div class="overlay" id="whatsNewOverlay">
-  <div class="modal" style="max-width:560px; width:92%;">
+  <div class="modal" style="max-width:580px; width:92%;">
     <div class="modal-head">
       <div class="modal-title" style="display:flex;align-items:center;gap:8px;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -661,11 +661,11 @@
       </div>
       <button class="modal-close" id="btnCloseWhatsNew">✕</button>
     </div>
-    <div class="modal-body" style="padding:16px 20px; max-height:480px; overflow-y:auto;">
+    <div class="modal-body" style="padding:18px 22px; max-height:490px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
       <!-- Version selector tabs -->
-      <div id="whatsNewVersionTabs" style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;"></div>
+      <div id="whatsNewVersionTabs" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;"></div>
       <!-- Version header -->
-      <div id="whatsNewHeader" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--b);"></div>
+      <div id="whatsNewHeader" class="whatsnew-overview-card"></div>
       <!-- Highlights list -->
       <div id="whatsNewHighlights" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>

@@ -1411,7 +1411,7 @@ select.fi option { background: var(--paper); }
   font-family: var(--mono);
   font-size: 11px;
   border: 1px solid var(--b);
-  background: var(--paper);
+  background: var(--card);
   color: var(--mu);
   border-radius: 4px;
   cursor: pointer;
@@ -1432,14 +1432,28 @@ select.fi option { background: var(--paper); }
   font-weight: 600;
 }
 
+.whatsnew-overview-card {
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: all .12s;
+}
+
+.whatsnew-overview-card:hover {
+  border-color: var(--sb);
+}
+
 .whatsnew-card {
   padding: 12px 14px;
-  background: var(--paper);
+  background: var(--card);
   border: 1px solid var(--b);
   border-radius: 6px;
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   transition: all .12s;
 }
 
@@ -1472,11 +1486,18 @@ select.fi option { background: var(--paper); }
 }
 
 [data-theme="dark"] .whatsnew-tab {
-  background: #222019;
+  background: #2a2720;
+  border-color: #3d3830;
+}
+
+[data-theme="dark"] .whatsnew-overview-card {
+  background: #2a2720;
+  border-color: #3d3830;
 }
 
 [data-theme="dark"] .whatsnew-card {
-  background: #222019;
+  background: #2a2720;
+  border-color: #3d3830;
 }
 
 

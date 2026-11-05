@@ -93,15 +93,15 @@
     const summary = isEn ? (entry.summaryEn || entry.summary) : entry.summary;
 
     headerEl.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <span class="whatsnew-badge-pill" style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--ac);background:rgba(90,154,110,0.12);padding:3px 8px;border-radius:4px;border:1px solid rgba(90,154,110,0.3);">${entry.tag}</span>
-          ${entry.isCurrent ? `<span style="font-family:var(--mono);font-size:10px;color:var(--amber);background:rgba(200,128,64,0.12);padding:2px 6px;border-radius:3px;border:1px solid rgba(200,128,64,0.25);">${isEn ? 'LATEST' : 'GÜNCEL'}</span>` : ''}
+          <span class="whatsnew-badge-pill" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ac);background:rgba(90,154,110,0.14);padding:3px 8px;border-radius:4px;border:1px solid rgba(90,154,110,0.3);letter-spacing:0.5px;">${entry.tag}</span>
+          ${entry.isCurrent ? `<span style="font-family:var(--mono);font-size:10px;font-weight:600;color:var(--amber);background:rgba(200,128,64,0.14);padding:2px 7px;border-radius:3px;border:1px solid rgba(200,128,64,0.3);letter-spacing:0.5px;">${isEn ? 'LATEST' : 'GÜNCEL'}</span>` : ''}
         </div>
         <span style="font-family:var(--mono);font-size:11px;color:var(--mu);">${date}</span>
       </div>
-      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.4;">${title}</div>
-      <div style="font-size:12px;color:var(--mu);line-height:1.5;">${summary}</div>
+      <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.45;">${title}</div>
+      <div style="font-size:12px;color:var(--mu);line-height:1.6;">${summary}</div>
     `;
 
     highlightsEl.innerHTML = '';

@@ -186,6 +186,11 @@ const TRANSLATIONS = {
     sysBackupTitle: 'Yedekleme Klasörü',
     sysBackupSub: 'Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.',
     sysBackupBtn: 'Klasörü Aç',
+    whatsNewTitle: 'Neler Yeni?',
+    whatsNewModalTitle: 'NELER YENİ?',
+    whatsNewSub: "Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.",
+    whatsNewBtn: 'Yama Notlarını Gör',
+    whatsNewGotIt: 'Harika, Anladım',
     slogan: 'Quietly secure.',
 
     toastClipCleared: 'pano temizlendi ✓',
@@ -503,6 +508,11 @@ const TRANSLATIONS = {
     sysBackupTitle: 'Backup Folder',
     sysBackupSub: 'Access your automatically generated vault backups (.bak files).',
     sysBackupBtn: 'Open Folder',
+    whatsNewTitle: "What's New?",
+    whatsNewModalTitle: "WHAT'S NEW?",
+    whatsNewSub: "View recent updates, new features, and security enhancements.",
+    whatsNewBtn: 'View Release Notes',
+    whatsNewGotIt: 'Got It',
     slogan: 'Quietly secure.',
 
     toastClipCleared: 'clipboard cleared ✓',

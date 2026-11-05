@@ -231,6 +231,14 @@ async function unlock() {
   api.setUnlockState(true);
   silentCheckForUpdates();
   checkRecoveryStatus();
+  if (exists && window.FuinWhatsNewController) {
+    (async () => {
+      try {
+        const curVer = (window.kekkai?.getAppVersion ? await window.kekkai.getAppVersion() : '1.0.0-beta.7') || '1.0.0-beta.7';
+        window.FuinWhatsNewController.checkOnUnlock(curVer);
+      } catch {}
+    })();
+  }
   
   if (api.saveTouchIdKey && localStorage.getItem('fuin-touchid-enabled') === 'true') api.saveTouchIdKey(pw);
 
@@ -2461,6 +2469,7 @@ function initAppListeners() {
   document.getElementById('btnImportCSV')?.addEventListener('click', importCSV);
   document.getElementById('updateBtn')?.addEventListener('click', checkForUpdates);
   document.getElementById('btnBackupFolder')?.addEventListener('click', () => window.kekkai?.openBackupFolder());
+  window.FuinWhatsNewController?.init();
 
   const toggleAutoUpdate = document.getElementById('toggleAutoUpdateCheck');
   if (toggleAutoUpdate) {

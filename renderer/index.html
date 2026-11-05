@@ -339,6 +339,16 @@
               <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
             </div>
           </div>
+          <div class="io-card">
+            <div class="io-title" style="display:flex;align-items:center;gap:6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span data-i18n="whatsNewTitle">Neler Yeni?</span>
+            </div>
+            <div class="io-sub" data-i18n="whatsNewSub">Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+              <button class="btn-io" id="btnOpenWhatsNew" data-i18n="whatsNewBtn">Yama Notlarını Gör</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -641,6 +651,31 @@
   </div>
 </div>
 
+<!-- WHAT'S NEW / CHANGELOG MODAL -->
+<div class="overlay" id="whatsNewOverlay">
+  <div class="modal" style="max-width:560px; width:92%;">
+    <div class="modal-head">
+      <div class="modal-title" style="display:flex;align-items:center;gap:8px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span data-i18n="whatsNewModalTitle">NELER YENİ?</span>
+      </div>
+      <button class="modal-close" id="btnCloseWhatsNew">✕</button>
+    </div>
+    <div class="modal-body" style="padding:16px 20px; max-height:480px; overflow-y:auto;">
+      <!-- Version selector tabs -->
+      <div id="whatsNewVersionTabs" style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;"></div>
+      <!-- Version header -->
+      <div id="whatsNewHeader" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--b);"></div>
+      <!-- Highlights list -->
+      <div id="whatsNewHighlights" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+    <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--mu);" data-i18n="whatsNewFooterOffline">Fuin — %100 Çevrimdışı, Sıfır Bulut & Güvenli</span>
+      <button class="btn-save" id="btnDismissWhatsNew" data-i18n="whatsNewGotIt">Harika, Anladım</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toastMsg">—</span></div>
 
@@ -844,6 +879,8 @@
 <script src="modules/syncAnimation.js"></script>
 <script src="modules/lanSyncController.js"></script>
 <script src="modules/recoveryController.js"></script>
+<script src="modules/changelogData.js"></script>
+<script src="modules/whatsNewController.js"></script>
   <!-- Generator Modal (Zen Design) -->
   <div class="overlay" id="genOverlay">
     <div class="modal zen-modal" style="width: 380px;">

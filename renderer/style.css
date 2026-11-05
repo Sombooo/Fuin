@@ -1403,5 +1403,82 @@ select.fi option { background: var(--paper); }
   white-space: nowrap;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   WHAT'S NEW / CHANGELOG MODAL STYLES
+   ═══════════════════════════════════════════════════════════════════ */
+.whatsnew-tab {
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  border: 1px solid var(--b);
+  background: var(--paper);
+  color: var(--mu);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .12s;
+}
+
+.whatsnew-tab:hover {
+  border-color: var(--sb);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.whatsnew-tab.active {
+  background: var(--ac-bg);
+  border-color: var(--ac);
+  color: var(--ac);
+  font-weight: 600;
+}
+
+.whatsnew-card {
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px solid var(--b);
+  border-radius: 6px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  transition: all .12s;
+}
+
+.whatsnew-card:hover {
+  border-color: var(--sb);
+  transform: translateY(-1px);
+}
+
+.whatsnew-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(90, 154, 110, 0.12);
+  color: var(--ac);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.whatsnew-badge {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  display: inline-block;
+  line-height: 1.2;
+}
+
+[data-theme="dark"] .whatsnew-tab {
+  background: #222019;
+}
+
+[data-theme="dark"] .whatsnew-card {
+  background: #222019;
+}
+
+
 
 

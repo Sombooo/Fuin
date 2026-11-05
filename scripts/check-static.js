@@ -57,6 +57,8 @@ const JS_TARGETS = [
   'renderer/modules/syncAnimation.js',
   'renderer/modules/lanSyncController.js',
   'renderer/modules/recoveryController.js',
+  'renderer/modules/changelogData.js',
+  'renderer/modules/whatsNewController.js',
   'browser-extension/background.js',
   'browser-extension/content.js',
   'browser-extension/popup.js',

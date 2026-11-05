@@ -9,11 +9,64 @@
 
   const CHANGELOG_ENTRIES = [
     {
+      version: '1.0.0-beta.8',
+      tag: 'v1.0.0-beta.8',
+      date: 'Kasım 2026',
+      dateEn: 'November 2026',
+      isCurrent: true,
+      title: "Neler Yeni (What's New) Modalı, Dinamik Dil Senkronizasyonu & Gelişmiş UI Cilalaması",
+      titleEn: "What's New Modal, Reactive Dynamic i18n Sync & UI Refinement",
+      summary: "Kullanıcıların en son güncellemeleri ve güvenlik iyileştirmelerini çevrimdışı inceleyebileceği 'Neler Yeni?' yama modalı, yeniden başlatma gerektirmeyen anlık reaktif dil senkronizasyonu ve sadeleştirilmiş dikkatsiz-tasarım arayüzü sunar.",
+      summaryEn: "Introduces an offline-first 'What's New?' changelog modal, instant dynamic multi-language reactivity without application restart, and distraction-free centered action layouts.",
+      highlights: [
+        {
+          badge: 'ui',
+          badgeText: 'ARAYÜZ',
+          badgeTextEn: 'UI / UX',
+          icon: 'scroll',
+          title: "Çevrimdışı 'Neler Yeni?' ve Yama Notları Gezgini",
+          titleEn: "Offline 'What's New?' & Release Navigator",
+          desc: "Ayarlar ve kasa açılışında en son sürüm değişikliklerini, güvenlik iyileştirmelerini ve özelliklerini gösteren sıcak organik koyu temalı sürüm gezgini eklendi.",
+          descEn: "Integrated a warm organic dark release explorer showing latest features, security enhancements, and changelog history directly within the vault."
+        },
+        {
+          badge: 'ui',
+          badgeText: 'DİL & i18N',
+          badgeTextEn: 'i18N / SYNC',
+          icon: 'sliders',
+          title: 'Anlık Reaktif Çoklu Dil (TR / EN) Senkronizasyonu',
+          titleEn: 'Instant Reactive Multi-Language (TR / EN) Parity',
+          desc: "Dinamik arayüz bileşenleri için onLanguageChanged reaktif kancası tanımlandı; dil değiştiğinde modallar, rozetler ve sürüm sekmeleri yeniden başlatmaya gerek kalmadan anında çevrilir.",
+          descEn: "Reactive onLanguageChanged hook for dynamic components ensuring tabs, badges, and modals translate immediately upon language toggle without app restart."
+        },
+        {
+          badge: 'ui',
+          badgeText: 'SADELİK',
+          badgeTextEn: 'CLEAN UX',
+          icon: 'lock',
+          title: 'Sakin ve Odaklı Modal Mimarisi (Quietly Secure)',
+          titleEn: 'Calm & Centered Action Hierarchy',
+          desc: "Aksiyon modallarındaki gereksiz alt sloganlar ve yinelenen linkler kaldırıldı; onay butonları tam odaklı, ortalanmış ve konforlu genişliğe (max 360px) kavuşturuldu.",
+          descEn: "Removed repetitive marketing slogans from modal footers; action buttons are now prominently centered, comfortably wide, and free of visual noise."
+        },
+        {
+          badge: 'security',
+          badgeText: 'GÜVENLİK',
+          badgeTextEn: 'SECURITY',
+          icon: 'shield-check',
+          title: 'Kapsamlı Karşıt Güvenlik & Regresyon Doğrulaması',
+          titleEn: 'Exhaustive Adversarial Security Verification',
+          desc: "41 statik kontrol ve 22/22 masaüstü güvenlik paketi (NIST KAT, WAL çökme dayanıklılığı, IPC izolasyonu, RFC1918 kısıtı) sıfır regresyonla doğrulandı.",
+          descEn: "Verified 41 static checks and 22/22 desktop security suites (NIST KATs, WAL crash durability, IPC isolation, RFC1918 constraints) with zero regressions."
+        }
+      ]
+    },
+    {
       version: '1.0.0-beta.7',
       tag: 'v1.0.0-beta.7',
       date: 'Kasım 2026',
       dateEn: 'November 2026',
-      isCurrent: true,
+      isCurrent: false,
       title: 'Resmi AGPLv3 Lisansı, Uygulama İçi Güncelleme & Dokunsal Arayüz',
       titleEn: 'Official AGPLv3 License, In-App Update Management & Tactile UI',
       summary: "Fuin'in sıfır-bulut felsefesini tam metin GNU AGPL-3.0 standardına taşırken; tek tıkla güncelleme indirici, tarayıcı eklentisi v1.0.2 güvenliği ve dokunsal arayüz mikro-geçişleri sunar.",

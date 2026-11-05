@@ -234,7 +234,7 @@ async function unlock() {
   if (exists && window.FuinWhatsNewController) {
     (async () => {
       try {
-        const curVer = (window.kekkai?.getAppVersion ? await window.kekkai.getAppVersion() : '1.0.0-beta.7') || '1.0.0-beta.7';
+        const curVer = (window.kekkai?.getAppVersion ? await window.kekkai.getAppVersion() : '1.0.0-beta.8') || '1.0.0-beta.8';
         window.FuinWhatsNewController.checkOnUnlock(curVer);
       } catch {}
     })();
@@ -2328,7 +2328,7 @@ function isNewerVersion(latest, current) {
 }
 
 async function getLocalAppVersion() {
-  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.7';
+  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.8';
 }
 
 async function silentCheckForUpdates() {

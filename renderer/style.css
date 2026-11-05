@@ -291,10 +291,55 @@ body::before {
 }
 .pw-list-wrap::-webkit-scrollbar,
 #view-settings::-webkit-scrollbar,
-#view-io::-webkit-scrollbar { width: 4px; }
+#view-io::-webkit-scrollbar,
+#view-health::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar,
+.whatsnew-tabs-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.pw-list-wrap::-webkit-scrollbar-track,
+#view-settings::-webkit-scrollbar-track,
+#view-io::-webkit-scrollbar-track,
+#view-health::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track,
+.whatsnew-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
 .pw-list-wrap::-webkit-scrollbar-thumb,
 #view-settings::-webkit-scrollbar-thumb,
-#view-io::-webkit-scrollbar-thumb { background: var(--b); border-radius: 2px; }
+#view-io::-webkit-scrollbar-thumb,
+#view-health::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb,
+.whatsnew-tabs-scroll::-webkit-scrollbar-thumb {
+  background: rgba(166, 157, 146, 0.28);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: all .12s;
+}
+.pw-list-wrap::-webkit-scrollbar-thumb:hover,
+#view-settings::-webkit-scrollbar-thumb:hover,
+#view-io::-webkit-scrollbar-thumb:hover,
+#view-health::-webkit-scrollbar-thumb:hover,
+.modal::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover,
+.whatsnew-tabs-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--sb);
+  border-color: rgba(90, 154, 110, 0.35);
+}
+.pw-list-wrap::-webkit-scrollbar-thumb:active,
+#view-settings::-webkit-scrollbar-thumb:active,
+#view-io::-webkit-scrollbar-thumb:active,
+#view-health::-webkit-scrollbar-thumb:active,
+.modal::-webkit-scrollbar-thumb:active,
+.modal-body::-webkit-scrollbar-thumb:active,
+.whatsnew-tabs-scroll::-webkit-scrollbar-thumb:active {
+  background: var(--ac);
+}
 
 .pw-card {
   background: var(--card); border: 1px solid var(--b); border-radius: 4px;
@@ -416,8 +461,6 @@ body::before {
   animation: modalIn .24s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, opacity;
 }
-.modal::-webkit-scrollbar { width: 4px; }
-.modal::-webkit-scrollbar-thumb { background: var(--b); }
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(8px) scale(0.975); }
   to   { opacity: 1; transform: none; }
@@ -1485,6 +1528,67 @@ select.fi option { background: var(--paper); }
   line-height: 1.2;
 }
 
+.whatsnew-modal {
+  max-width: 600px !important;
+  width: 92% !important;
+  max-height: 86vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.whatsnew-tabs-bar {
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--b);
+  background: var(--paper);
+  flex-shrink: 0;
+}
+
+.whatsnew-tabs-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.whatsnew-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 18px 22px 24px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.whatsnew-archive-box {
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 6px;
+  transition: all .12s;
+}
+
+.whatsnew-archive-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--paper);
+  border: 1px solid var(--b);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .12s;
+  user-select: none;
+}
+
+.whatsnew-archive-item:hover {
+  border-color: var(--ac);
+  background: rgba(90, 154, 110, 0.08);
+  transform: translateX(2px);
+}
+
 [data-theme="dark"] .whatsnew-tab {
   background: #2a2720;
   border-color: #3d3830;
@@ -1497,6 +1601,21 @@ select.fi option { background: var(--paper); }
 
 [data-theme="dark"] .whatsnew-card {
   background: #2a2720;
+  border-color: #3d3830;
+}
+
+[data-theme="dark"] .whatsnew-tabs-bar {
+  background: #222019;
+  border-color: #3d3830;
+}
+
+[data-theme="dark"] .whatsnew-archive-box {
+  background: #2a2720;
+  border-color: #3d3830;
+}
+
+[data-theme="dark"] .whatsnew-archive-item {
+  background: #222019;
   border-color: #3d3830;
 }
 

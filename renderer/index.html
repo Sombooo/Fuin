@@ -240,8 +240,52 @@
               </label>
             </div>
           </div>
+        </div>
 
+        <div class="main-title" style="margin-top:28px; margin-bottom:14px;" data-i18n="sysTitle">SİSTEM & GÜNCELLEMELER</div>
+        <div class="io-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+          <div class="io-card">
+            <div class="io-title" style="display:flex;align-items:center;gap:6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span data-i18n="sysUpdateCheckTitle">Sürüm Kontrolü</span>
+            </div>
+            <div class="io-sub" id="sysUpdateCheckSub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;flex-wrap:wrap;">
+              <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
+              <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text);display:flex;align-items:center;flex-wrap:wrap;gap:6px;"></span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--b);">
+              <div>
+                <div style="font-size:12px;font-weight:500;color:var(--text);" data-i18n="sysAutoUpdateCheckTitle">Açılışta Otomatik Denetle</div>
+                <div style="font-size:11px;color:var(--mu);" data-i18n="sysAutoUpdateCheckSub">Yeni sürüm olup olmadığını kasa açıldığında sessizce denetler.</div>
+              </div>
+              <input type="checkbox" id="toggleAutoUpdateCheck" style="cursor:pointer;accent-color:var(--ac);width:16px;height:16px;">
+            </div>
+          </div>
+          <div class="io-card">
+            <div class="io-title" style="display:flex;align-items:center;gap:6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span data-i18n="sysBackupTitle">Yedekleme Klasörü</span>
+            </div>
+            <div class="io-sub" id="sysBackupSub" data-i18n="sysBackupSub">Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;">
+              <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
+            </div>
+          </div>
+          <div class="io-card">
+            <div class="io-title" style="display:flex;align-items:center;gap:6px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span data-i18n="whatsNewTitle">Neler Yeni?</span>
+            </div>
+            <div class="io-sub" data-i18n="whatsNewSub">Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;">
+              <button class="btn-io" id="btnOpenWhatsNew" data-i18n="whatsNewBtn">Yama Notlarını Gör</button>
+            </div>
+          </div>
+        </div>
 
+        <div class="main-title" style="margin-top:28px; margin-bottom:14px;" data-i18n="settingConnDevicesTitle">CİHAZLAR & EKLENTİLER</div>
+        <div class="io-grid" style="grid-template-columns: 1fr;">
           <!-- Paired Mobile Devices Card (R1) -->
           <div class="io-card" id="pairedDevicesCard">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -305,48 +349,6 @@
             <div style="margin-top:10px;font-size:11px;color:var(--mu);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
               <span style="display:inline-flex;align-items:center;gap:5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Firefox: Hazır (<code style="color:var(--ac)">fuin-app@sombo.dev</code>)</span>
               <span>Kısayol: <b style="color:var(--text)">Cmd+Shift+L</b> / <b style="color:var(--text)">Ctrl+Shift+L</b></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="main-title" style="margin-top:32px; margin-bottom:16px;" data-i18n="sysTitle">SİSTEM & GÜNCELLEMELER</div>
-        <div class="io-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
-          <div class="io-card">
-            <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              <span data-i18n="sysUpdateCheckTitle">Sürüm Kontrolü</span>
-            </div>
-            <div class="io-sub" id="sysUpdateCheckSub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.</div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;flex-wrap:wrap;">
-              <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
-              <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text);display:flex;align-items:center;flex-wrap:wrap;gap:6px;"></span>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--b);">
-              <div>
-                <div style="font-size:12px;font-weight:500;color:var(--text);" data-i18n="sysAutoUpdateCheckTitle">Açılışta Otomatik Denetle</div>
-                <div style="font-size:11px;color:var(--mu);" data-i18n="sysAutoUpdateCheckSub">Yeni sürüm olup olmadığını kasa açıldığında sessizce denetler.</div>
-              </div>
-              <input type="checkbox" id="toggleAutoUpdateCheck" style="cursor:pointer;accent-color:var(--ac);width:16px;height:16px;">
-            </div>
-          </div>
-          <div class="io-card">
-            <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              <span data-i18n="sysBackupTitle">Yedekleme Klasörü</span>
-            </div>
-            <div class="io-sub" id="sysBackupSub" data-i18n="sysBackupSub">Otomatik alınan geçmiş kasa yedeklerinize (.bak dosyaları) erişin.</div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;">
-              <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
-            </div>
-          </div>
-          <div class="io-card">
-            <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              <span data-i18n="whatsNewTitle">Neler Yeni?</span>
-            </div>
-            <div class="io-sub" data-i18n="whatsNewSub">Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.</div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;">
-              <button class="btn-io" id="btnOpenWhatsNew" data-i18n="whatsNewBtn">Yama Notlarını Gör</button>
             </div>
           </div>
         </div>
@@ -653,7 +655,7 @@
 
 <!-- WHAT'S NEW / CHANGELOG MODAL -->
 <div class="overlay" id="whatsNewOverlay">
-  <div class="modal" style="max-width:580px; width:92%;">
+  <div class="modal whatsnew-modal">
     <div class="modal-head">
       <div class="modal-title" style="display:flex;align-items:center;gap:8px;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -661,15 +663,20 @@
       </div>
       <button class="modal-close" id="btnCloseWhatsNew">✕</button>
     </div>
-    <div class="modal-body" style="padding:18px 22px; max-height:490px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;">
-      <!-- Version selector tabs -->
-      <div id="whatsNewVersionTabs" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;"></div>
+    <!-- Sticky Version Selector Bar -->
+    <div class="whatsnew-tabs-bar">
+      <div id="whatsNewVersionTabs" class="whatsnew-tabs-scroll"></div>
+    </div>
+    <!-- Scrollable Content Body -->
+    <div class="modal-body whatsnew-body">
       <!-- Version header -->
       <div id="whatsNewHeader" class="whatsnew-overview-card"></div>
       <!-- Highlights list -->
       <div id="whatsNewHighlights" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <!-- Archive / Previous Releases Navigation -->
+      <div id="whatsNewArchiveNav" class="whatsnew-archive-box"></div>
     </div>
-    <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; flex-shrink:0;">
       <span style="font-family:var(--mono);font-size:11px;color:var(--mu);" data-i18n="whatsNewFooterOffline">Fuin — %100 Çevrimdışı, Sıfır Bulut & Güvenli</span>
       <button class="btn-save" id="btnDismissWhatsNew" data-i18n="whatsNewGotIt">Harika, Anladım</button>
     </div>

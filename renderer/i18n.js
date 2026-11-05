@@ -191,6 +191,7 @@ const TRANSLATIONS = {
     whatsNewSub: "Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.",
     whatsNewBtn: 'Yama Notlarını Gör',
     whatsNewGotIt: 'Harika, Anladım',
+    whatsNewFooterOffline: 'Fuin — %100 Çevrimdışı, Sıfır Bulut & Güvenli',
     slogan: 'Quietly secure.',
 
     toastClipCleared: 'pano temizlendi ✓',
@@ -513,6 +514,7 @@ const TRANSLATIONS = {
     whatsNewSub: "View recent updates, new features, and security enhancements.",
     whatsNewBtn: 'View Release Notes',
     whatsNewGotIt: 'Got It',
+    whatsNewFooterOffline: 'Fuin — 100% Offline, Zero Cloud & Secure',
     slogan: 'Quietly secure.',
 
     toastClipCleared: 'clipboard cleared ✓',

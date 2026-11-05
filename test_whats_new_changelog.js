@@ -94,7 +94,7 @@ console.log('\n[3. i18n Translation Dictionary Keys]');
 const i18nFile = fs.readFileSync(path.join(ROOT, 'renderer', 'i18n.js'), 'utf8');
 
 check('i18n.js includes all whatsNew translation keys in TR and EN', () => {
-  const keys = ['whatsNewTitle', 'whatsNewModalTitle', 'whatsNewSub', 'whatsNewBtn', 'whatsNewGotIt'];
+  const keys = ['whatsNewTitle', 'whatsNewModalTitle', 'whatsNewSub', 'whatsNewBtn', 'whatsNewGotIt', 'whatsNewFooterOffline'];
   for (const k of keys) {
     assert.ok(i18nFile.includes(`${k}:`), `Missing key ${k} in i18n.js`);
   }

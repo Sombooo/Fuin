@@ -129,6 +129,37 @@
       `;
       highlightsEl.appendChild(card);
     });
+
+    // Render previous releases quick-switch at the bottom so user never misses other versions
+    const archiveEl = document.getElementById('whatsNewArchiveNav');
+    if (archiveEl) {
+      const allEntries = window.FuinChangelog?.CHANGELOG_ENTRIES || [];
+      const otherEntries = allEntries.filter(e => e.version !== entry.version);
+      if (otherEntries.length > 0) {
+        archiveEl.innerHTML = `
+          <div style="font-family:var(--mono);font-size:10.5px;color:var(--mu);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">${isEn ? 'PREVIOUS RELEASES' : 'ÖNCEKİ SÜRÜMLER'}</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            ${otherEntries.map(oe => `
+              <div class="whatsnew-archive-item" data-ver="${oe.version}">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ac);">${oe.tag}</span>
+                  <span style="font-size:12px;color:var(--text);font-weight:500;">${isEn ? (oe.titleEn || oe.title) : oe.title}</span>
+                </div>
+                <span style="font-family:var(--mono);font-size:11px;color:var(--ac);display:flex;align-items:center;gap:4px;">${isEn ? 'View →' : 'Gör →'}</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        archiveEl.querySelectorAll('.whatsnew-archive-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const targetVer = item.getAttribute('data-ver');
+            if (targetVer) selectVersion(targetVer);
+          });
+        });
+      } else {
+        archiveEl.innerHTML = '';
+      }
+    }
   }
 
   function selectVersion(ver) {
@@ -139,6 +170,9 @@
     currentSelectedVersion = entry.version;
     renderTabs(entries, entry.version);
     renderContent(entry);
+
+    const bodyEl = document.querySelector('.whatsnew-body') || document.querySelector('#whatsNewOverlay .modal-body');
+    if (bodyEl) bodyEl.scrollTop = 0;
   }
 
   function openModal(ver) {

@@ -7,7 +7,7 @@
 
 A calm, local-first password and 2FA manager I built for Desktop and Mobile.
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Platform: macOS | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-lightgray.svg)](#)
 [![Companion: Fuin Mobile](https://img.shields.io/badge/Mobile-Android-366347.svg)](https://github.com/Sombooo/FuinMobile)
 
@@ -147,6 +147,6 @@ npm run build-win
 
 ## ☕ Support
 
-Fuin is an independent open-source project licensed under the **GPLv3**. If you find it useful and want to support my work on it, you can buy me a coffee below—thank you!
+Fuin is an independent open-source project licensed under the **AGPLv3**. If you find it useful and want to support my work on it, you can buy me a coffee below—thank you!
 
 [![Support via Lemon Squeezy](https://img.shields.io/badge/Support_Fuin-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://fuindev.lemonsqueezy.com/checkout/buy/c898c753-098b-4c0b-a721-77332db06bdc)

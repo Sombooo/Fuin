@@ -321,6 +321,29 @@ test('8. In-app update settings, asset resolver, download validation & clean UI'
   assert.ok(mainJs.includes("finalUrl.hostname.endsWith('.blob.core.windows.net')"), 'main.js must permit GitHub Azure blob backend');
 });
 
+// ── 9. Recovery Key Self-Test & Backup History DOM/IPC Parity ───────────────
+test('9. Recovery Key Self-Test & Backup History DOM IDs and IPC response keys match across HTML, renderer, and main', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
+  const appJs = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
+  const mainJs = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+
+  // Verify Recovery Key modal DOM IDs exist in index.html and are referenced in app.js
+  for (const id of ['verifyRecoveryOverlay', 'verifyRecoveryInp', 'verifyRecoveryMsg', 'btnConfirmVerifyRecovery']) {
+    assert.ok(indexHtml.includes(`id="${id}"`), `index.html must include #${id}`);
+    assert.ok(appJs.includes(`'${id}'`), `app.js must reference #${id}`);
+  }
+
+  // Verify Backup History modal DOM IDs exist in index.html and are referenced in app.js
+  for (const id of ['backupHistoryOverlay', 'backupHistoryList', 'backupAutoHealBanner', 'backupSummaryBadge', 'btnCreateBackupNow', 'btnOpenBackupHistory']) {
+    assert.ok(indexHtml.includes(`id="${id}"`), `index.html must include #${id}`);
+    assert.ok(appJs.includes(`'${id}'`), `app.js must reference #${id}`);
+  }
+
+  // Verify main.js listVaultBackups returns both backups and snapshots arrays and file/filename properties
+  assert.ok(mainJs.includes('backups: files') && mainJs.includes('snapshots: files'), 'main.js listVaultBackups must provide backups and snapshots arrays');
+  assert.ok(appJs.includes('extractSnapshotsFromResponse'), 'app.js must extract snapshots from getBackupList response');
+});
+
 console.log('═'.repeat(75));
 console.log(`TOTAL PASSES: ${passes}`);
 console.log(`TOTAL FAILURES: ${failures}`);

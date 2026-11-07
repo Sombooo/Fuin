@@ -1491,7 +1491,7 @@ function listVaultBackups(userDataDir = app.getPath('userData')) {
   const backupDir = path.join(userDataDir, 'backups');
   const log = loadBackupLog(userDataDir);
   if (!fs.existsSync(backupDir)) {
-    return { backups: [], lastAutoHeal: log.lastAutoHeal || null, totalCount: 0 };
+    return { ok: true, backups: [], snapshots: [], lastAutoHeal: log.lastAutoHeal || null, totalCount: 0 };
   }
   const files = fs.readdirSync(backupDir)
     .filter(f => f.startsWith('fuin.enc.') && f.endsWith('.bak'))
@@ -1508,6 +1508,7 @@ function listVaultBackups(userDataDir = app.getPath('userData')) {
       const verified = stat.size > 0 && (!!actualSha) && (!logEntry || !logEntry.sha256 || logEntry.sha256 === actualSha);
       return {
         file: f,
+        filename: f,
         timestamp: logEntry?.timestamp || stat.mtime.getTime(),
         iso: logEntry?.iso || stat.mtime.toISOString(),
         size: stat.size,
@@ -1515,12 +1516,15 @@ function listVaultBackups(userDataDir = app.getPath('userData')) {
         fullSha256: actualSha,
         reason: logEntry?.reason || 'auto-save',
         verified,
+        integrityOk: verified,
       };
     })
     .sort((a, b) => b.timestamp - a.timestamp);
 
   return {
+    ok: true,
     backups: files,
+    snapshots: files,
     lastAutoHeal: log.lastAutoHeal || null,
     totalCount: files.length,
   };
@@ -1576,6 +1580,12 @@ ipcMain.handle('restore-backup-snapshot', (_, payload) => {
   // Take a protective pre-restore snapshot of current DATA_FILE
   if (fs.existsSync(DATA_FILE)) {
     backupFile(DATA_FILE, 'pre-restore');
+  }
+  writeAtomicSync(DATA_FILE, ciphertext, { encoding: 'utf8', mode: 0o600 });
+  if (_authoritativeVaultSession) {
+    try {
+      _authoritativeVaultSession.dataFileHash = actualSha;
+    } catch {}
   }
   return { ok: true, ciphertext, sha256: actualSha, file: filename };
 });

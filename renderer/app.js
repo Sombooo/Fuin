@@ -1705,14 +1705,19 @@ async function exportEmergencyKit() {
 }
 
 // ── RECOVERY KEY VERIFICATION (SELF-TEST) ─────────────────────────
+function getVerifyRecoveryMsgEl() {
+  return document.getElementById('verifyRecoveryMsg') || document.getElementById('verifyRecoveryStatusMsg');
+}
+
 function openVerifyRecoveryModal() {
   if (!master) { toast(t('toastLoginFirst')); return; }
   const inp = document.getElementById('verifyRecoveryInp');
-  const msg = document.getElementById('verifyRecoveryStatusMsg');
+  const msg = getVerifyRecoveryMsgEl();
   if (inp) inp.value = '';
   if (msg) {
     msg.style.display = 'none';
     msg.textContent = '';
+    msg.className = 'forgot-msg';
   }
   document.getElementById('verifyRecoveryOverlay')?.classList.add('open');
   setTimeout(() => inp?.focus(), 80);
@@ -1726,56 +1731,90 @@ function closeVerifyRecoveryModal() {
 
 async function handleVerifyRecoveryKey() {
   const inp = document.getElementById('verifyRecoveryInp');
-  const msg = document.getElementById('verifyRecoveryStatusMsg');
+  const msg = getVerifyRecoveryMsgEl();
+  const btn = document.getElementById('btnConfirmVerifyRecovery');
   const rawKey = (inp?.value || '').trim().toUpperCase();
-  if (!msg) return;
-  if (!rawKey) {
-    msg.style.display = 'block';
-    msg.style.background = 'rgba(200, 128, 64, 0.12)';
-    msg.style.border = '1px solid var(--amber)';
-    msg.style.color = 'var(--amber)';
-    msg.textContent = t('verifyRecoveryInvalid');
-    return;
-  }
-  const recoveryEnc = await api.loadRecovery();
-  const masterEnc = await api.loadMasterEnc();
-  if (!recoveryEnc || !masterEnc) {
-    msg.style.display = 'block';
-    msg.style.background = 'rgba(200, 128, 64, 0.12)';
-    msg.style.border = '1px solid var(--amber)';
-    msg.style.color = 'var(--amber)';
-    msg.textContent = t('verifyRecoveryInvalid');
-    return;
-  }
-  try {
-    const keyClean = rawKey.replace(/-/g, '');
-    const recData = await api.decrypt(recoveryEnc, keyClean);
-    const masterData = await api.decrypt(masterEnc, keyClean);
-    if (recData && recData.verified && masterData && typeof masterData.master === 'string') {
+  const keyClean = rawKey.replace(/[^A-Z0-9]/g, '');
+
+  const showResult = (text, type) => {
+    if (msg) {
+      const bgMap = {
+        green: 'rgba(90, 154, 110, 0.14)',
+        red: 'rgba(160, 52, 42, 0.12)',
+        amber: 'rgba(200, 128, 64, 0.12)',
+      };
+      const borderMap = {
+        green: 'rgba(90, 154, 110, 0.35)',
+        red: 'rgba(160, 52, 42, 0.35)',
+        amber: 'rgba(200, 128, 64, 0.35)',
+      };
+      msg.className = `forgot-msg ${type}`;
       msg.style.display = 'block';
-      msg.style.background = 'rgba(90, 154, 110, 0.14)';
-      msg.style.border = '1px solid var(--green)';
-      msg.style.color = 'var(--green)';
-      msg.textContent = t('verifyRecoverySuccess');
+      msg.style.color = `var(--${type})`;
+      msg.style.background = bgMap[type] || bgMap.amber;
+      msg.style.border = `1px solid ${borderMap[type] || borderMap.amber}`;
+      msg.style.borderRadius = '6px';
+      msg.style.marginTop = '8px';
+      msg.textContent = text;
+    }
+  };
+
+  if (!keyClean || keyClean.length < 16) {
+    showResult(t('verifyRecoveryInvalid'), 'amber');
+    inp?.focus();
+    return;
+  }
+
+  const origBtnText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t('lockVerifying');
+  }
+
+  try {
+    const recoveryEnc = await api.loadRecovery();
+    if (!recoveryEnc) {
+      showResult(t('forgotNoRecovery').replace('{word}', t('resetConfirmWord')), 'amber');
+      return;
+    }
+    const recData = await api.decrypt(recoveryEnc, keyClean);
+    const masterEnc = await api.loadMasterEnc();
+    if (masterEnc) {
+      const masterData = await api.decrypt(masterEnc, keyClean);
+      if (!masterData || typeof masterData.master !== 'string') {
+        throw new Error('invalid-master-payload');
+      }
+    }
+    if (recData && (recData.verified || recData.key)) {
+      showResult(t('verifyRecoverySuccess'), 'green');
       toast(t('verifyRecoverySuccess'));
     } else {
-      throw new Error('invalid-payload');
+      throw new Error('invalid-recovery-payload');
     }
   } catch {
-    msg.style.display = 'block';
-    msg.style.background = 'rgba(200, 80, 70, 0.12)';
-    msg.style.border = '1px solid var(--red)';
-    msg.style.color = 'var(--red)';
-    msg.textContent = t('verifyRecoveryInvalid');
+    showResult(t('verifyRecoveryInvalid'), 'red');
+    toast(t('verifyRecoveryInvalid'));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origBtnText || t('verifyRecoveryBtn');
+    }
   }
 }
 
 // ── AUTOMATIC BACKUP HISTORY & SNAPSHOT RESTORE ───────────────────
 function formatBackupReason(reason) {
-  if (reason === 'manual') return t('backupReasonManual');
+  if (reason === 'manual' || reason === 'manual-snapshot') return t('backupReasonManual');
   if (reason === 'pre-restore') return t('backupReasonPreRestore');
-  if (reason === 'pre-reset' || reason === 'recovery-regen') return t('backupReasonRecovery');
+  if (reason === 'pre-reset' || reason === 'recovery-regen' || reason === 'recovery-rotation' || reason === 'recovery-save') return t('backupReasonRecovery');
   return t('backupReasonAuto');
+}
+
+function extractSnapshotsFromResponse(res) {
+  if (!res) return [];
+  if (Array.isArray(res.backups)) return res.backups;
+  if (Array.isArray(res.snapshots)) return res.snapshots;
+  return [];
 }
 
 async function refreshBackupSummaryBadge() {
@@ -1783,7 +1822,7 @@ async function refreshBackupSummaryBadge() {
   if (!badge || !api.getBackupList) return;
   try {
     const res = await api.getBackupList();
-    const snaps = Array.isArray(res?.snapshots) ? res.snapshots : [];
+    const snaps = extractSnapshotsFromResponse(res);
     if (!snaps.length) {
       badge.textContent = t('backupHistoryEmpty');
       badge.style.color = 'var(--mu)';
@@ -1802,7 +1841,7 @@ async function renderBackupHistoryList() {
   if (!listEl || !api.getBackupList) return;
   try {
     const res = await api.getBackupList();
-    const snaps = Array.isArray(res?.snapshots) ? res.snapshots : [];
+    const snaps = extractSnapshotsFromResponse(res);
     if (healBanner) {
       if (res?.lastAutoHeal?.timestamp) {
         const d = new Date(res.lastAutoHeal.timestamp).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'tr-TR');
@@ -1817,11 +1856,13 @@ async function renderBackupHistoryList() {
       return;
     }
     listEl.innerHTML = snaps.map(snap => {
+      const fname = snap.file || snap.filename || '';
       const d = new Date(snap.timestamp).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'tr-TR');
       const kb = Math.max(1, Math.round((snap.size || 0) / 1024));
-      const hashShort = snap.sha256 ? snap.sha256.slice(0, 10) : '—';
+      const hashShort = (snap.fullSha256 || snap.sha256 || '').slice(0, 10) || '—';
       const reasonLabel = formatBackupReason(snap.reason);
-      const badgeLabel = snap.sha256 ? t('backupVerifiedBadge') : t('backupCorruptBadge');
+      const isVerified = snap.verified !== false && Boolean(snap.sha256 || snap.fullSha256);
+      const badgeLabel = isVerified ? t('backupVerifiedBadge') : t('backupCorruptBadge');
       return `
         <div class="pw-history-item" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
           <div style="display:flex;flex-direction:column;gap:3px;overflow:hidden;flex:1;">
@@ -1833,7 +1874,7 @@ async function renderBackupHistoryList() {
               ${kb} KB · SHA-256: ${esc(hashShort)}… · ${esc(badgeLabel)}
             </div>
           </div>
-          <button type="button" class="btn-io" data-restore-snap="${esc(snap.filename)}" style="font-size:11px;padding:6px 12px;flex-shrink:0;">
+          <button type="button" class="btn-io" data-restore-snap="${esc(fname)}" style="font-size:11px;padding:6px 12px;flex-shrink:0;">
             ${esc(t('backupRestoreBtn'))}
           </button>
         </div>
@@ -1863,15 +1904,19 @@ function closeBackupHistoryModal() {
 async function handleCreateManualBackup() {
   if (!master) { toast(t('toastLoginFirst')); return; }
   try {
-    await persist();
+    const exists = await api.dataExists();
+    if (!exists) {
+      await persist();
+    }
     if (api.createManualBackup) {
       const res = await api.createManualBackup();
       if (res?.ok) {
         toast(t('toastSnapshotCreated'));
         await refreshBackupSummaryBadge();
-        if (document.getElementById('backupHistoryOverlay')?.classList.contains('open')) {
-          await renderBackupHistoryList();
-        }
+        await renderBackupHistoryList();
+        document.getElementById('backupHistoryOverlay')?.classList.add('open');
+      } else {
+        toast(t('toastError'));
       }
     }
   } catch (err) {
@@ -1888,7 +1933,7 @@ async function restoreSnapshotByFilename(filename) {
       toast(t('toastError') + ': ' + (res?.error || ''));
       return;
     }
-    const raw = await api.loadData();
+    const raw = res.ciphertext || await api.loadData();
     if (raw) {
       try {
         const parsed = await api.decrypt(raw, master);
@@ -2326,12 +2371,18 @@ async function exportEncryptedBackup() {
       categories: [],
       entries: exportEntries
     };
-    const enc = await api.encrypt(payload, master);
+    const ciphertext = await api.encrypt(payload, master);
+    const envelope = {
+      format: 'fuin-encrypted-backup',
+      version: 1,
+      exportedAt: Date.now(),
+      ciphertext
+    };
     const datePart = new Date().toISOString().slice(0, 10);
     const ok = await api.exportFile({
-      content: JSON.stringify(enc, null, 2),
+      content: JSON.stringify(envelope, null, 2),
       defaultName: `fuin-kasa-${datePart}.fuin`,
-      filters: [{ name: 'Fuin Encrypted Backup', extensions: ['fuin', 'enc', 'json'] }]
+      filters: [{ name: 'Fuin Encrypted Backup', extensions: ['fuin', 'bak', 'enc'] }]
     });
     if (ok) toast(t('toastEncBackupExported'));
   } catch (err) {
@@ -2342,13 +2393,25 @@ async function exportEncryptedBackup() {
 async function importEncryptedBackup() {
   if (!master) { toast(t('toastLoginFirst')); return; }
   const raw = await api.importFile({
-    filters: [{ name: 'Fuin Encrypted Backup', extensions: ['fuin', 'enc', 'json'] }]
+    filters: [{ name: 'Fuin Encrypted Backup', extensions: ['fuin', 'bak', 'enc', 'json'] }]
   });
   if (!raw) return;
-  let encObj;
+  let ciphertext = '';
   try {
-    encObj = JSON.parse(raw);
-    if (!encObj || typeof encObj.data !== 'string' || typeof encObj.iv !== 'string' || typeof encObj.salt !== 'string' || typeof encObj.tag !== 'string') {
+    const trimmed = String(raw).trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('"')) {
+      const parsedJson = JSON.parse(trimmed);
+      if (typeof parsedJson === 'string') {
+        ciphertext = parsedJson;
+      } else if (parsedJson && typeof parsedJson.ciphertext === 'string') {
+        ciphertext = parsedJson.ciphertext;
+      } else if (parsedJson && typeof parsedJson.data === 'string' && !parsedJson.iv) {
+        ciphertext = parsedJson.data;
+      }
+    } else {
+      ciphertext = trimmed;
+    }
+    if (typeof ciphertext !== 'string' || ciphertext.length < 80) {
       throw new Error('invalid-format');
     }
   } catch {
@@ -2365,14 +2428,14 @@ async function importEncryptedBackup() {
   };
 
   try {
-    const parsed = await api.decrypt(encObj, master);
+    const parsed = await api.decrypt(ciphertext, master);
     await applyDecryptedVault(parsed);
   } catch {
     // Mevcut ana şifre ile çözülemediyse yedeğin oluşturulduğu şifreyi sor
     repromptCustomVerifier = async (val, msgEl, inpEl) => {
       if (!val) return false;
       try {
-        const parsed = await api.decrypt(encObj, val);
+        const parsed = await api.decrypt(ciphertext, val);
         await applyDecryptedVault(parsed);
         return true;
       } catch {

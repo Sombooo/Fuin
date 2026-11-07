@@ -1651,10 +1651,14 @@ select.fi option { background: var(--paper); }
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 8px;
+  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--b);
   width: 100%;
+}
+
+.settings-action-bar.single-col {
+  grid-template-columns: 1fr;
 }
 
 .settings-action-bar .btn-io {

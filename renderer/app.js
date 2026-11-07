@@ -70,10 +70,15 @@ async function copySecure(text, label, durationMs = 30000) {
 
 // ── INIT ──────────────────────────────────────────────────────────
 async function init() {
-  const info = await api.cryptoInfo();
-  const badge = document.getElementById('cryptoBadge');
-  badge.textContent = info.argon2 ? 'Argon2id · Dual-Key' : 'PBKDF2 · Dual-Key';
-  badge.style.color  = info.argon2 ? 'var(--green)' : 'var(--amber)';
+  try {
+    const badge = document.getElementById('cryptoBadge');
+    if (badge) badge.removeAttribute('data-i18n');
+    const info = await api.cryptoInfo();
+    if (badge && info) {
+      badge.textContent = info.argon2 ? 'Argon2id · Dual-Key' : 'PBKDF2 · Dual-Key';
+      badge.style.color  = info.argon2 ? 'var(--green)' : 'var(--amber)';
+    }
+  } catch {}
 }
 init();
 
@@ -2678,6 +2683,7 @@ document.addEventListener('keydown',e=>{
 // ── i18n.js tarafından dil değiştiğinde çağrılır — data-i18n
 // özniteliğiyle kapsanmayan, JS içinde dinamik üretilen metinleri günceller
 function refreshDynamicI18nLabels() {
+  init();
   if (window.FuinWhatsNewController && typeof window.FuinWhatsNewController.onLanguageChanged === 'function') {
     window.FuinWhatsNewController.onLanguageChanged();
   }
@@ -2707,6 +2713,11 @@ function refreshDynamicI18nLabels() {
     refreshPairedDevicesList();
     updateExtStatusUI();
     refreshBackupSummaryBadge();
+    checkRecoveryStatus();
+    getLocalAppVersion().then(ver => {
+      const sub = document.getElementById('sysUpdateCheckSub');
+      if (sub) sub.textContent = `${t('sysUpdateCheckSub')} ${t('sysUpdateCurrent', { v: normalizeVersion(ver) })}`;
+    });
   }
   if (document.getElementById('addOverlay')?.classList.contains('open')) {
     document.getElementById('addModalTitle').textContent = editId ? t('modalEditEntry') : t('modalNewEntry');

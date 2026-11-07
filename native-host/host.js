@@ -20,6 +20,7 @@ const crypto = require('crypto');
 
 const PRODUCT_NAME = 'Fuin';
 const MAX_MSG_SIZE = 1024 * 1024; // 1 MB güvenlik sınırı
+const PROTOCOL_VERSION = 1; // Native-host & eklenti protokol sürümü
 
 function getUserDataPath() {
   const home = os.homedir();
@@ -118,7 +119,7 @@ function forwardToFuin(request, cb) {
       socket.end();
     }
   });
-  socket.on('error', () => safeCb({ error: 'fuin-not-running' }));
+  socket.on('error', () => safeCb({ error: 'fuin-not-running', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true }));
   socket.on('timeout', () => { socket.destroy(); safeCb({ error: 'timeout' }); });
   socket.setTimeout(32000);
 }
@@ -130,7 +131,9 @@ const ALLOWED_TYPES = new Set([
   'check-save-candidate',
   'save-credential',
   'exclude-domain',
-  'copy-secure'
+  'copy-secure',
+  'handshake',
+  'ping'
 ]);
 
 function clampField(val, maxLen) {
@@ -163,6 +166,12 @@ readMessages((msg) => {
     if (msg.updateEntryId) sanitized.updateEntryId = clampField(msg.updateEntryId, 128);
   } else if (msg.type === 'exclude-domain') {
     sanitized.domain = clampField(msg.domain, 253);
+  } else if (msg.type === 'handshake') {
+    sanitized.clientVersion = clampField(msg.clientVersion, 32);
+    sanitized.protocolVersion = Number(msg.protocolVersion) || 1;
+    sanitized.hostProtocolVersion = PROTOCOL_VERSION;
+  } else if (msg.type === 'ping') {
+    sanitized.timestamp = Date.now();
   }
   forwardToFuin(sanitized, (result) => writeMessage(result));
 });

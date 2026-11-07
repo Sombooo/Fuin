@@ -190,6 +190,21 @@ const server = net.createServer((socket) => {
       if (!msg.token || typeof msg.token !== 'string' || !safeCompare(msg.token, serverToken)) {
         return reply({ id: msg.id, error: 'unauthorized' });
       }
+      if (msg.type === 'ping') {
+        return reply({ id: msg.id, ok: true, pong: true, timestamp: Date.now() });
+      }
+      if (msg.type === 'handshake') {
+        const clientProto = Number(msg.protocolVersion) || 1;
+        const compatible = (clientProto === 1);
+        return reply({
+          id: msg.id,
+          ok: true,
+          protocolVersion: 1,
+          appVersion: '1.0.0-test',
+          unlocked: !!isUnlocked,
+          compatible
+        });
+      }
       if (!isUnlocked) {
         return reply({ id: msg.id, error: 'locked' });
       }
@@ -234,11 +249,44 @@ server.listen(sockPath, async () => {
   const res4 = await querySocket({ id: '4', type: 'lookup', domain: 'example.com', token: serverToken });
   assert.strictEqual(res4.error, 'locked');
 
+  // Handshake when locked (must still succeed and report unlocked: false)
+  const res5 = await querySocket({ id: '5', type: 'handshake', protocolVersion: 1, token: serverToken });
+  assert.strictEqual(res5.ok, true);
+  assert.strictEqual(res5.compatible, true);
+  assert.strictEqual(res5.unlocked, false);
+  assert.strictEqual(res5.protocolVersion, 1);
+
+  // Handshake with incompatible protocol version
+  const res6 = await querySocket({ id: '6', type: 'handshake', protocolVersion: 99, token: serverToken });
+  assert.strictEqual(res6.ok, true);
+  assert.strictEqual(res6.compatible, false);
+
+  // Ping test
+  const res7 = await querySocket({ id: '7', type: 'ping', token: serverToken });
+  assert.strictEqual(res7.ok, true);
+  assert.strictEqual(res7.pong, true);
+
   server.close(() => {
     if (process.platform !== 'win32' && fs.existsSync(sockPath)) {
       try { fs.unlinkSync(sockPath); } catch {}
     }
-    console.log('✓ 5. Socket IPC authentication, missing token, tamper rejection, and lockout handling passed');
+    console.log('✓ 5. Socket IPC authentication, missing token, tamper rejection, lockout handling, and handshake passed');
+
+    // ── 6. Tray Manager and Localized Notifications i18n tests ────────────
+    const trayManager = require('./main/trayManager');
+    assert.strictEqual(typeof trayManager.TRAY_I18N, 'object');
+    assert.strictEqual(trayManager.TRAY_I18N.tr.lock, 'Kilitle');
+    assert.strictEqual(trayManager.TRAY_I18N.en.lock, 'Lock');
+    assert.strictEqual(trayManager.TRAY_I18N.tr.vaultLockedTitle, 'Kasa Kilitlendi');
+    assert.strictEqual(trayManager.TRAY_I18N.en.vaultLockedTitle, 'Vault Locked');
+
+    // Test language toggle
+    trayManager.updateLanguage('en');
+    assert.strictEqual(trayManager.getLanguage(), 'en');
+    trayManager.updateLanguage('tr');
+    assert.strictEqual(trayManager.getLanguage(), 'tr');
+    console.log('✓ 6. Tray manager dynamic i18n and notification keys passed');
+
     console.log('═'.repeat(60));
     console.log('ALL NATIVE HOST & STORAGE TEST CASES PASSED (100%)');
     console.log('═'.repeat(60));

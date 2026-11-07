@@ -720,6 +720,9 @@ function setLanguage(lang) {
   localStorage.setItem('fuin-lang', lang);
   const btn = document.getElementById('langToggle');
   if (btn) btn.textContent = lang === 'en' ? 'TR' : 'EN'; // buton, GEÇİLECEK dili gösterir
+  if (typeof window !== 'undefined' && window.kekkai?.setLanguage) {
+    try { window.kekkai.setLanguage(lang); } catch {}
+  }
   applyI18n();
 }
 

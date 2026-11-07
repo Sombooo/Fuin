@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, clipboard, powerMonitor, shell, Tray, Menu, nativeImage, systemPreferences, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, powerMonitor, shell, Tray, Menu, nativeImage, systemPreferences, safeStorage, Notification } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const crypto = require('crypto');
@@ -174,6 +174,7 @@ function createTray() {
   tray = trayManager.initTray({
     Menu,
     Tray,
+    Notification,
     nativeImage,
     baseDir: __dirname,
     getMainWindow: () => mainWindow,
@@ -229,6 +230,11 @@ function triggerForceLock(reason) {
     try { _ephemeralLanServer.stop('vault-locked'); } catch {}
   }
   mainWindow?.webContents?.send('force-lock', reason);
+  if (reason === 'idle' || reason === 'tray' || reason === 'lock-screen' || reason === 'suspend') {
+    if (!mainWindow || !mainWindow.isVisible() || (typeof mainWindow.isMinimized === 'function' && mainWindow.isMinimized())) {
+      trayManager.showNotification('vaultLocked');
+    }
+  }
 }
 
 // Renderer, unlock()/lock() olduğunda bu state'i main process'e bildirir
@@ -245,6 +251,9 @@ ipcMain.handle('set-unlock-state', (_, unlocked) => {
       const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
       if (lastCopiedHash && currentHash === lastCopiedHash) {
         clipboard.writeText('');
+        if (!mainWindow || !mainWindow.isVisible() || (typeof mainWindow.isMinimized === 'function' && mainWindow.isMinimized())) {
+          trayManager.showNotification('clipboardCleared');
+        }
       }
     } catch {}
     lastCopiedHash = null;
@@ -263,6 +272,16 @@ ipcMain.handle('set-idle-lock', (_, seconds) => {
 
 ipcMain.on('user-activity', () => {
   powerMonitorManager.recordActivity();
+});
+
+ipcMain.handle('set-language', (_, lang) => {
+  const clean = (lang === 'en' ? 'en' : 'tr');
+  trayManager.updateLanguage(clean);
+  return true;
+});
+
+ipcMain.handle('get-language', () => {
+  return trayManager.getLanguage();
 });
 
 // ===================================================================
@@ -1167,6 +1186,9 @@ ipcMain.handle('copy-secure', (_, text, durationMs = 30000) => {
       const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
       if (lastCopiedHash && currentHash === lastCopiedHash) {
         clipboard.writeText('');
+        if (!mainWindow || !mainWindow.isVisible() || (typeof mainWindow.isMinimized === 'function' && mainWindow.isMinimized())) {
+          trayManager.showNotification('clipboardCleared');
+        }
       }
     } catch {}
     clipboardTimer = null;

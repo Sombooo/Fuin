@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const NATIVE_HOST_NAME = 'com.fuin.nativehost';
+const PROTOCOL_VERSION = 1; // Native-host & eklenti protokol sürümü
 
 function getChromeOriginsFilePath(app) {
   return app ? path.join(app.getPath('userData'), 'fuin.chrome-origins.json') : null;
@@ -340,6 +341,25 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
       }
       return reply({ id: msg.id, ok: true });
     }
+    if (msg.type === 'ping') {
+      return reply({ id: msg.id, ok: true, pong: true, timestamp: Date.now() });
+    }
+    if (msg.type === 'handshake') {
+      const clientProto = Number(msg.protocolVersion) || 1;
+      const compatible = (clientProto === PROTOCOL_VERSION);
+      let appVer = '1.0.0';
+      try {
+        if (app && typeof app.getVersion === 'function') appVer = app.getVersion();
+      } catch {}
+      return reply({
+        id: msg.id,
+        ok: true,
+        protocolVersion: PROTOCOL_VERSION,
+        appVersion: appVer,
+        unlocked: !!getIsUnlocked(),
+        compatible
+      });
+    }
     if (!getIsUnlocked()) {
       return reply({ id: msg.id, error: 'locked' });
     }
@@ -448,6 +468,7 @@ function getMaskedToken(app) {
 
 module.exports = {
   NATIVE_HOST_NAME,
+  PROTOCOL_VERSION,
   getKnownExtensionIds,
   getExtTokenPath,
   getExtSocketPath,

@@ -140,6 +140,12 @@ async function checkStatus() {
     fillBtn.disabled = true;
     if (openAppBtn) openAppBtn.style.display = 'none';
     if (matchesList) matchesList.style.display = 'none';
+  } else if (res.error === 'protocol-mismatch') {
+    dot.className = 'dot err';
+    text.textContent = 'Sürüm uyuşmazlığı — Fuin güncellenmeli';
+    fillBtn.disabled = true;
+    if (openAppBtn) openAppBtn.style.display = 'none';
+    if (matchesList) matchesList.style.display = 'none';
   } else if (res.error === 'locked') {
     dot.className = 'dot warn';
     text.textContent = 'Fuin kilitli';

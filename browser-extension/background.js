@@ -9,6 +9,46 @@
 // güvenilir, bu yüzden kalıcı port yerine sendNativeMessage kullanıyoruz.
 // ═══════════════════════════════════════════════════════════════════
 const HOST_NAME = 'com.fuin.nativehost';
+const PROTOCOL_VERSION = 1;
+let hostHandshakeState = null;
+
+async function checkHostHandshake(force = false) {
+  const now = Date.now();
+  if (!force && hostHandshakeState && (now - hostHandshakeState.lastChecked < 30000)) {
+    return hostHandshakeState;
+  }
+  const res = await askFuin({
+    type: 'handshake',
+    clientVersion: chrome.runtime?.getManifest?.()?.version || '1.0.0',
+    protocolVersion: PROTOCOL_VERSION
+  });
+  if (res && res.ok) {
+    hostHandshakeState = {
+      ok: true,
+      compatible: res.compatible !== false,
+      protocolVersion: res.protocolVersion || 1,
+      appVersion: res.appVersion || 'unknown',
+      unlocked: !!res.unlocked,
+      lastChecked: now,
+      error: null
+    };
+  } else {
+    hostHandshakeState = {
+      ok: false,
+      compatible: res?.hostOk ? true : false,
+      protocolVersion: res?.hostProtocolVersion || null,
+      appVersion: null,
+      unlocked: false,
+      lastChecked: now,
+      error: res?.error || 'unreachable'
+    };
+  }
+  return hostHandshakeState;
+}
+
+try {
+  checkHostHandshake(true).catch(() => {});
+} catch {}
 
 function askFuin(payload) {
   return new Promise((resolve) => {
@@ -314,6 +354,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     if (msg.type === 'fuin-open-app') {
       askFuin({ type: 'open-app' }).then(sendResponse);
+      return true;
+    }
+    if (msg.type === 'fuin-handshake') {
+      checkHostHandshake(!!msg.force).then(sendResponse);
       return true;
     }
     if (msg.type === 'fuin-get-pending-save-popup') {

@@ -86,4 +86,7 @@ contextBridge.exposeInMainWorld('kekkai', {
 
   exportFile:          (opts)           => ipcRenderer.invoke('export-file', opts),
   importFile:          (opts)           => ipcRenderer.invoke('import-file', opts),
+
+  setLanguage:         (lang)           => ipcRenderer.invoke('set-language', lang),
+  getLanguage:         ()               => ipcRenderer.invoke('get-language'),
 });

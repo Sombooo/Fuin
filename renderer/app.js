@@ -1451,234 +1451,530 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
     kitFooterNote: 'Fuin Password Manager',
     kitPrintBtn: 'Print Kit',
     kitExportDateLabel: 'Date',
-    kitHandwriteHint: '[ Handwritten Master Password ]'
+    kitHandwriteHint: '[ Handwritten Master Password ]',
+    themeToggleTitle: 'Dark/Light mode'
   }[k] || k);
-  const title = trFn('kitDocTitle');
-  const subtitle = trFn('kitDocSubtitle');
-  const recoveryTitle = trFn('kitRecoveryTitle');
-  const recoveryDesc = trFn('kitRecoveryDesc');
-  const masterPwTitle = trFn('kitMasterPwTitle');
-  const masterPwDesc = trFn('kitMasterPwDesc');
-  const instructionsTitle = trFn('kitInstructionsTitle');
-  const step1 = trFn('kitStep1');
-  const step2 = trFn('kitStep2');
-  const step3 = trFn('kitStep3');
-  const step4 = trFn('kitStep4');
-  const securityRulesTitle = trFn('kitRulesTitle');
-  const rule1 = trFn('kitRule1');
-  const rule2 = trFn('kitRule2');
-  const rule3 = trFn('kitRule3');
-  const footerNote = trFn('kitFooterNote');
-  const printBtnText = trFn('kitPrintBtn');
-  const exportDateLabel = trFn('kitExportDateLabel');
-  const handwriteHint = trFn('kitHandwriteHint');
+
+  const title = safeEsc(trFn('kitDocTitle'));
+  const subtitle = safeEsc(trFn('kitDocSubtitle'));
+  const recoveryTitle = safeEsc(trFn('kitRecoveryTitle'));
+  const recoveryDesc = safeEsc(trFn('kitRecoveryDesc'));
+  const masterPwTitle = safeEsc(trFn('kitMasterPwTitle'));
+  const masterPwDesc = safeEsc(trFn('kitMasterPwDesc'));
+  const instructionsTitle = safeEsc(trFn('kitInstructionsTitle'));
+  const stripNum = (s) => safeEsc(String(s || '').replace(/^\d+\.\s*/, ''));
+  const step1 = stripNum(trFn('kitStep1'));
+  const step2 = stripNum(trFn('kitStep2'));
+  const step3 = stripNum(trFn('kitStep3'));
+  const step4 = stripNum(trFn('kitStep4'));
+  const securityRulesTitle = safeEsc(trFn('kitRulesTitle'));
+  const splitRule = (r) => {
+    const raw = String(r || '');
+    const idx = raw.indexOf(':');
+    if (idx === -1) return { head: '', body: safeEsc(raw) };
+    return { head: safeEsc(raw.slice(0, idx)), body: safeEsc(raw.slice(idx + 1).trim()) };
+  };
+  const r1 = splitRule(trFn('kitRule1'));
+  const r2 = splitRule(trFn('kitRule2'));
+  const r3 = splitRule(trFn('kitRule3'));
+  const footerNote = safeEsc(trFn('kitFooterNote'));
+  const printBtnText = safeEsc(trFn('kitPrintBtn'));
+  const exportDateLabel = safeEsc(trFn('kitExportDateLabel'));
+  const handwriteHint = safeEsc(trFn('kitHandwriteHint'));
+  const themeBtnTitle = safeEsc(trFn('themeToggleTitle'));
+  const currentTheme = (typeof document !== 'undefined' && typeof document.documentElement?.getAttribute === 'function' && document.documentElement.getAttribute('data-theme') === 'light') ? 'light' : 'dark';
 
   return `<!DOCTYPE html>
-<html lang="${isEn ? 'en' : 'tr'}">
+<html lang="${isEn ? 'en' : 'tr'}" data-theme="${currentTheme}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <style>
   :root {
-    --bg: #ffffff;
-    --fg: #111827;
-    --muted: #4b5563;
-    --border: #e5e7eb;
-    --card: #f9fafb;
-    --accent: #0f172a;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --bg: #1a1816;
+    --paper: #222019;
+    --card: #2a2720;
+    --b: #3d3830;
+    --b2: #524b40;
+    --text: #e8e2d8;
+    --mu: #a69d92;
+    --ac: #5a9a6e;
+    --ac-tint: rgba(90, 154, 110, 0.14);
+    --amber: #c88040;
+    --amber-tint: rgba(200, 128, 64, 0.12);
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #090a0f;
-      --fg: #f3f4f6;
-      --muted: #9ca3af;
-      --border: #1f2937;
-      --card: #111827;
-      --accent: #38bdf8;
-    }
+  [data-theme="light"] {
+    --bg: #f5f0e8;
+    --paper: #ede8df;
+    --card: #e8e2d8;
+    --b: #c8c0b0;
+    --b2: #b0a898;
+    --text: #2a2520;
+    --mu: #6e655c;
+    --ac: #3d6b4f;
+    --ac-tint: rgba(61, 107, 79, 0.1);
+    --amber: #8b4513;
+    --amber-tint: rgba(176, 112, 32, 0.1);
   }
   @media print {
-    :root {
+    :root, [data-theme="dark"], [data-theme="light"] {
       --bg: #ffffff !important;
-      --fg: #000000 !important;
-      --muted: #333333 !important;
-      --border: #cccccc !important;
-      --card: #f8f9fa !important;
-      --accent: #000000 !important;
+      --paper: #ffffff !important;
+      --card: #faf8f4 !important;
+      --b: #c8c0b0 !important;
+      --b2: #8a8078 !important;
+      --text: #1a1816 !important;
+      --mu: #524b40 !important;
+      --ac: #2d5a3f !important;
+      --ac-tint: rgba(45, 90, 63, 0.06) !important;
+      --amber: #8b4513 !important;
+      --amber-tint: rgba(139, 69, 19, 0.05) !important;
     }
-    body { padding: 0 !important; }
-    .no-print { display: none !important; }
-    .kit-card { break-inside: avoid; }
+    body {
+      padding: 0 !important;
+      background: #ffffff !important;
+    }
+    body::before {
+      display: none !important;
+    }
+    .no-print {
+      display: none !important;
+    }
+    .vault-sheet {
+      border: 1px solid #c8c0b0 !important;
+      padding: 24px 28px !important;
+      max-width: 100% !important;
+    }
+    .kit-card, .kit-grid {
+      break-inside: avoid;
+    }
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
   body {
     background: var(--bg);
-    color: var(--fg);
-    font-family: var(--sans);
-    line-height: 1.5;
-    padding: 40px 20px;
+    color: var(--text);
+    font-family: var(--mono);
+    line-height: 1.6;
+    padding: 32px 20px 48px;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    position: relative;
   }
-  .container {
-    max-width: 720px;
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(var(--b) 1px, transparent 1px);
+    background-size: 6px 6px;
+    opacity: 0.22;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .shell {
     width: 100%;
+    max-width: 760px;
+    position: relative;
+    z-index: 1;
   }
-  .header {
-    border-bottom: 2px solid var(--accent);
-    padding-bottom: 20px;
-    margin-bottom: 24px;
+  .top-bar {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
-  }
-  .header-left h1 {
-    font-size: 24px;
-    font-weight: 800;
-    letter-spacing: 1px;
-    color: var(--accent);
-  }
-  .header-left p {
-    font-size: 13px;
-    color: var(--muted);
-    margin-top: 4px;
-  }
-  .meta-tag {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    background: var(--card);
-    border: 1px solid var(--border);
-    padding: 4px 8px;
+    background: var(--paper);
+    border: 1px solid var(--b);
     border-radius: 4px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
   }
-  .btn-print {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    padding: 8px 16px;
+  .tb-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tb-logo {
+    font-size: 13px;
     font-weight: 600;
-    font-size: 13px;
-    border-radius: 6px;
-    cursor: pointer;
-    margin-bottom: 20px;
+    letter-spacing: 2px;
+    color: var(--text);
   }
-  .kit-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
+  .tb-sep {
+    color: var(--b2);
   }
-  .kit-card h2 {
-    font-size: 13px;
-    font-family: var(--mono);
-    font-weight: 700;
+  .crypto-badge {
+    font-size: 10px;
+    color: var(--ac);
+    background: var(--ac-tint);
+    border: 1px solid var(--ac);
+    padding: 2px 8px;
+    border-radius: 2px;
     letter-spacing: 0.5px;
-    color: var(--accent);
-    margin-bottom: 6px;
+  }
+  .tb-actions {
     display: flex;
     align-items: center;
     gap: 8px;
   }
-  .kit-card p {
+  .btn-theme {
+    background: var(--card);
+    border: 1px solid var(--b);
+    color: var(--mu);
+    font-family: var(--mono);
+    font-size: 14px;
+    width: 34px;
+    height: 34px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s;
+  }
+  .btn-theme:hover {
+    border-color: var(--ac);
+    color: var(--text);
+  }
+  .btn-print {
+    background: var(--ac);
+    color: var(--bg);
+    border: 1px solid var(--ac);
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-weight: 600;
     font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.12s;
+  }
+  .btn-print:hover {
+    filter: brightness(1.08);
+  }
+  .vault-sheet {
+    background: var(--paper);
+    border: 1px solid var(--b);
+    border-radius: 4px;
+    padding: 32px 36px;
+  }
+  .doc-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--b);
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .brand-hex {
+    width: 42px;
+    height: 42px;
+    color: var(--ac);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--card);
+    border: 1px solid var(--b);
+    border-radius: 4px;
+  }
+  .brand-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .brand-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 5px;
+    color: var(--text);
+  }
+  .brand-tag {
+    font-size: 10px;
+    color: var(--mu);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .brand-sub {
+    font-size: 11px;
+    color: var(--mu);
+    margin-top: 4px;
+  }
+  .meta-box {
+    background: var(--card);
+    border: 1px solid var(--b);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--mu);
+    text-align: right;
     line-height: 1.6;
+  }
+  .meta-box strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .sec-heading {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--mu);
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sec-heading::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--b);
+  }
+  .sec-num {
+    color: var(--ac);
+    font-weight: 600;
+  }
+  .kit-card {
+    background: var(--card);
+    border: 1px solid var(--b);
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .kit-desc {
+    font-size: 12px;
+    color: var(--mu);
+    margin-bottom: 14px;
+    line-height: 1.65;
   }
   .key-box {
     background: var(--bg);
-    border: 2px dashed var(--accent);
-    padding: 14px 16px;
+    border: 1px solid var(--ac);
+    border-left: 3px solid var(--ac);
+    padding: 18px 20px;
     font-family: var(--mono);
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: 2px;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    color: var(--ac);
     text-align: center;
-    border-radius: 6px;
+    border-radius: 2px;
     word-break: break-all;
+    line-height: 1.9;
     user-select: all;
   }
+  .handwrite-box {
+    background: var(--bg);
+    border: 1px solid var(--b);
+    border-radius: 2px;
+    padding: 16px 20px 12px;
+  }
   .handwrite-line {
-    border-bottom: 1px solid var(--muted);
+    border-bottom: 1px dashed var(--b2);
     height: 36px;
-    margin-top: 10px;
     display: flex;
     align-items: flex-end;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--muted);
-    padding-bottom: 4px;
-  }
-  ol, ul {
-    padding-left: 20px;
-    font-size: 13px;
-    color: var(--fg);
-  }
-  li { margin-bottom: 8px; line-height: 1.5; }
-  .footer {
-    border-top: 1px solid var(--border);
-    margin-top: 30px;
-    padding-top: 16px;
-    font-family: var(--mono);
     font-size: 11px;
-    color: var(--muted);
-    text-align: center;
+    color: var(--mu);
+    padding-bottom: 6px;
+  }
+  .kit-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 4px;
+  }
+  @media (max-width: 640px) {
+    .kit-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .kit-grid .kit-card {
+    margin-bottom: 0;
+    height: 100%;
+  }
+  .step-list, .rule-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .step-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    line-height: 1.55;
+  }
+  .step-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--ac);
+    background: var(--ac-tint);
+    border: 1px solid var(--b);
+    border-radius: 2px;
+    padding: 1px 6px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .rule-card {
+    border-color: rgba(200, 128, 64, 0.35);
+  }
+  .rule-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.55;
+    color: var(--mu);
+  }
+  .rule-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+    margin-top: 7px;
+  }
+  .rule-item strong {
+    color: var(--amber);
+    font-weight: 600;
+  }
+  .doc-footer {
+    border-top: 1px solid var(--b);
+    margin-top: 24px;
+    padding-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--mu);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .footer-brand {
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text);
+    font-weight: 600;
   }
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="no-print" style="display:flex; justify-content:flex-end;">
-    <button class="btn-print" onclick="window.print()">🖨 ${printBtnText}</button>
-  </div>
-  <div class="header">
-    <div class="header-left">
-      <h1>FUIN</h1>
-      <p>${subtitle}</p>
+<div class="shell">
+  <div class="top-bar no-print">
+    <div class="tb-left">
+      <span class="tb-logo">FUIN</span>
+      <span class="tb-sep">|</span>
+      <span class="crypto-badge">Argon2id · AES-256-GCM</span>
     </div>
-    <div class="meta-tag">
-      ${exportDateLabel}: ${safeEsc(dateStr)}
+    <div class="tb-actions">
+      <button class="btn-theme" type="button" title="${themeBtnTitle}" onclick="document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light')">◐</button>
+      <button class="btn-print" type="button" onclick="window.print()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <span>${printBtnText}</span>
+      </button>
     </div>
   </div>
 
-  <div class="kit-card">
-    <h2>🔑 ${recoveryTitle}</h2>
-    <p>${recoveryDesc}</p>
-    <div class="key-box">${safeEsc(recoveryKey || '________________________________________')}</div>
-  </div>
+  <div class="vault-sheet">
+    <div class="doc-head">
+      <div class="brand-wrap">
+        <div class="brand-hex">
+          <svg width="24" height="24" viewBox="0 0 38 38" fill="none">
+            <polygon points="19,2 35,10.5 35,27.5 19,36 3,27.5 3,10.5" stroke="currentColor" stroke-width="2" fill="none"/>
+            <circle cx="19" cy="19" r="3" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title-row">
+            <span class="brand-title">FUIN</span>
+            <span class="brand-tag">quietly secure</span>
+          </div>
+          <div class="brand-sub">${title} — ${subtitle}</div>
+        </div>
+      </div>
+      <div class="meta-box">
+        <div>${exportDateLabel}: <strong>${safeEsc(dateStr)}</strong></div>
+        <div>KDF / Cipher: <strong>Argon2id · AES-256-GCM</strong></div>
+      </div>
+    </div>
 
-  <div class="kit-card">
-    <h2>✍️ ${masterPwTitle}</h2>
-    <p>${masterPwDesc}</p>
-    <div class="handwrite-line">${handwriteHint}</div>
-  </div>
+    <div class="sec-heading">
+      <span class="sec-num">01</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      <span>${recoveryTitle}</span>
+    </div>
+    <div class="kit-card">
+      <p class="kit-desc">${recoveryDesc}</p>
+      <div class="key-box">${safeEsc(recoveryKey || '________________________________________')}</div>
+    </div>
 
-  <div class="kit-card">
-    <h2>📋 ${instructionsTitle}</h2>
-    <ol>
-      <li>${step1}</li>
-      <li>${step2}</li>
-      <li>${step3}</li>
-      <li>${step4}</li>
-    </ol>
-  </div>
+    <div class="sec-heading">
+      <span class="sec-num">02</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span>${masterPwTitle}</span>
+    </div>
+    <div class="kit-card">
+      <p class="kit-desc">${masterPwDesc}</p>
+      <div class="handwrite-box">
+        <div class="handwrite-line">${handwriteHint}</div>
+      </div>
+    </div>
 
-  <div class="kit-card" style="border-left: 4px solid #b07020;">
-    <h2>🛡 ${securityRulesTitle}</h2>
-    <ul>
-      <li><b>${rule1.split(':')[0]}:</b> ${rule1.split(':')[1]}</li>
-      <li><b>${rule2.split(':')[0]}:</b> ${rule2.split(':')[1]}</li>
-      <li><b>${rule3.split(':')[0]}:</b> ${rule3.split(':')[1]}</li>
-    </ul>
-  </div>
+    <div class="kit-grid">
+      <div>
+        <div class="sec-heading">
+          <span class="sec-num">03</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span>${instructionsTitle}</span>
+        </div>
+        <div class="kit-card">
+          <ol class="step-list">
+            <li class="step-item"><span class="step-badge">01</span><span>${step1}</span></li>
+            <li class="step-item"><span class="step-badge">02</span><span>${step2}</span></li>
+            <li class="step-item"><span class="step-badge">03</span><span>${step3}</span></li>
+            <li class="step-item"><span class="step-badge">04</span><span>${step4}</span></li>
+          </ol>
+        </div>
+      </div>
 
-  <div class="footer">
-    ${footerNote}
+      <div>
+        <div class="sec-heading">
+          <span class="sec-num" style="color:var(--amber)">04</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>${securityRulesTitle}</span>
+        </div>
+        <div class="kit-card rule-card">
+          <ul class="rule-list">
+            <li class="rule-item"><span class="rule-dot"></span><span>${r1.head ? `<strong>${r1.head}:</strong> ` : ''}${r1.body}</span></li>
+            <li class="rule-item"><span class="rule-dot"></span><span>${r2.head ? `<strong>${r2.head}:</strong> ` : ''}${r2.body}</span></li>
+            <li class="rule-item"><span class="rule-dot"></span><span>${r3.head ? `<strong>${r3.head}:</strong> ` : ''}${r3.body}</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-footer">
+      <span class="footer-brand">FUIN · QUIETLY SECURE</span>
+      <span>${footerNote}</span>
+    </div>
   </div>
 </div>
 </body>

@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-27  
 **Methodology:** [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill)  
-**Target:** Fuin Desktop (`/Users/kadir/Fuin`) & Fuin Mobile (`/Users/kadir/FuinMobile`)  
+**Target:** Fuin Desktop & Fuin Mobile  
 **Status:** Audit Complete · All Findings Remediated · 100% Tests Passing (59/59 Master Audit Checks, 290+ Total Invariant Tests)
 
 ---

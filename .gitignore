@@ -37,6 +37,10 @@ assets/screenshots/newscreenshots/
 
 
 
+# Native Host Local Wrappers
+native-host/host.sh
+native-host/host.bat
+
 # Local AI & Editor Configs
 .agents/
 .claude/

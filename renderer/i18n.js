@@ -97,6 +97,10 @@ const TRANSLATIONS = {
     btnCancel: 'İptal',
     btnSave: 'Kaydet',
     btnCopy: 'Kopyala',
+    btnRestore: 'Geri Yükle',
+    btnPermDel: 'Kalıcı Olarak Sil',
+    btnEdit: 'Düzenle',
+    btnDel: 'Sil',
     sectionSecurityPrefs: 'Güvenlik ve Tercihler',
     genPwTitle: 'Üret',
     showPwTitle: 'Göster',
@@ -237,7 +241,7 @@ const TRANSLATIONS = {
     forgotChangePwBtn: 'Şifreyi Değiştir',
     forgotKeyVerified: '✓ Anahtar doğrulandı. Yeni şifrenizi girin.',
     forgotKeyInvalid: '✕ Geçersiz kurtarma anahtarı.',
-    forgotRecoveryFailed: '✕ Veriler kurtarılamadı. "SIFIRLA" ile sıfırlayabilirsiniz.',
+    forgotRecoveryFailed: '✕ Veriler kurtarılamadı. "{word}" ile sıfırlayabilirsiniz.',
     forgotNoRecovery: '⚠ Kurtarma anahtarı yok. Tüm verileri silmek için "{word}" yazın.',
     hardResetConfirmHint: 'Onaylamak için tam olarak "{word}" yazın.',
     resetConfirmWord: 'SIFIRLA',
@@ -426,6 +430,10 @@ const TRANSLATIONS = {
     btnCancel: 'Cancel',
     btnSave: 'Save',
     btnCopy: 'Copy',
+    btnRestore: 'Restore',
+    btnPermDel: 'Permanently Delete',
+    btnEdit: 'Edit',
+    btnDel: 'Delete',
     sectionSecurityPrefs: 'Security & Preferences',
     genPwTitle: 'Generate',
     showPwTitle: 'Show',
@@ -689,7 +697,7 @@ function t(key, vars) {
 const I18N_HTML_KEYS = new Set([
   'lockHintLocalOnly', 'hardResetBody1', 'hardResetBody2',
   'autoLockBody', 'syncErrorLevel', 'healthInfoBox', 'securityInfoBox',
-  'syncPassModalBody',
+  'syncPassModalBody', 'syncExpired',
 ]);
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => {

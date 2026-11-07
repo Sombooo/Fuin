@@ -33,7 +33,7 @@ Kullanıcılarımızın bize "güvenmesini" beklemiyoruz; denetlenebilir, şeffa
 
 4. **Resmi Güvenlik Standartları ve İletişim:**
    - **RFC 9116 `security.txt`:** Bağımsız güvenlik araştırmacıları için `/.well-known/security.txt` ve `SECURITY.md` yayınlandı.
-   - **Fuin Tehdit Modeli Dokümanı:** [docs/SECURITY_MODEL.md](file:///Users/kadir/Fuin/docs/SECURITY_MODEL.md) adresinde neyi koruduğumuzu ve varsayımlarımızı şeffafça ilan ettik.
+   - **Fuin Tehdit Modeli Dokümanı:** [docs/SECURITY_MODEL.md](SECURITY_MODEL.md) adresinde neyi koruduğumuzu ve varsayımlarımızı şeffafça ilan ettik.
 
 ---
 

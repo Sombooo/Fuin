@@ -122,11 +122,13 @@ async function getActiveTab() {
 }
 
 let pendingReveal = null;
-const pendingSaveByTab = new Map(); // tabId -> { domain, username, password, action, entryId, timestamp }
+const pendingSaveByTab = new Map(); // tabId -> { domain, username, password, action, entryId, timestamp, locked }
+const stagedUsernameByTab = new Map(); // tabId -> { domain, username, timestamp } (2 adımlı sayfa geçişli girişler için)
 const dismissedFingerprints = new Map(); // key -> timestamp (session suppression for "Not Now" & just-saved)
 const excludedDomainsMemory = new Set(); // normalized domains excluded via "Never for this site"
 const DISMISS_TTL_MS = 60 * 60 * 1000; // 1 saat boyunca aynı şifre için tekrar sorma
-const PENDING_SAVE_TTL_MS = 60 * 1000; // Yönlendirme sonrası en fazla 60 saniye tut
+const PENDING_SAVE_TTL_MS = 90 * 1000; // Yönlendirme veya kilit açma sonrası en fazla 90 saniye tut
+const STAGED_USER_TTL_MS = 2 * 60 * 1000; // 2 adımlı girişte kullanıcı adını en fazla 2 dakika tut
 
 const MULTI_TENANT_SUFFIXES = new Set([
   'github.io', 'pages.dev', 'vercel.app', 'netlify.app', 'gitlab.io',
@@ -238,6 +240,12 @@ function sweepExpiredMemory() {
       pendingSaveByTab.delete(tabId);
     }
   }
+  for (const [tabId, staged] of stagedUsernameByTab.entries()) {
+    if (now - staged.timestamp > STAGED_USER_TTL_MS) {
+      staged.username = '';
+      stagedUsernameByTab.delete(tabId);
+    }
+  }
   for (const [key, ts] of dismissedFingerprints.entries()) {
     if (now - ts > DISMISS_TTL_MS) {
       dismissedFingerprints.delete(key);
@@ -258,8 +266,22 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
         }
       }
 
-      // Güvenlik: Sekme farklı bir siteye veya HTTP'ye geçerse bekleyen şifreyi anında bellekten sil (Site Isolation koruması)
+      // Güvenlik: Sekme farklı bir siteye veya HTTP'ye geçerse bekleyen şifreyi ve 1. adım kullanıcı adını anında bellekten sil (Site Isolation koruması)
       const candidateUrl = changeInfo.url || tab?.url;
+      if (candidateUrl && stagedUsernameByTab.has(tabId)) {
+        const staged = stagedUsernameByTab.get(tabId);
+        let keepStaged = false;
+        try {
+          const parsed = new URL(candidateUrl);
+          if (parsed.protocol === 'https:' && isSameSiteSafe(parsed.hostname, staged.domain)) {
+            keepStaged = true;
+          }
+        } catch {}
+        if (!keepStaged) {
+          staged.username = '';
+          stagedUsernameByTab.delete(tabId);
+        }
+      }
       if (candidateUrl && pendingSaveByTab.has(tabId)) {
         const pending = pendingSaveByTab.get(tabId);
         let keep = false;
@@ -295,7 +317,7 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
             sendTabMessage(tabId, {
               type: 'fuin-trigger-save-prompt',
               candidate: pending,
-              result: { action: pending.action, entryId: pending.entryId, shouldPrompt: true }
+              result: { action: pending.action, entryId: pending.entryId, shouldPrompt: true, locked: !!pending.locked }
             });
           } else {
             clearPendingForTab(tabId, false);
@@ -308,6 +330,7 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
   if (chrome.tabs.onRemoved) {
     chrome.tabs.onRemoved.addListener((tabId) => {
       clearPendingForTab(tabId, false);
+      stagedUsernameByTab.delete(tabId);
       if (pendingReveal && pendingReveal.tabId === tabId) {
         pendingReveal.cancelled = true;
         try { pendingReveal.sendResponse({ error: 'navigation-cancelled' }); } catch {}
@@ -430,6 +453,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     askFuin({ type: 'lookup', domain: actualDomain }).then(sendResponse);
     return true;
   }
+  if (msg.type === 'fuin-open-app') {
+    askFuin({ type: 'open-app' }).then(sendResponse);
+    return true;
+  }
+  if (msg.type === 'fuin-stage-username' && msg.username) {
+    const tabId = sender.tab?.id;
+    const cleanUser = typeof msg.username === 'string' ? msg.username.trim().slice(0, 512) : '';
+    if (tabId && cleanUser) {
+      stagedUsernameByTab.set(tabId, {
+        domain: actualDomain,
+        username: cleanUser,
+        timestamp: Date.now()
+      });
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
   if (msg.type === 'fuin-get-pending-save') {
     const tabId = sender.tab?.id;
     if (tabId && pendingSaveByTab.has(tabId)) {
@@ -439,7 +479,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         Date.now() - p.timestamp < PENDING_SAVE_TTL_MS &&
         !isCredentialDismissed(p.domain, p.username, p.password)
       ) {
-        sendResponse({ hasPending: true, candidate: p, result: { action: p.action, entryId: p.entryId, shouldPrompt: true } });
+        sendResponse({ hasPending: true, candidate: p, result: { action: p.action, entryId: p.entryId, shouldPrompt: true, locked: !!p.locked } });
         return true;
       } else {
         clearPendingForTab(tabId, false);
@@ -475,8 +515,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'fuin-form-submitted' && msg.password) {
     if (typeof msg.password !== 'string' || msg.password.length > 1024 || msg.password.length < 2) return;
-    const cleanUser = typeof msg.username === 'string' ? msg.username.slice(0, 512) : '';
+    let cleanUser = typeof msg.username === 'string' ? msg.username.trim().slice(0, 512) : '';
     const tabId = sender.tab?.id;
+    if (!cleanUser && tabId && stagedUsernameByTab.has(tabId)) {
+      const staged = stagedUsernameByTab.get(tabId);
+      if (staged && isSameSiteSafe(actualDomain, staged.domain) && (Date.now() - staged.timestamp < STAGED_USER_TTL_MS)) {
+        cleanUser = staged.username;
+      }
+      stagedUsernameByTab.delete(tabId);
+    } else if (tabId) {
+      stagedUsernameByTab.delete(tabId);
+    }
     if (isCredentialDismissed(actualDomain, cleanUser, msg.password)) {
       sendResponse({ shouldPrompt: false, dismissed: true });
       return true;
@@ -487,16 +536,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       username: cleanUser,
       password: msg.password
     }).then((res) => {
-      if (res && res.shouldPrompt && !isCredentialDismissed(actualDomain, cleanUser, msg.password)) {
-        const finalUser = res.username || cleanUser || '';
+      const isLockedState = res && (res.error === 'locked' || res.error === 'fuin-not-running' || res.error === 'native-host-unreachable');
+      const shouldStage = Boolean((res && res.shouldPrompt) || isLockedState);
+      if (shouldStage && !isCredentialDismissed(actualDomain, cleanUser, msg.password)) {
+        const finalUser = (res && res.username) || cleanUser || '';
         const item = {
           domain: actualDomain,
           username: finalUser,
           password: msg.password,
-          action: res.action || 'save',
-          entryId: res.entryId || null,
+          action: (res && res.action) || 'save',
+          entryId: (res && res.entryId) || null,
+          locked: Boolean(isLockedState),
           timestamp: Date.now()
         };
+        const promptResult = isLockedState
+          ? { shouldPrompt: true, action: 'save', entryId: null, locked: true }
+          : res;
         if (tabId) {
           pendingSaveByTab.set(tabId, item);
           if (chrome.action?.setBadgeText) {
@@ -505,8 +560,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               chrome.action.setBadgeBackgroundColor({ color: '#5a9a6e', tabId });
             } catch {}
           }
-          sendTabMessage(tabId, { type: 'fuin-trigger-save-prompt', candidate: item, result: res });
+          sendTabMessage(tabId, { type: 'fuin-trigger-save-prompt', candidate: item, result: promptResult });
         }
+        sendResponse(promptResult);
+        return;
       }
       sendResponse(res);
     }).catch(() => {

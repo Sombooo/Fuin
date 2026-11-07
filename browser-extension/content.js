@@ -492,6 +492,18 @@
     }
   }, true);
 
+  function pickBestFilledPasswordInput(list) {
+    if (!list || list.length === 0) return null;
+    if (list.length === 1) return list[0];
+    const newPwMatch = list.find(f => {
+      const ac = (f.getAttribute('autocomplete') || '').toLowerCase();
+      const meta = ((f.name || '') + ' ' + (f.id || '') + ' ' + (f.placeholder || '') + ' ' + (f.getAttribute('aria-label') || '')).toLowerCase();
+      return ac.includes('new-password') || /(?:new[-_\s]?pass|yeni[-_\s]?sifre|yeni[-_\s]?şifre|new_pw)/i.test(meta);
+    });
+    if (newPwMatch) return newPwMatch;
+    return list[list.length - 1];
+  }
+
   function captureFormCredentials(contextEl) {
     const pwCandidates = Array.from(document.querySelectorAll('input')).filter(
       el => el.type === 'password' || _knownPasswordInputs.has(el)
@@ -501,8 +513,10 @@
     const pool = scopedPws.length > 0 ? scopedPws : pwCandidates;
 
     // Güvenlik: Gizli (görünmeyen) şifre alanları yalnızca kullanıcı gerçekten klavyeden yazdıysa (_passwordDirty) okunur
-    const visibleFilledPw = pool.find(f => isVisibleInput(f) && f.value && f.value.length > 0);
-    const hiddenDirtyPw = _passwordDirty ? pool.find(f => f.value && f.value.length > 0) : null;
+    // Çoklu şifre alanı olan (Şifre Değiştirme / Kayıt) formlarda yeni şifre alanını tercih et
+    const visibleFilledList = pool.filter(f => isVisibleInput(f) && f.value && f.value.length > 0);
+    const visibleFilledPw = pickBestFilledPasswordInput(visibleFilledList);
+    const hiddenDirtyPw = _passwordDirty ? pickBestFilledPasswordInput(pool.filter(f => f.value && f.value.length > 0)) : null;
     const filledPw = visibleFilledPw || hiddenDirtyPw || null;
 
     const password = (filledPw && filledPw.value)
@@ -583,7 +597,22 @@
     if (isFuinInternalNode(target)) return;
 
     const creds = captureFormCredentials(target);
-    if (!creds || !creds.password || creds.password.length < 2) return;
+    if (!creds || !creds.password || creds.password.length < 2) {
+      // 2 adımlı (Split-Login) formlarda 1. adımda şifre alanı yoktur; kullanıcı adını 2. sayfa için sakla
+      const standalone = findStandaloneUsernameFields()[0];
+      const step1User = (standalone && standalone.value && standalone.value.trim())
+        ? standalone.value.trim()
+        : (_lastTypedUsername || '');
+      if (step1User) {
+        try {
+          chrome.runtime.sendMessage({
+            type: 'fuin-stage-username',
+            username: step1User
+          });
+        } catch {}
+      }
+      return;
+    }
     if (isLocallyDismissed(creds.username, creds.password)) return;
 
     const now = Date.now();
@@ -841,6 +870,23 @@
       dismissCurrentPrompt();
     });
 
+    const statusNote = document.createElement('div');
+    Object.assign(statusNote.style, {
+      display: (result && result.locked) ? 'block' : 'none',
+      fontSize: '11px',
+      color: '#c88040',
+      background: 'rgba(200, 128, 64, 0.12)',
+      border: '1px solid rgba(200, 128, 64, 0.35)',
+      borderRadius: '5px',
+      padding: '6px 8px',
+      marginBottom: '10px',
+      lineHeight: '1.4'
+    });
+    if (result && result.locked) {
+      statusNote.textContent = 'Fuin şu an kilitli. Kaydet\'e bastığınızda uygulama açılır; kilidi açıp tekrar Kaydet\'e basabilirsiniz.';
+    }
+    card.appendChild(statusNote);
+
     const btnRow = document.createElement('div');
     Object.assign(btnRow.style, {
       display: 'flex',
@@ -932,6 +978,7 @@
         });
         if (resp && resp.ok) {
           markLocalDismissed(finalUsername, finalPassword);
+          statusNote.style.display = 'none';
           saveBtn.textContent = 'Kaydedildi! ✓';
           saveBtn.style.background = '#6bb382';
           userInput.value = '';
@@ -940,8 +987,14 @@
             if (host.parentNode) host.remove();
             activeSaveHost = null;
           }, 900);
+        } else if (resp && (resp.error === 'locked' || resp.error === 'fuin-not-running' || resp.error === 'native-host-unreachable')) {
+          try { chrome.runtime.sendMessage({ type: 'fuin-open-app' }); } catch {}
+          statusNote.textContent = 'Fuin kilitli — masaüstü uygulaması açıldı. Kilidi açıp tekrar Kaydet\'e basın.';
+          statusNote.style.display = 'block';
+          saveBtn.disabled = false;
+          saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet';
         } else {
-          saveBtn.textContent = (resp && resp.error === 'locked') ? 'Kasa kilitli' : 'Hata';
+          saveBtn.textContent = 'Hata';
           setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet'; }, 2000);
         }
       } catch {

@@ -594,6 +594,49 @@ async function executeAllTests() {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
+  // SECTION 4: SHA-256 Backup Log, Manual Snapshot & Point-in-Time Restore IPC
+  // ──────────────────────────────────────────────────────────────────────────
+  console.log('\n--- SECTION 4: SHA-256 Backup Log & Point-in-Time Restore IPC ---');
+
+  await runCheck('4.1 SHA-256 backup log tracks snapshots, deduplicates identical auto-saves, and restores snapshots', async () => {
+    resetUserDataFiles();
+    const logFile = path.join(defaultUserData, 'fuin.backup-log.json');
+    try { if (fs.existsSync(logFile)) fs.unlinkSync(logFile); } catch {}
+
+    // Save initial and updated vault
+    await mainHandlers['save-data'](null, 'SNAPSHOT_V1_DATA');
+    await mainHandlers['save-data'](null, 'SNAPSHOT_V2_DATA'); // Backs up V1 (auto-save #1)
+    await mainHandlers['save-data'](null, 'SNAPSHOT_V2_DATA'); // Backs up V2 (auto-save #2)
+    await mainHandlers['save-data'](null, 'SNAPSHOT_V2_DATA'); // Identical to newest backup V2 -> deduplicated!
+
+    // Manual backup of V2 (always forces snapshot creation)
+    const manualRes = await mainHandlers['create-manual-backup']();
+    assert.strictEqual(manualRes.ok, true, 'Manual backup must succeed');
+
+    // List backups via get-backup-list IPC
+    const listRes = await mainHandlers['get-backup-list']();
+    assert.ok(listRes && Array.isArray(listRes.backups), 'get-backup-list must return backups array');
+    assert.strictEqual(listRes.backups.length, 3, 'Should have 3 snapshots (V1 auto-save, V2 auto-save, V2 manual-snapshot; duplicate auto-save skipped)');
+    assert.ok(listRes.backups.every(s => s.verified === true && /^[a-f0-9]{64}$/.test(s.fullSha256)), 'All snapshots must have verified SHA-256');
+
+    // Find the V1 snapshot (oldest snapshot) and restore it
+    const v1Sha = crypto.createHash('sha256').update('SNAPSHOT_V1_DATA').digest('hex');
+    const v1Snap = listRes.backups.find(s => s.fullSha256 === v1Sha);
+    assert.ok(v1Snap, 'Must record V1 auto-save snapshot in backup log');
+
+    const restoreRes = await mainHandlers['restore-backup-snapshot'](null, v1Snap.file);
+    assert.strictEqual(restoreRes.ok, true, 'Point-in-time snapshot restore must succeed');
+    assert.strictEqual(restoreRes.ciphertext, 'SNAPSHOT_V1_DATA', 'Restored payload must match V1 snapshot');
+    assert.strictEqual(restoreRes.sha256, v1Sha, 'Restored SHA-256 must match V1 snapshot');
+  });
+
+  await runCheck('4.2 restore-backup-snapshot rejects path traversal and corrupted snapshots', async () => {
+    const travRes = await mainHandlers['restore-backup-snapshot'](null, '../fuin.enc');
+    assert.strictEqual(travRes.ok, false, 'Must reject path traversal filenames');
+    assert.strictEqual(travRes.error, 'invalid-filename');
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Summary & Verdict
   // ──────────────────────────────────────────────────────────────────────────
   console.log('\n' + '═'.repeat(78));

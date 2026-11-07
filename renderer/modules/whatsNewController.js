@@ -80,7 +80,8 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'whatsnew-tab' + (entry.version === selectedVer ? ' active' : '');
-      btn.textContent = entry.tag + (entry.isCurrent ? (isEn ? ' (Latest)' : ' (Güncel)') : '');
+      const latestSuffix = typeof window.t === 'function' ? window.t('whatsNewLatestTab') : (isEn ? ' (Latest)' : '');
+      btn.textContent = entry.tag + (entry.isCurrent ? latestSuffix : '');
       btn.addEventListener('click', () => {
         selectVersion(entry.version);
       });
@@ -97,12 +98,13 @@
     const title = isEn ? (entry.titleEn || entry.title) : entry.title;
     const date = isEn ? (entry.dateEn || entry.date) : entry.date;
     const summary = isEn ? (entry.summaryEn || entry.summary) : entry.summary;
+    const latestBadge = typeof window.t === 'function' ? window.t('whatsNewLatestBadge') : (isEn ? 'LATEST' : '');
 
     headerEl.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="whatsnew-badge-pill" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ac);background:rgba(90,154,110,0.14);padding:3px 8px;border-radius:4px;border:1px solid rgba(90,154,110,0.3);letter-spacing:0.5px;">${entry.tag}</span>
-          ${entry.isCurrent ? `<span style="font-family:var(--mono);font-size:10px;font-weight:600;color:var(--amber);background:rgba(200,128,64,0.14);padding:2px 7px;border-radius:3px;border:1px solid rgba(200,128,64,0.3);letter-spacing:0.5px;">${isEn ? 'LATEST' : 'GÜNCEL'}</span>` : ''}
+          ${entry.isCurrent ? `<span style="font-family:var(--mono);font-size:10px;font-weight:600;color:var(--amber);background:rgba(200,128,64,0.14);padding:2px 7px;border-radius:3px;border:1px solid rgba(200,128,64,0.3);letter-spacing:0.5px;">${latestBadge}</span>` : ''}
         </div>
         <span style="font-family:var(--mono);font-size:11px;color:var(--mu);">${date}</span>
       </div>

@@ -309,6 +309,29 @@ async function runNativeHostAndSuppressionTests() {
   report('5.8 After "Bu Sitede Asla" (fuin-exclude-domain), all future prompts on domain are suppressed',
     sub4 && sub4.shouldPrompt === false && sub4.dismissed === true && nativeCalls.some(c => c.type === 'exclude-domain'));
 
+  // Test 5.10: Cross-page split-login username staging (Step 1 username -> Step 2 password)
+  const splitSender = {
+    id: 'abcdefghijklmnopabcdefghijklmnop',
+    frameId: 0,
+    url: 'https://accounts.google.com/v3/signin/identifier',
+    tab: { id: 77, url: 'https://accounts.google.com/v3/signin/identifier' }
+  };
+  function sendSplitMsg(msg) {
+    return new Promise((resolve) => {
+      onMessageHandler(msg, splitSender, resolve);
+    });
+  }
+  const stageRes = await sendSplitMsg({ type: 'fuin-stage-username', username: 'kadir@example.com' });
+  splitSender.url = 'https://accounts.google.com/v3/signin/challenge/pwd';
+  splitSender.tab.url = 'https://accounts.google.com/v3/signin/challenge/pwd';
+  const step2Res = await sendSplitMsg({ type: 'fuin-form-submitted', username: '', password: 'SplitLoginPass!42' });
+  report('5.10 Multi-page split login merges Step-1 staged username into Step-2 password submit',
+    stageRes && stageRes.ok === true && step2Res && step2Res.shouldPrompt === true && step2Res.username === 'kadir@example.com');
+
+  // Test 5.11: Multi-password field selection (Change Password / Registration forms)
+  report('5.11 content.js implements pickBestFilledPasswordInput for Change Password / Signup forms',
+    contentJs.includes('function pickBestFilledPasswordInput') && contentJs.includes("ac.includes('new-password')"));
+
   console.log('\n═══════════════════════════════════════════════════════════════════════════');
   console.log(`TOTAL AUDIT CHECKS: ${passed + failed} | PASSED: ${passed} | FAILED: ${failed}`);
   console.log('═══════════════════════════════════════════════════════════════════════════');

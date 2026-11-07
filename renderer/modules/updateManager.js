@@ -182,12 +182,12 @@
       const currentVersion = await getLocalAppVersion();
       if (subEl) {
         const curLabel = t('sysUpdateCurrent', { v: normalizeVersion(currentVersion) }) || `(v${normalizeVersion(currentVersion)})`;
-        subEl.textContent = `${t('sysUpdateCheckSub') || "Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin."} ${curLabel}`;
+        subEl.textContent = `${t('sysUpdateCheckSub')} ${curLabel}`;
       }
 
       const releases = await fetchReleasesWithTimeout();
       if (!Array.isArray(releases) || releases.length === 0) {
-        msg.textContent = t('sysUpdateNoReleases') || 'Henüz yayınlanmış bir sürüm bulunamadı.';
+        msg.textContent = t('sysUpdateNoReleases');
         return;
       }
 
@@ -199,7 +199,7 @@
         const vSpan = document.createElement('span');
         vSpan.style.color = 'var(--green)';
         vSpan.style.fontWeight = '600';
-        vSpan.textContent = t('sysUpdateNewAvailable', { v: latestVersion }) || `Yeni sürüm mevcut: ${latestVersion}`;
+        vSpan.textContent = t('sysUpdateNewAvailable', { v: latestVersion });
         msg.appendChild(vSpan);
 
         const asset = findPlatformAsset(latestRelease);
@@ -207,12 +207,12 @@
           const dlBtn = document.createElement('button');
           dlBtn.className = 'btn-io pri';
           dlBtn.style.cssText = 'margin-left:10px;padding:4px 10px;font-size:11px;cursor:pointer;';
-          dlBtn.textContent = t('sysUpdateDownloadBtn') || 'Uygulama İçinden İndir & Güncelle';
+          dlBtn.textContent = t('sysUpdateDownloadBtn');
 
           const progressWrap = document.createElement('div');
           progressWrap.style.cssText = 'display:none;margin-top:8px;width:100%;max-width:320px;';
           progressWrap.innerHTML = `
-            <div style="font-size:11px;color:var(--mu);margin-bottom:4px;" class="dl-status-text">${t('sysUpdateDownloading') || 'İndiriliyor'}...</div>
+            <div style="font-size:11px;color:var(--mu);margin-bottom:4px;" class="dl-status-text">${t('sysUpdateDownloading')}...</div>
             <div class="update-progress-wrap"><div class="update-progress-bar" style="width:0%;"></div></div>
           `;
 
@@ -230,7 +230,7 @@
                 const totMB = total > 0 ? (total / 1048576).toFixed(1) : '?';
                 const isEn = typeof document !== 'undefined' && document.documentElement && document.documentElement.lang === 'en';
                 const pctStr = isEn ? `${percent}%` : `%${percent}`;
-                statusText.textContent = `${t('sysUpdateDownloading') || 'İndiriliyor'}: ${pctStr} (${recMB} MB / ${totMB} MB)`;
+                statusText.textContent = `${t('sysUpdateDownloading')}: ${pctStr} (${recMB} MB / ${totMB} MB)`;
               });
             }
 
@@ -240,17 +240,17 @@
                 filename: asset.name
               });
               if (res && res.filePath) {
-                statusText.textContent = t('sysUpdateDownloaded') || 'İndirme tamamlandı! Yükleyici hazır.';
+                statusText.textContent = t('sysUpdateDownloaded');
                 pBar.style.width = '100%';
                 dlBtn.className = 'btn-io pri';
-                dlBtn.textContent = t('sysUpdateInstallBtn') || 'Kurulumu Başlat';
+                dlBtn.textContent = t('sysUpdateInstallBtn');
                 dlBtn.disabled = false;
                 dlBtn.onclick = async () => {
                   await window.kekkai?.installUpdate?.({ filePath: res.filePath });
                 };
               }
             } catch (err) {
-              statusText.textContent = `${t('sysUpdateFailed') || 'İndirme başarısız oldu'}: ${err.message || 'Error'}`;
+              statusText.textContent = `${t('sysUpdateFailed')}: ${err.message || 'Error'}`;
               dlBtn.disabled = false;
             } finally {
               if (unregProgress) unregProgress();
@@ -266,19 +266,29 @@
           const safeHref = new URL(latestRelease.html_url.trim()).href;
           const link = document.createElement('a');
           link.href = '#';
-          link.textContent = t('sysUpdateViewRelease') || 'GitHub Sürüm Notları';
+          link.textContent = t('sysUpdateViewRelease');
           link.style.cssText = 'color:var(--mu);text-decoration:underline;margin-left:8px;font-size:11px;cursor:pointer;';
           link.addEventListener('click', (ev) => { ev.preventDefault(); window.kekkai?.openUrl(safeHref); });
           msg.appendChild(link);
         }
       } else {
-        msg.textContent = t('sysUpdateLatest', { v: normalizeVersion(currentVersion) }) || `En güncel sürümü kullanıyorsunuz (v${normalizeVersion(currentVersion)}).`;
+        msg.textContent = t('sysUpdateLatest', { v: normalizeVersion(currentVersion) });
       }
     } catch (err) {
-      msg.textContent = t('sysUpdateCheckFailed') || 'Kontrol edilemedi. İnternet bağlantısını kontrol edin veya depo adresini ayarlayın.';
+      msg.textContent = t('sysUpdateCheckFailed');
     } finally {
       btn.disabled = false;
-      btn.textContent = t('sysUpdateBtn') || 'Şimdi Denetle';
+      btn.textContent = t('sysUpdateBtn');
+    }
+  }
+
+  async function onLanguageChanged(t) {
+    if (typeof t !== 'function') return;
+    const subEl = document.getElementById('sysUpdateCheckSub');
+    if (subEl) {
+      const currentVersion = await getLocalAppVersion();
+      const curLabel = t('sysUpdateCurrent', { v: normalizeVersion(currentVersion) });
+      subEl.textContent = `${t('sysUpdateCheckSub')} ${curLabel}`;
     }
   }
 
@@ -291,6 +301,7 @@
     isAutoUpdateCheckEnabled,
     findPlatformAsset,
     isTrustedFuinDownloadUrl,
+    onLanguageChanged,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

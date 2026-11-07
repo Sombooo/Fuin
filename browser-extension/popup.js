@@ -158,7 +158,19 @@ async function checkStatus() {
         window.close();
       };
     }
-    if (matchesList) matchesList.style.display = 'none';
+    let pendingSaveRes = null;
+    try {
+      pendingSaveRes = await chrome.runtime.sendMessage({ type: 'fuin-get-pending-save-popup', domain });
+    } catch {}
+    if (matchesList) {
+      if (pendingSaveRes && pendingSaveRes.hasPending && pendingSaveRes.item) {
+        matchesList.replaceChildren();
+        matchesList.style.display = 'flex';
+        renderPendingSaveBanner(pendingSaveRes.item, matchesList);
+      } else {
+        matchesList.style.display = 'none';
+      }
+    }
   } else if (res.error) {
     dot.className = 'dot err';
     text.textContent = 'Masaüstü uygulamasına ulaşılamadı';
@@ -289,6 +301,15 @@ function renderPendingSaveBanner(item, container) {
       showToast('Hesap Fuin kasasına kaydedildi');
       banner.remove();
       setTimeout(checkStatus, 500);
+    } else if (resp && (resp.error === 'locked' || resp.error === 'fuin-not-running')) {
+      showToast('Önce Fuin kilidini açın');
+      try { chrome.runtime.sendMessage({ type: 'fuin-open-app' }); } catch {}
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Kaydet';
+    } else {
+      showToast('Kaydedilemedi');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Kaydet';
     }
   });
 

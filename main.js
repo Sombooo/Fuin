@@ -51,6 +51,7 @@ const DATA_FILE        = path.join(app.getPath('userData'), 'fuin.enc');
 const RECOVERY_FILE    = path.join(app.getPath('userData'), 'fuin.recovery');
 const MASTER_ENC_FILE  = path.join(app.getPath('userData'), 'fuin.master.enc');
 const RECOVERY_STATUS_FILE = path.join(app.getPath('userData'), 'fuin.recovery-status');
+const BACKUP_LOG_FILE  = path.join(app.getPath('userData'), 'fuin.backup-log.json');
 
 let mainWindow;
 let tray = null;
@@ -564,8 +565,8 @@ function saveRecoveryPairSync(arg1, arg2, arg3, arg4) {
     // 6. Update recovery status coherently
     if (typeof app !== 'undefined' && app.getPath && userDataDir === app.getPath('userData')) {
       setRecoveryLegacyBound(false);
-      backupFile(targetRecovery);
-      backupFile(targetMasterEnc);
+      backupFile(targetRecovery, 'recovery-rotation');
+      backupFile(targetMasterEnc, 'recovery-rotation');
     } else {
       const statusData = JSON.stringify({ version: 1, legacyBound: false, updatedAt: Date.now() });
       const tempStatus = path.join(userDataDir, `.${path.basename(targetStatus)}.${txId}.tmp`);
@@ -1221,32 +1222,161 @@ ipcMain.handle('cancel-clipboard-clear', () => {
   lastCopiedHash = null;
 });
 
-function backupFile(sourcePath) {
-  if (!fs.existsSync(sourcePath)) return;
+const MAX_BACKUP_SNAPSHOTS = 20;
+
+function loadBackupLog(userDataDir = app.getPath('userData')) {
+  const logPath = path.join(userDataDir, 'fuin.backup-log.json');
+  if (!fs.existsSync(logPath)) {
+    return { version: 1, entries: [], lastAutoHeal: null };
+  }
   try {
-    const backupDir = path.join(app.getPath('userData'), 'backups');
-    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { mode: 0o700 });
-    
+    const parsed = JSON.parse(fs.readFileSync(logPath, 'utf8'));
+    return {
+      version: 1,
+      entries: Array.isArray(parsed.entries) ? parsed.entries : [],
+      lastAutoHeal: parsed.lastAutoHeal || null,
+    };
+  } catch {
+    return { version: 1, entries: [], lastAutoHeal: null };
+  }
+}
+
+function saveBackupLog(logObj, userDataDir = app.getPath('userData')) {
+  try {
+    const logPath = path.join(userDataDir, 'fuin.backup-log.json');
+    const clean = {
+      version: 1,
+      entries: Array.isArray(logObj.entries) ? logObj.entries.slice(0, 100) : [],
+      lastAutoHeal: logObj.lastAutoHeal || null,
+    };
+    writeAtomicSync(logPath, JSON.stringify(clean, null, 2), { encoding: 'utf8', mode: 0o600 });
+  } catch (e) {
+    console.error('Backup log save error:', e);
+  }
+}
+
+function backupFile(sourcePath, reason = 'auto-save') {
+  if (!fs.existsSync(sourcePath)) return null;
+  try {
+    const srcStat = fs.statSync(sourcePath);
+    if (srcStat.size === 0) return null; // Never back up a 0-byte file
+
+    const srcBuf = fs.readFileSync(sourcePath);
+    const sha256 = crypto.createHash('sha256').update(srcBuf).digest('hex');
+
+    const userDataDir = app.getPath('userData');
+    const backupDir = path.join(userDataDir, 'backups');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+
     const ext = path.extname(sourcePath);
     const base = path.basename(sourcePath, ext);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(backupDir, `${base}${ext}.${timestamp}.bak`);
-    
-    fs.copyFileSync(sourcePath, backupPath);
-    
-    const files = fs.readdirSync(backupDir)
-      .filter(f => f.startsWith(base + ext + '.') && f.endsWith('.bak'))
+    const targetName = `${base}${ext}`;
+    const prefix = `${targetName}.`;
+
+    const existingBefore = fs.readdirSync(backupDir)
+      .filter(f => f.startsWith(prefix) && f.endsWith('.bak'))
       .map(f => ({ name: f, time: fs.statSync(path.join(backupDir, f)).mtime.getTime() }))
       .sort((a, b) => b.time - a.time);
-      
-    if (files.length > 10) {
-      for (let i = 10; i < files.length; i++) {
-        fs.unlinkSync(path.join(backupDir, files[i].name));
+
+    // Avoid redundant snapshots if newest backup already has identical SHA-256
+    if (reason !== 'manual-snapshot' && existingBefore.length > 0) {
+      try {
+        const latestBuf = fs.readFileSync(path.join(backupDir, existingBefore[0].name));
+        const latestSha = crypto.createHash('sha256').update(latestBuf).digest('hex');
+        if (latestSha === sha256) {
+          return { skipped: true, file: existingBefore[0].name, sha256, size: srcStat.size, reason };
+        }
+      } catch {}
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    let backupName = `${targetName}.${timestamp}.bak`;
+    let backupPath = path.join(backupDir, backupName);
+    let collisionIdx = 1;
+    while (fs.existsSync(backupPath)) {
+      backupName = `${targetName}.${timestamp}-${collisionIdx}.bak`;
+      backupPath = path.join(backupDir, backupName);
+      collisionIdx++;
+    }
+
+    fs.copyFileSync(sourcePath, backupPath);
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(backupPath, 0o600); } catch {}
+    }
+
+    const files = fs.readdirSync(backupDir)
+      .filter(f => f.startsWith(prefix) && f.endsWith('.bak'))
+      .map(f => ({ name: f, time: fs.statSync(path.join(backupDir, f)).mtime.getTime() }))
+      .sort((a, b) => b.time - a.time);
+
+    const removedNames = new Set();
+    if (files.length > MAX_BACKUP_SNAPSHOTS) {
+      for (let i = MAX_BACKUP_SNAPSHOTS; i < files.length; i++) {
+        removedNames.add(files[i].name);
+        try { fs.unlinkSync(path.join(backupDir, files[i].name)); } catch {}
       }
     }
+
+    const log = loadBackupLog(userDataDir);
+    const entry = {
+      file: backupName,
+      target: targetName,
+      timestamp: Date.now(),
+      iso: new Date().toISOString(),
+      size: srcStat.size,
+      sha256,
+      reason: String(reason || 'auto-save'),
+    };
+    log.entries = [
+      entry,
+      ...log.entries.filter(e => e && e.file !== backupName && !removedNames.has(e.file)),
+    ];
+    saveBackupLog(log, userDataDir);
+    return entry;
   } catch (e) {
     console.error('Backup error:', e);
+    return null;
   }
+}
+
+function recoverZeroByteFile(targetFile, prefix) {
+  const userDataDir = app.getPath('userData');
+  const backupDir = path.join(userDataDir, 'backups');
+  if (!fs.existsSync(backupDir)) return null;
+
+  const files = fs.readdirSync(backupDir)
+    .filter(f => f.startsWith(prefix) && f.endsWith('.bak'))
+    .map(f => ({ name: f, path: path.join(backupDir, f), stat: fs.statSync(path.join(backupDir, f)) }))
+    .filter(f => f.stat.size > 0)
+    .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime());
+
+  if (files.length === 0) return null;
+
+  const log = loadBackupLog(userDataDir);
+  for (const candidate of files) {
+    try {
+      const recovered = fs.readFileSync(candidate.path, 'utf8');
+      if (!recovered) continue;
+      const actualSha = crypto.createHash('sha256').update(Buffer.from(recovered, 'utf8')).digest('hex');
+      const logEntry = log.entries.find(e => e && e.file === candidate.name);
+      if (logEntry && logEntry.sha256 && logEntry.sha256 !== actualSha) {
+        console.warn(`[auto-heal] Skipping backup ${candidate.name}: SHA-256 mismatch`);
+        continue;
+      }
+      console.warn(`[auto-heal] Recovered ${path.basename(targetFile)} from backup: ${candidate.name}`);
+      writeAtomicSync(targetFile, recovered, { mode: 0o600 });
+      log.lastAutoHeal = {
+        target: path.basename(targetFile),
+        recoveredFrom: candidate.name,
+        timestamp: Date.now(),
+        iso: new Date().toISOString(),
+        sha256: actualSha,
+      };
+      saveBackupLog(log, userDataDir);
+      return recovered;
+    } catch {}
+  }
+  return null;
 }
 
 // ── IPC: Veri dosyası ─────────────────────────────────────────────
@@ -1255,25 +1385,13 @@ ipcMain.handle('load-data', () => {
   const stat = fs.statSync(DATA_FILE);
   if (stat.size === 0) {
     console.warn('[load-data] DATA_FILE is 0 bytes. Attempting recovery from latest backup...');
-    const backupDir = path.join(app.getPath('userData'), 'backups');
-    if (fs.existsSync(backupDir)) {
-      const files = fs.readdirSync(backupDir)
-        .filter(f => f.startsWith('fuin.enc.') && f.endsWith('.bak'))
-        .map(f => ({ name: f, path: path.join(backupDir, f), stat: fs.statSync(path.join(backupDir, f)) }))
-        .filter(f => f.stat.size > 0)
-        .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime());
-      if (files.length > 0) {
-        console.warn(`[load-data] Recovered from backup: ${files[0].name}`);
-        const recovered = fs.readFileSync(files[0].path, 'utf8');
-        writeAtomicSync(DATA_FILE, recovered, { mode: 0o600 });
-        return recovered;
-      }
-    }
+    const recovered = recoverZeroByteFile(DATA_FILE, 'fuin.enc.');
+    if (recovered !== null) return recovered;
   }
   return fs.readFileSync(DATA_FILE, 'utf8');
 });
 ipcMain.handle('save-data', (_, enc) => { 
-  backupFile(DATA_FILE);
+  backupFile(DATA_FILE, 'auto-save');
   writeAtomicSync(DATA_FILE, enc, { encoding: 'utf8', mode: 0o600 }); 
   if (_authoritativeVaultSession) {
     try {
@@ -1299,11 +1417,21 @@ ipcMain.handle('save-recovery-pair', (_, payload, maybeMasterEnc) => {
 // DEPRECATED (IPC-IPC-01): Standalone recovery/master handlers are deprecated and removed
 // from preload.js to prevent split-write desynchronization. Retained strictly for test harness compatibility.
 ipcMain.handle('save-recovery', (_, d) => { 
+  backupFile(RECOVERY_FILE, 'recovery-save');
   writeAtomicSync(RECOVERY_FILE, d, { encoding: 'utf8', mode: 0o600 }); 
   setRecoveryLegacyBound(false);
   return true; 
 });
-ipcMain.handle('load-recovery', () => fs.existsSync(RECOVERY_FILE) ? fs.readFileSync(RECOVERY_FILE, 'utf8') : null);
+ipcMain.handle('load-recovery', () => {
+  if (!fs.existsSync(RECOVERY_FILE)) return null;
+  const stat = fs.statSync(RECOVERY_FILE);
+  if (stat.size === 0) {
+    console.warn('[load-recovery] RECOVERY_FILE is 0 bytes. Attempting recovery from latest backup...');
+    const recovered = recoverZeroByteFile(RECOVERY_FILE, 'fuin.recovery.');
+    if (recovered !== null) return recovered;
+  }
+  return fs.readFileSync(RECOVERY_FILE, 'utf8');
+});
 ipcMain.handle('recovery-exists', () => fs.existsSync(RECOVERY_FILE));
 ipcMain.handle('get-recovery-status', () => getRecoveryStatus());
 
@@ -1312,7 +1440,7 @@ ipcMain.handle('get-recovery-status', () => getRecoveryStatus());
 // master.enc — şifre değiştirmek için vault'u yeniden şifrelemede kullanılır
 // localStorage yerine bu dosya kullanılır; renderer erişemez, yalnızca IPC üzerinden
 ipcMain.handle('save-master-enc', (_, d) => { 
-  backupFile(MASTER_ENC_FILE);
+  backupFile(MASTER_ENC_FILE, 'master-enc-save');
   writeAtomicSync(MASTER_ENC_FILE, d, { encoding: 'utf8', mode: 0o600 }); 
   return true; 
 });
@@ -1321,20 +1449,8 @@ ipcMain.handle('load-master-enc', () => {
   const stat = fs.statSync(MASTER_ENC_FILE);
   if (stat.size === 0) {
     console.warn('[load-master-enc] MASTER_ENC_FILE is 0 bytes. Attempting recovery from latest backup...');
-    const backupDir = path.join(app.getPath('userData'), 'backups');
-    if (fs.existsSync(backupDir)) {
-      const files = fs.readdirSync(backupDir)
-        .filter(f => f.startsWith('fuin.master.enc.') && f.endsWith('.bak'))
-        .map(f => ({ name: f, path: path.join(backupDir, f), stat: fs.statSync(path.join(backupDir, f)) }))
-        .filter(f => f.stat.size > 0)
-        .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime());
-      if (files.length > 0) {
-        console.warn(`[load-master-enc] Recovered from backup: ${files[0].name}`);
-        const recovered = fs.readFileSync(files[0].path, 'utf8');
-        writeAtomicSync(MASTER_ENC_FILE, recovered, { mode: 0o600 });
-        return recovered;
-      }
-    }
+    const recovered = recoverZeroByteFile(MASTER_ENC_FILE, 'fuin.master.enc.');
+    if (recovered !== null) return recovered;
   }
   return fs.readFileSync(MASTER_ENC_FILE, 'utf8');
 });
@@ -1354,6 +1470,7 @@ ipcMain.handle('full-reset', () => {
   try { if (fs.existsSync(RECOVERY_FILE))   fs.unlinkSync(RECOVERY_FILE);   } catch {}
   try { if (fs.existsSync(MASTER_ENC_FILE)) fs.unlinkSync(MASTER_ENC_FILE); } catch {}
   try { if (fs.existsSync(RECOVERY_STATUS_FILE)) fs.unlinkSync(RECOVERY_STATUS_FILE); } catch {}
+  try { if (fs.existsSync(BACKUP_LOG_FILE)) fs.unlinkSync(BACKUP_LOG_FILE); } catch {}
   try {
     const touchIdFile = path.join(userDataDir, 'fuin.touchid.enc');
     if (fs.existsSync(touchIdFile)) fs.unlinkSync(touchIdFile);
@@ -1369,12 +1486,98 @@ ipcMain.handle('full-reset', () => {
   return true;
 });
 
-// ── IPC: Yedek Klasörü ─────────────────────────────────────────────
+// ── IPC: Yedek Klasörü & Yedek Geçmişi ────────────────────────────
+function listVaultBackups(userDataDir = app.getPath('userData')) {
+  const backupDir = path.join(userDataDir, 'backups');
+  const log = loadBackupLog(userDataDir);
+  if (!fs.existsSync(backupDir)) {
+    return { backups: [], lastAutoHeal: log.lastAutoHeal || null, totalCount: 0 };
+  }
+  const files = fs.readdirSync(backupDir)
+    .filter(f => f.startsWith('fuin.enc.') && f.endsWith('.bak'))
+    .map(f => {
+      const fullPath = path.join(backupDir, f);
+      const stat = fs.statSync(fullPath);
+      const logEntry = log.entries.find(e => e && e.file === f);
+      let actualSha = '';
+      if (stat.size > 0) {
+        try {
+          actualSha = crypto.createHash('sha256').update(fs.readFileSync(fullPath)).digest('hex');
+        } catch {}
+      }
+      const verified = stat.size > 0 && (!!actualSha) && (!logEntry || !logEntry.sha256 || logEntry.sha256 === actualSha);
+      return {
+        file: f,
+        timestamp: logEntry?.timestamp || stat.mtime.getTime(),
+        iso: logEntry?.iso || stat.mtime.toISOString(),
+        size: stat.size,
+        sha256: actualSha ? actualSha.slice(0, 12) : '',
+        fullSha256: actualSha,
+        reason: logEntry?.reason || 'auto-save',
+        verified,
+      };
+    })
+    .sort((a, b) => b.timestamp - a.timestamp);
+
+  return {
+    backups: files,
+    lastAutoHeal: log.lastAutoHeal || null,
+    totalCount: files.length,
+  };
+}
+
 ipcMain.handle('open-backup-folder', async () => {
   const backupDir = path.join(app.getPath('userData'), 'backups');
   if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true, mode: 0o700 });
   await shell.openPath(backupDir);
   return true;
+});
+
+ipcMain.handle('get-backup-list', () => {
+  return listVaultBackups();
+});
+
+ipcMain.handle('create-manual-backup', () => {
+  const bData = backupFile(DATA_FILE, 'manual-snapshot');
+  if (fs.existsSync(RECOVERY_FILE)) backupFile(RECOVERY_FILE, 'manual-snapshot');
+  if (fs.existsSync(MASTER_ENC_FILE)) backupFile(MASTER_ENC_FILE, 'manual-snapshot');
+  return {
+    ok: !!bData,
+    backup: bData,
+    ...listVaultBackups(),
+  };
+});
+
+ipcMain.handle('restore-backup-snapshot', (_, payload) => {
+  const filename = payload && typeof payload === 'object' ? payload.filename : payload;
+  if (!filename || typeof filename !== 'string') {
+    return { ok: false, error: 'invalid-filename' };
+  }
+  if (path.basename(filename) !== filename || !filename.startsWith('fuin.enc.') || !filename.endsWith('.bak')) {
+    return { ok: false, error: 'invalid-filename' };
+  }
+  const userDataDir = app.getPath('userData');
+  const backupDir = path.join(userDataDir, 'backups');
+  const fullPath = path.join(backupDir, filename);
+  if (!fs.existsSync(fullPath)) {
+    return { ok: false, error: 'not-found' };
+  }
+  const stat = fs.statSync(fullPath);
+  if (!stat.isFile() || stat.size === 0) {
+    return { ok: false, error: 'corrupted-backup' };
+  }
+  const ciphertext = fs.readFileSync(fullPath, 'utf8');
+  const actualSha = crypto.createHash('sha256').update(Buffer.from(ciphertext, 'utf8')).digest('hex');
+  const log = loadBackupLog(userDataDir);
+  const logEntry = log.entries.find(e => e && e.file === filename);
+  if (logEntry && logEntry.sha256 && logEntry.sha256 !== actualSha) {
+    return { ok: false, error: 'integrity-mismatch' };
+  }
+  // Take a protective pre-restore snapshot of current DATA_FILE
+  if (fs.existsSync(DATA_FILE)) {
+    backupFile(DATA_FILE, 'pre-restore');
+  }
+  return { ok: true, ciphertext, sha256: actualSha, file: filename };
 });
 
 // ── IPC: Dosya dialogları ─────────────────────────────────────────
@@ -1612,6 +1815,10 @@ if (typeof module !== 'undefined' && module.exports) {
     safeRenameSync,
     cleanupOrphanRecoveryTransactions,
     saveRecoveryPairSync,
+    backupFile,
+    loadBackupLog,
+    recoverZeroByteFile,
+    listVaultBackups,
     KNOWN_EXTENSION_IDS,
     autoInstallNativeMessagingHosts,
     writeNativeHostManifest,

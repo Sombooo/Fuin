@@ -38,7 +38,8 @@
       ctx.fillRect(0, 0, 260, 260);
       ctx.fillStyle = '#a0342a';
       ctx.font = '12px monospace';
-      ctx.fillText('Chunk çok büyük', 20, 130);
+      const errMsg = typeof window.t === 'function' ? window.t('syncChunkTooLarge') : 'QR Size Error';
+      ctx.fillText(errMsg, 20, 130);
     } finally {
       if (div.parentNode) {
         div.parentNode.removeChild(div);
@@ -104,12 +105,21 @@
     }
   }
 
+  function onLanguageChanged(t) {
+    if (typeof t !== 'function') return;
+    const prepText = document.getElementById('preparingText');
+    if (prepText && !prepText.style.color) {
+      prepText.textContent = t('syncPreparing');
+    }
+  }
+
   window.FuinSyncAnimation = {
     renderSyncChunkToCanvas,
     renderSyncFrame,
     updatePauseUI,
     updateFpsUI,
     resetSyncModalDOM,
+    onLanguageChanged,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

@@ -150,7 +150,7 @@ async function handleRegenerateRecovery() {
     toast(t('toastRecoveryRegenerated'));
   } catch (err) {
     console.error('Regenerate recovery error:', err);
-    toast(t('toastError') || 'Hata oluştu');
+    toast(t('toastError'));
   }
 }
 
@@ -269,11 +269,11 @@ function lock() {
   if (catNavEl) catNavEl.innerHTML = '';
   const catSecEl = document.getElementById('categoryNavSection');
   if (catSecEl) catSecEl.style.display = 'none';
-  ['f-site','f-user','f-pw','f-note','f-url','f-totp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp','repromptPwInp'].forEach(id => {
+  ['f-site','f-user','f-pw','f-note','f-url','f-totp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp','repromptPwInp','verifyRecoveryInp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  ['addOverlay','totpOverlay','genOverlay','pairOverlay','lanSyncOverlay','newCategoryOverlay','changePwOverlay','backupOverlay','recoveryOverlay','repromptOverlay','pwHistoryOverlay'].forEach(id => {
+  ['addOverlay','totpOverlay','genOverlay','pairOverlay','lanSyncOverlay','newCategoryOverlay','changePwOverlay','backupOverlay','recoveryOverlay','repromptOverlay','pwHistoryOverlay','verifyRecoveryOverlay','backupHistoryOverlay'].forEach(id => {
     document.getElementById(id)?.classList.remove('open');
   });
   const overlaySyncPass = document.getElementById('overlaySyncPass');
@@ -487,7 +487,7 @@ api.onExtRevealRequest(async (req) => {
   if (!requirePrompt) {
     try {
       api.extRespond(req.requestId, { username: entry.username, password: await memDecrypt(entry.password) });
-      toast(t('toastExtCredSent') || 'Şifre tarayıcıya aktarıldı');
+      toast(t('toastExtCredSent'));
     } catch {
       api.extRespond(req.requestId, { error: 'internal-error' });
     }
@@ -516,7 +516,7 @@ api.onExtCopySecureRequest?.(async (req) => {
     return;
   }
   if (req.field === 'username') {
-    await copySecure(entry.username || '', t('toastCopiedDefault') || 'Kullanıcı adı', 30000);
+    await copySecure(entry.username || '', t('toastCopiedDefault'), 30000);
     api.extRespond(req.requestId, { ok: true });
     return;
   }
@@ -527,7 +527,7 @@ api.onExtCopySecureRequest?.(async (req) => {
   }
   try {
     const pw = await memDecrypt(entry.password);
-    await copySecure(pw, t('toastPwCopied') || 'Şifre kopyalandı', 30000);
+    await copySecure(pw, t('toastPwCopied'), 30000);
     api.extRespond(req.requestId, { ok: true });
   } catch {
     api.extRespond(req.requestId, { error: 'internal-error' });
@@ -656,7 +656,7 @@ function highlightSavedCard(entryId) {
   document.querySelectorAll('.cat-item').forEach(el => el.classList.remove('active'));
   document.querySelector('.cat-item[data-view="all"]')?.classList.add('active');
   const viewTitle = document.getElementById('viewTitle');
-  if (viewTitle) viewTitle.textContent = t('viewTitleAll') || 'Tüm Parolalar';
+  if (viewTitle) viewTitle.textContent = t('viewTitleAll');
 
   renderList().then(() => {
     setTimeout(() => {
@@ -737,7 +737,7 @@ api.onExtSaveCredentialRequest?.(async (req) => {
       existing.updatedAt = now;
       await persist();
       highlightSavedCard(existing.id);
-      toast(`${t('toastUpdated') || 'Şifre güncellendi'}: ${existing.site}`);
+      toast(`${t('toastUpdated')}: ${existing.site}`);
       api.extRespond(req.requestId, { ok: true, action: 'updated', id: existing.id });
       return;
     }
@@ -771,7 +771,7 @@ api.onExtSaveCredentialRequest?.(async (req) => {
   entries.unshift(newEntry);
   await persist();
   highlightSavedCard(newEntry.id);
-  toast(`${t('toastSaved') || 'Yeni hesap kaydedildi'}: ${site}${newEntry.username ? ' (' + newEntry.username + ')' : ''}`);
+  toast(`${t('toastSaved')}: ${site}${newEntry.username ? ' (' + newEntry.username + ')' : ''}`);
 
   api.extRespond(req.requestId, { ok: true, action: 'created', id: newEntry.id });
 });
@@ -853,7 +853,7 @@ function setView(v, btn) {
     document.getElementById('btnAddNew').style.display = (v === 'trash') ? 'none' : 'block';
     
     if (v==='fav') document.getElementById('viewTitle').textContent = t('viewTitleFav');
-    else if (v==='trash') document.getElementById('viewTitle').textContent = 'ÇÖP KUTUSU';
+    else if (v==='trash') document.getElementById('viewTitle').textContent = t('viewTitleTrash');
     else document.getElementById('viewTitle').textContent = t('viewTitleAll');
     renderList();
   } else if (v.startsWith('cat:')) {
@@ -871,9 +871,10 @@ function setView(v, btn) {
     document.getElementById('view-settings').style.display='block';
     loadSyncSettings();
     updateExtStatusUI();
+    refreshBackupSummaryBadge();
     getLocalAppVersion().then(ver => {
       const sub = document.getElementById('sysUpdateCheckSub');
-      if (sub) sub.textContent = `${t('sysUpdateCheckSub') || "Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin."} (Mevcut: v${normalizeVersion(ver)})`;
+      if (sub) sub.textContent = `${t('sysUpdateCheckSub')} ${t('sysUpdateCurrent', { v: normalizeVersion(ver) })}`;
     });
   }
 }
@@ -957,24 +958,24 @@ async function renderList() {
     <div class="pw-card" data-id="${esc(e.id)}" style="animation-delay:${i*15}ms">
       <div class="pw-icon">${esc(e.site.slice(0,2).toUpperCase())}</div>
       <div class="pw-info">
-        <div class="pw-site">${e.fav ? `<span class="fav-star" title="${t('navFav') || 'Favori'}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}<span class="pw-site-name">${esc(e.site)}</span>${e.reprompt ? `<span class="reprompt-badge" title="${esc(t('badgeReprompt'))}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>` : ''}${e.url && /^http:\/\//i.test(e.url.trim()) ? `<span class="insecure-http-badge" title="${esc(t('warnInsecureHttp'))}">HTTP</span>` : ''}</div>
+        <div class="pw-site">${e.fav ? `<span class="fav-star" title="${esc(t('navFav'))}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}<span class="pw-site-name">${esc(e.site)}</span>${e.reprompt ? `<span class="reprompt-badge" title="${esc(t('badgeReprompt'))}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>` : ''}${e.url && /^http:\/\//i.test(e.url.trim()) ? `<span class="insecure-http-badge" title="${esc(t('warnInsecureHttp'))}">HTTP</span>` : ''}</div>
         <div class="pw-meta">
           <span class="pw-user">${esc(e.username)||'—'}</span>
           <span class="pw-cat">${esc(catLabel(e.category||'Diğer'))}</span>
-          <span class="pw-dots" id="dot-${esc(e.id)}" title="Şifreyi görmek için tıklayın">••••••</span>
+          <span class="pw-dots" id="dot-${esc(e.id)}" title="${esc(t('clickToRevealPw'))}">••••••</span>
           <div class="str-dot ${dotClass(scores[i])}"></div>
         </div>
       </div>
       <div class="pw-actions">
         ${curView === 'trash' ? `
-          <button class="act-btn" data-action="restore-pw" data-val="${esc(e.id)}" title="${t('btnRestore') || 'Geri Yükle'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
-          <button class="act-btn del" data-action="perm-del-pw" data-val="${esc(e.id)}" title="${t('btnPermDel') || 'Kalıcı Olarak Sil'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <button class="act-btn" data-action="restore-pw" data-val="${esc(e.id)}" title="${esc(t('btnRestore'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+          <button class="act-btn del" data-action="perm-del-pw" data-val="${esc(e.id)}" title="${esc(t('btnPermDel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         ` : `
           ${e.totp?`<button class="act-btn" data-action="show-totp" data-val="${esc(e.id)}" title="2FA"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>`:''}
-          <button class="act-btn" data-action="copy-pw" data-val="${esc(e.id)}" title="${t('btnCopy') || 'Kopyala'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-          <button class="act-btn" data-action="reveal-pw" data-val="${esc(e.id)}" title="${t('showPwTitle') || 'Göster'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          <button class="act-btn" data-action="edit-pw" data-val="${esc(e.id)}" title="${t('btnEdit') || 'Düzenle'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-          <button class="act-btn del" data-action="del-pw" data-val="${esc(e.id)}" title="${t('btnDel') || 'Sil'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          <button class="act-btn" data-action="copy-pw" data-val="${esc(e.id)}" title="${esc(t('btnCopy'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+          <button class="act-btn" data-action="reveal-pw" data-val="${esc(e.id)}" title="${esc(t('showPwTitle'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          <button class="act-btn" data-action="edit-pw" data-val="${esc(e.id)}" title="${esc(t('btnEdit'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="act-btn del" data-action="del-pw" data-val="${esc(e.id)}" title="${esc(t('btnDel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         `}
       </div>
     </div>`).join('');
@@ -1126,7 +1127,7 @@ async function delEntry(id) {
     entries[i].deletedAt = now;
     entries[i].updated = now;
     entries[i].updatedAt = now;
-    await persist(); renderList(); toast(t('toastDeleted') || 'Çöp kutusuna taşındı');
+    await persist(); renderList(); toast(t('toastDeleted'));
   }
 }
 
@@ -1138,13 +1139,13 @@ async function restoreEntry(id) {
     entries[i].deletedAt = null;
     entries[i].updated = now;
     entries[i].updatedAt = now;
-    await persist(); renderList(); toast('Kayıt geri yüklendi');
+    await persist(); renderList(); toast(t('toastEntryRestored'));
   }
 }
 
 async function permDelEntry(id) {
   entries = entries.filter(x=>x.id!==id);
-  await persist(); renderList(); toast('Kalıcı olarak silindi');
+  await persist(); renderList(); toast(t('toastEntryPermDeleted'));
 }
 
 // ── ACTIONS ───────────────────────────────────────────────────────
@@ -1295,6 +1296,7 @@ function copyRecoveryKey() {
 
 // ── MASTER PASSWORD REPROMPT ───────────────────────────────────────
 let repromptPendingAction = null;
+let repromptCustomVerifier = null;
 
 function constantTimeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -1313,6 +1315,7 @@ function requireReprompt(id, callback) {
     callback();
     return;
   }
+  repromptCustomVerifier = null;
   repromptPendingAction = callback;
   const overlay = document.getElementById('repromptOverlay');
   const inp = document.getElementById('repromptPwInp');
@@ -1331,10 +1334,19 @@ function requireReprompt(id, callback) {
   setTimeout(() => { if (inp) inp.focus(); }, 80);
 }
 
-function verifyReprompt() {
+async function verifyReprompt() {
   const inp = document.getElementById('repromptPwInp');
   const msg = document.getElementById('repromptMsg');
   const val = inp ? inp.value : '';
+  if (typeof repromptCustomVerifier === 'function') {
+    const ok = await repromptCustomVerifier(val, msg, inp);
+    if (ok) {
+      repromptCustomVerifier = null;
+      repromptPendingAction = null;
+      closeRepromptModal();
+    }
+    return;
+  }
   if (constantTimeEqual(val, master)) {
     const action = repromptPendingAction;
     repromptPendingAction = null;
@@ -1360,6 +1372,7 @@ function verifyReprompt() {
 
 function cancelReprompt() {
   repromptPendingAction = null;
+  repromptCustomVerifier = null;
   closeRepromptModal();
 }
 
@@ -1389,7 +1402,7 @@ async function openPwHistory() {
             <div class="pw-hist-val" title="${esc(decrypted)}">${esc(masked)}</div>
           </div>
           <button type="button" class="btn-io" data-copy-hist="${idx}" style="font-size:11px;padding:4px 8px;flex-shrink:0;">
-            ${esc(t('btnCopy') || 'Kopyala')}
+            ${esc(t('btnCopy'))}
           </button>
         </div>
       `;
@@ -1412,44 +1425,46 @@ async function openPwHistory() {
 function generateEmergencyKitHtml(recoveryKey, dateStr) {
   const safeEsc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
   const isEn = document.documentElement.lang === 'en';
-  const title = isEn ? 'FUIN EMERGENCY KIT' : 'FUIN ACİL DURUM KİTİ';
-  const subtitle = isEn 
-    ? 'Confidential Disaster Recovery Document for your Fuin Password Vault'
-    : 'Fuin Şifre Kasanız için Gizli ve Çevrimdışı Kurtarma Belgesi';
-  const recoveryTitle = isEn ? 'PRIMARY RECOVERY KEY' : 'BİRİNCİL KURTARMA ANAHTARI';
-  const recoveryDesc = isEn
-    ? 'This 256-bit cryptographic key can unlock and recover your vault if you ever lose or forget your Master Password. Keep this document strictly confidential.'
-    : 'Bu 256-bit kriptografik anahtar, Ana Şifrenizi unutmanız veya erişiminizi kaybetmeniz durumunda kasanızı kurtarmanızı sağlar. Bu belgeyi kesinlikle gizli tutun.';
-  const masterPwTitle = isEn ? 'MASTER PASSWORD (HANDWRITTEN)' : 'ANA ŞİFRE (EL YAZISIYLA)';
-  const masterPwDesc = isEn
-    ? 'Write your Master Password here by hand for air-gapped physical cold backup. Never save this file with your master password typed in.'
-    : 'Fiziksel soğuk yedekleme amacıyla buraya Ana Şifrenizi el yazınızla not edin. Bu dosyayı asla dijital olarak şifreniz yazılı halde kaydetmeyin.';
-  const instructionsTitle = isEn ? 'DISASTER RECOVERY INSTRUCTIONS' : 'KASAYI KURTARMA ADIMLARI';
-  const step1 = isEn 
-    ? '1. Open Fuin on your desktop or mobile device.'
-    : '1. Fuin uygulamasını bilgisayarınızda veya telefonunuzda açın.';
-  const step2 = isEn
-    ? '2. On the unlock screen, click "Forgot Password" ("Şifremi Unuttum").'
-    : '2. Kilit ekranında "Şifremi Unuttum" bağlantısına tıklayın.';
-  const step3 = isEn
-    ? '3. Enter the 32-character Primary Recovery Key listed above exactly as shown.'
-    : '3. Yukarıda listelenen 32 karakterlik Birincil Kurtarma Anahtarını eksiksiz girin.';
-  const step4 = isEn
-    ? '4. Set your new Master Password. Your vault entries will be atomically re-encrypted.'
-    : '4. Yeni Ana Şifrenizi belirleyin. Kasanız yeni şifrenizle baştan sona otomatik olarak yeniden şifrelenir.';
-  const securityRulesTitle = isEn ? 'SECURITY BEST PRACTICES' : 'GÜVENLİK KURALLARI';
-  const rule1 = isEn
-    ? 'PRINT IMMEDIATELY: Print this page physically on paper and delete this unencrypted HTML file from your downloads.'
-    : 'HEMEN YAZDIRIN: Bu sayfayı fiziksel kağıda yazdırın ve indirilen bu HTML dosyasını bilgisayarınızdan kalıcı olarak silin.';
-  const rule2 = isEn
-    ? 'PHYSICAL STORAGE: Store the printed sheet in a fireproof safe, bank deposit box, or sealed envelope.'
-    : 'FİZİKSEL SAKLAMA: Çıktıyı yangına dayanıklı bir kasada, banka kasasında veya kilitli bir çekmecede saklayın.';
-  const rule3 = isEn
-    ? 'NO DIGITAL SHARING: Never upload this file to Google Drive, iCloud, Dropbox, or send it via email or messaging apps.'
-    : 'DİJİTAL PAYLAŞIM YASAKTIR: Bu belgeyi asla bulut depolamaya yüklemeyin, e-posta veya mesajlaşma uygulamalarıyla göndermeyin.';
-  const footerNote = isEn
-    ? 'Fuin Password Vault • Zero-Knowledge Local Architecture • High-Assurance End-to-End Cryptography'
-    : 'Fuin Şifre Yöneticisi • Sıfır Bilgi Yerel Mimari • Uçtan Uca Yüksek Güvenceli Kriptografi';
+  const trFn = typeof t === 'function' ? t : (k) => ({
+    kitDocTitle: 'FUIN EMERGENCY KIT',
+    kitDocSubtitle: 'Fuin Vault Recovery Document',
+    kitRecoveryTitle: 'PRIMARY RECOVERY KEY',
+    kitRecoveryDesc: '256-bit cryptographic recovery key for your vault.',
+    kitMasterPwTitle: 'ANA \u015e\u0130FRE / MASTER PASSWORD',
+    kitMasterPwDesc: 'Write your Master Password here by hand after printing.',
+    kitInstructionsTitle: 'RECOVERY STEPS',
+    kitStep1: '1. Open Fuin on your computer.',
+    kitStep2: '2. Click Forgot Password on the lock screen.',
+    kitStep3: '3. Enter your 32-character Recovery Key.',
+    kitStep4: '4. Set your new Master Password.',
+    kitRulesTitle: 'SECURITY RULES',
+    kitRule1: 'PRINT: Print this page and delete the digital file.',
+    kitRule2: 'STORE: Keep the printed sheet in a safe place.',
+    kitRule3: 'PRIVATE: Never upload this file to cloud services.',
+    kitFooterNote: 'Fuin Password Manager',
+    kitPrintBtn: 'Print Kit',
+    kitExportDateLabel: 'Date',
+    kitHandwriteHint: '[ Handwritten Master Password ]'
+  }[k] || k);
+  const title = trFn('kitDocTitle');
+  const subtitle = trFn('kitDocSubtitle');
+  const recoveryTitle = trFn('kitRecoveryTitle');
+  const recoveryDesc = trFn('kitRecoveryDesc');
+  const masterPwTitle = trFn('kitMasterPwTitle');
+  const masterPwDesc = trFn('kitMasterPwDesc');
+  const instructionsTitle = trFn('kitInstructionsTitle');
+  const step1 = trFn('kitStep1');
+  const step2 = trFn('kitStep2');
+  const step3 = trFn('kitStep3');
+  const step4 = trFn('kitStep4');
+  const securityRulesTitle = trFn('kitRulesTitle');
+  const rule1 = trFn('kitRule1');
+  const rule2 = trFn('kitRule2');
+  const rule3 = trFn('kitRule3');
+  const footerNote = trFn('kitFooterNote');
+  const printBtnText = trFn('kitPrintBtn');
+  const exportDateLabel = trFn('kitExportDateLabel');
+  const handwriteHint = trFn('kitHandwriteHint');
 
   return `<!DOCTYPE html>
 <html lang="${isEn ? 'en' : 'tr'}">
@@ -1612,7 +1627,7 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
 <body>
 <div class="container">
   <div class="no-print" style="display:flex; justify-content:flex-end;">
-    <button class="btn-print" onclick="window.print()">🖨 ${isEn ? 'Print Emergency Kit' : 'Bu Kiti Yazdır'}</button>
+    <button class="btn-print" onclick="window.print()">🖨 ${printBtnText}</button>
   </div>
   <div class="header">
     <div class="header-left">
@@ -1620,7 +1635,7 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
       <p>${subtitle}</p>
     </div>
     <div class="meta-tag">
-      ${isEn ? 'Exported' : 'Tarih'}: ${safeEsc(dateStr)}
+      ${exportDateLabel}: ${safeEsc(dateStr)}
     </div>
   </div>
 
@@ -1633,7 +1648,7 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
   <div class="kit-card">
     <h2>✍️ ${masterPwTitle}</h2>
     <p>${masterPwDesc}</p>
-    <div class="handwrite-line">${isEn ? '[ Note Master Password here by hand after printing ]' : '[ Yazdırdıktan sonra buraya elle Ana Şifrenizi yazınız ]'}</div>
+    <div class="handwrite-line">${handwriteHint}</div>
   </div>
 
   <div class="kit-card">
@@ -1670,7 +1685,7 @@ async function exportEmergencyKit() {
   }
   let rKey = document.getElementById('recoveryKeyDisplay')?.textContent?.trim() || '';
   if (!rKey) {
-    const proceed = confirm(t('confirmGenKitRegen') || 'Acil durum kitine anahtarınızı eklemek için yeni bir kurtarma anahtarı üretilecek. Onaylıyor musunuz?');
+    const proceed = confirm(t('confirmGenKitRegen'));
     if (!proceed) return;
     rKey = generateRecoveryKey();
     await saveRecoveryKey(rKey, master);
@@ -1686,6 +1701,221 @@ async function exportEmergencyKit() {
   });
   if (success) {
     toast(t('toastEmergencyKitSaved'));
+  }
+}
+
+// ── RECOVERY KEY VERIFICATION (SELF-TEST) ─────────────────────────
+function openVerifyRecoveryModal() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  const inp = document.getElementById('verifyRecoveryInp');
+  const msg = document.getElementById('verifyRecoveryStatusMsg');
+  if (inp) inp.value = '';
+  if (msg) {
+    msg.style.display = 'none';
+    msg.textContent = '';
+  }
+  document.getElementById('verifyRecoveryOverlay')?.classList.add('open');
+  setTimeout(() => inp?.focus(), 80);
+}
+
+function closeVerifyRecoveryModal() {
+  const inp = document.getElementById('verifyRecoveryInp');
+  if (inp) inp.value = '';
+  closeModal('verifyRecoveryOverlay');
+}
+
+async function handleVerifyRecoveryKey() {
+  const inp = document.getElementById('verifyRecoveryInp');
+  const msg = document.getElementById('verifyRecoveryStatusMsg');
+  const rawKey = (inp?.value || '').trim().toUpperCase();
+  if (!msg) return;
+  if (!rawKey) {
+    msg.style.display = 'block';
+    msg.style.background = 'rgba(200, 128, 64, 0.12)';
+    msg.style.border = '1px solid var(--amber)';
+    msg.style.color = 'var(--amber)';
+    msg.textContent = t('verifyRecoveryInvalid');
+    return;
+  }
+  const recoveryEnc = await api.loadRecovery();
+  const masterEnc = await api.loadMasterEnc();
+  if (!recoveryEnc || !masterEnc) {
+    msg.style.display = 'block';
+    msg.style.background = 'rgba(200, 128, 64, 0.12)';
+    msg.style.border = '1px solid var(--amber)';
+    msg.style.color = 'var(--amber)';
+    msg.textContent = t('verifyRecoveryInvalid');
+    return;
+  }
+  try {
+    const keyClean = rawKey.replace(/-/g, '');
+    const recData = await api.decrypt(recoveryEnc, keyClean);
+    const masterData = await api.decrypt(masterEnc, keyClean);
+    if (recData && recData.verified && masterData && typeof masterData.master === 'string') {
+      msg.style.display = 'block';
+      msg.style.background = 'rgba(90, 154, 110, 0.14)';
+      msg.style.border = '1px solid var(--green)';
+      msg.style.color = 'var(--green)';
+      msg.textContent = t('verifyRecoverySuccess');
+      toast(t('verifyRecoverySuccess'));
+    } else {
+      throw new Error('invalid-payload');
+    }
+  } catch {
+    msg.style.display = 'block';
+    msg.style.background = 'rgba(200, 80, 70, 0.12)';
+    msg.style.border = '1px solid var(--red)';
+    msg.style.color = 'var(--red)';
+    msg.textContent = t('verifyRecoveryInvalid');
+  }
+}
+
+// ── AUTOMATIC BACKUP HISTORY & SNAPSHOT RESTORE ───────────────────
+function formatBackupReason(reason) {
+  if (reason === 'manual') return t('backupReasonManual');
+  if (reason === 'pre-restore') return t('backupReasonPreRestore');
+  if (reason === 'pre-reset' || reason === 'recovery-regen') return t('backupReasonRecovery');
+  return t('backupReasonAuto');
+}
+
+async function refreshBackupSummaryBadge() {
+  const badge = document.getElementById('backupSummaryBadge');
+  if (!badge || !api.getBackupList) return;
+  try {
+    const res = await api.getBackupList();
+    const snaps = Array.isArray(res?.snapshots) ? res.snapshots : [];
+    if (!snaps.length) {
+      badge.textContent = t('backupHistoryEmpty');
+      badge.style.color = 'var(--mu)';
+      return;
+    }
+    badge.textContent = t('backupSummaryCount', { count: snaps.length });
+    badge.style.color = 'var(--green)';
+  } catch {
+    badge.textContent = '';
+  }
+}
+
+async function renderBackupHistoryList() {
+  const listEl = document.getElementById('backupHistoryList');
+  const healBanner = document.getElementById('backupAutoHealBanner');
+  if (!listEl || !api.getBackupList) return;
+  try {
+    const res = await api.getBackupList();
+    const snaps = Array.isArray(res?.snapshots) ? res.snapshots : [];
+    if (healBanner) {
+      if (res?.lastAutoHeal?.timestamp) {
+        const d = new Date(res.lastAutoHeal.timestamp).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'tr-TR');
+        healBanner.textContent = `${t('backupAutoHealNotice')} (${d})`;
+        healBanner.style.display = 'block';
+      } else {
+        healBanner.style.display = 'none';
+      }
+    }
+    if (!snaps.length) {
+      listEl.innerHTML = `<div style="font-family:var(--mono);font-size:12px;color:var(--mu);text-align:center;padding:18px;">${esc(t('backupHistoryEmpty'))}</div>`;
+      return;
+    }
+    listEl.innerHTML = snaps.map(snap => {
+      const d = new Date(snap.timestamp).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'tr-TR');
+      const kb = Math.max(1, Math.round((snap.size || 0) / 1024));
+      const hashShort = snap.sha256 ? snap.sha256.slice(0, 10) : '—';
+      const reasonLabel = formatBackupReason(snap.reason);
+      const badgeLabel = snap.sha256 ? t('backupVerifiedBadge') : t('backupCorruptBadge');
+      return `
+        <div class="pw-history-item" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="display:flex;flex-direction:column;gap:3px;overflow:hidden;flex:1;">
+            <div style="font-size:12px;font-weight:600;color:var(--tx);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span>${esc(d)}</span>
+              <span style="font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(90,154,110,0.14);color:var(--ac2);">${esc(reasonLabel)}</span>
+            </div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--mu);">
+              ${kb} KB · SHA-256: ${esc(hashShort)}… · ${esc(badgeLabel)}
+            </div>
+          </div>
+          <button type="button" class="btn-io" data-restore-snap="${esc(snap.filename)}" style="font-size:11px;padding:6px 12px;flex-shrink:0;">
+            ${esc(t('backupRestoreBtn'))}
+          </button>
+        </div>
+      `;
+    }).join('');
+    listEl.querySelectorAll('[data-restore-snap]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const fname = btn.getAttribute('data-restore-snap');
+        if (fname) restoreSnapshotByFilename(fname);
+      });
+    });
+  } catch {
+    listEl.innerHTML = `<div style="font-family:var(--mono);font-size:12px;color:var(--red);text-align:center;padding:16px;">${esc(t('toastError'))}</div>`;
+  }
+}
+
+async function openBackupHistoryModal() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  await renderBackupHistoryList();
+  document.getElementById('backupHistoryOverlay')?.classList.add('open');
+}
+
+function closeBackupHistoryModal() {
+  closeModal('backupHistoryOverlay');
+}
+
+async function handleCreateManualBackup() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  try {
+    await persist();
+    if (api.createManualBackup) {
+      const res = await api.createManualBackup();
+      if (res?.ok) {
+        toast(t('toastSnapshotCreated'));
+        await refreshBackupSummaryBadge();
+        if (document.getElementById('backupHistoryOverlay')?.classList.contains('open')) {
+          await renderBackupHistoryList();
+        }
+      }
+    }
+  } catch (err) {
+    toast(t('toastError') + ': ' + (err?.message || err));
+  }
+}
+
+async function restoreSnapshotByFilename(filename) {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  if (!confirm(t('confirmRestoreSnapshot'))) return;
+  try {
+    const res = await api.restoreBackupSnapshot(filename);
+    if (!res?.ok) {
+      toast(t('toastError') + ': ' + (res?.error || ''));
+      return;
+    }
+    const raw = await api.loadData();
+    if (raw) {
+      try {
+        const parsed = await api.decrypt(raw, master);
+        const list = (parsed && parsed.type === 'fuin/vault')
+          ? (parsed.entries || [])
+          : (Array.isArray(parsed) ? parsed : (parsed?.entries || []));
+        const seenIds = new Set();
+        entries = await Promise.all(list.map(async e => {
+          let id = e.id;
+          while (seenIds.has(id) || !id) id = crypto.randomUUID();
+          seenIds.add(id);
+          return { ...e, id, password: await memEncrypt(e.password), totp: await memEncrypt(e.totp) };
+        }));
+        closeBackupHistoryModal();
+        renderList();
+        renderCategoryNav();
+        await refreshBackupSummaryBadge();
+        toast(t('toastSnapshotRestored'));
+      } catch {
+        // Yedek farklı bir Ana Şifre ile şifrelenmişse kasayı kilitleyip o şifreyle açmasını sağla
+        closeBackupHistoryModal();
+        lock();
+        toast(t('toastSnapshotRestored'));
+      }
+    }
+  } catch (err) {
+    toast(t('toastError') + ': ' + (err?.message || err));
   }
 }
 
@@ -1830,7 +2060,7 @@ async function openSyncWindow() {
     const preparingText = document.getElementById('preparingText');
     const spin = document.querySelector('.qr-preparing .spin');
     if (preparingText) {
-      preparingText.textContent = t('syncPreparing') || 'PAKET HAZIRLANIYOR...';
+      preparingText.textContent = t('syncPreparing');
       preparingText.style.color = '';
     }
     if (spin) spin.style.display = 'block';
@@ -1902,7 +2132,7 @@ async function openSyncWindow() {
     if (Array.isArray(pairedList) && pairedList.length > 0) {
       pairedSection.style.display = 'block';
       if (pairedDeviceName) {
-        pairedDeviceName.textContent = `${pairedList[0].deviceName || 'Eşleşmiş Cihaz'} (${pairedList[0].keyPreview || ''})`;
+        pairedDeviceName.textContent = `${pairedList[0].deviceName || t('deviceMobileDefault')} (${pairedList[0].keyPreview || ''})`;
       }
       if (btnSyncPassUsePaired) {
         btnSyncPassUsePaired.onclick = async () => {
@@ -1928,12 +2158,12 @@ async function openSyncWindow() {
   document.getElementById('btnConfirmSyncPass').onclick = async () => {
     const syncPassword = inputSyncPass.value;
     if (!syncPassword || syncPassword.trim().length === 0) {
-      toast(t('toastSyncPassRequired') || 'Sync şifresi gereklidir.');
+      toast(t('toastSyncPassRequired'));
       inputSyncPass.focus();
       return;
     }
     if (syncPassword.trim().length < 10) {
-      toast(t('toastSyncPassMinLength') || 'Sync şifresi en az 10 karakter olmalıdır.');
+      toast(t('toastSyncPassMinLength'));
       inputSyncPass.focus();
       return;
     }
@@ -1958,9 +2188,9 @@ async function startLanSyncFlow() {
   const timerText = document.getElementById('lanSyncTimer');
   const addrText = document.getElementById('lanSyncAddresses');
 
-  if (statusText) statusText.textContent = t('lanSyncWaiting') || 'Yerel ağ dinleyicisi başlatıldı. Telefonunuzdan Eşitle\'ye basın...';
-  if (timerText) timerText.textContent = `${t('lanSyncTimer') || 'Kalan süre: '}120s`;
-  if (addrText) addrText.textContent = t('syncStatusPreparing') || 'Hazırlanıyor...';
+  if (statusText) statusText.textContent = t('lanSyncWaiting');
+  if (timerText) timerText.textContent = `${t('lanSyncTimer')}120s`;
+  if (addrText) addrText.textContent = t('syncStatusPreparing');
   if (overlay) overlay.classList.add('open');
 
   try {
@@ -1986,7 +2216,7 @@ async function startLanSyncFlow() {
     if (lanSyncCountdownTimer) clearInterval(lanSyncCountdownTimer);
     lanSyncCountdownTimer = setInterval(() => {
       remaining--;
-      if (timerText) timerText.textContent = `${t('lanSyncTimer') || 'Kalan süre: '}${remaining}s`;
+      if (timerText) timerText.textContent = `${t('lanSyncTimer')}${remaining}s`;
       if (remaining <= 0) {
         clearInterval(lanSyncCountdownTimer);
         lanSyncCountdownTimer = null;
@@ -2038,14 +2268,14 @@ async function refreshPairedDevicesList() {
 }
 
 window.revokePairedDevice = async function(deviceId) {
-  if (!confirm(t('confirmRevokeDevice') || 'Bu cihazın eşleşmesini kaldırmak istediğinize emin misiniz?')) return;
+  if (!confirm(t('confirmRevokeDevice'))) return;
   if (!api.revokePairedDevice) return;
   try {
     await api.revokePairedDevice(deviceId);
-    toast(t('toastDeviceRevoked') || 'Cihaz eşleşmesi iptal edildi.');
+    toast(t('toastDeviceRevoked'));
     await refreshPairedDevicesList();
   } catch (err) {
-    toast((t('toastError') || 'Hata oluştu: ') + (err.message || ''));
+    toast(t('toastError') + ': ' + (err.message || ''));
   }
 };
 
@@ -2071,7 +2301,7 @@ async function openPairingModal() {
 
     const infoEl = document.getElementById('pairDeviceInfo');
     if (infoEl) {
-      infoEl.textContent = `${t('pairDeviceLabel') || 'Cihaz'}: ${payload.deviceId} · Port: ${payload.port}`;
+      infoEl.textContent = `${t('pairDeviceLabel')}: ${payload.deviceId} · Port: ${payload.port}`;
     }
 
     document.getElementById('pairOverlay')?.classList.add('open');
@@ -2082,8 +2312,96 @@ async function openPairingModal() {
 }
 
 // ── IMPORT / EXPORT ───────────────────────────────────────────────
+async function exportEncryptedBackup() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  try {
+    const exportEntries = await Promise.all(entries.map(async e => ({
+      ...e,
+      password: await memDecrypt(e.password),
+      totp: await memDecrypt(e.totp)
+    })));
+    const payload = {
+      type: 'fuin/vault',
+      exportedAt: Date.now(),
+      categories: [],
+      entries: exportEntries
+    };
+    const enc = await api.encrypt(payload, master);
+    const datePart = new Date().toISOString().slice(0, 10);
+    const ok = await api.exportFile({
+      content: JSON.stringify(enc, null, 2),
+      defaultName: `fuin-kasa-${datePart}.fuin`,
+      filters: [{ name: 'Fuin Encrypted Backup', extensions: ['fuin', 'enc', 'json'] }]
+    });
+    if (ok) toast(t('toastEncBackupExported'));
+  } catch (err) {
+    toast(t('toastError') + ': ' + (err?.message || err));
+  }
+}
+
+async function importEncryptedBackup() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  const raw = await api.importFile({
+    filters: [{ name: 'Fuin Encrypted Backup', extensions: ['fuin', 'enc', 'json'] }]
+  });
+  if (!raw) return;
+  let encObj;
+  try {
+    encObj = JSON.parse(raw);
+    if (!encObj || typeof encObj.data !== 'string' || typeof encObj.iv !== 'string' || typeof encObj.salt !== 'string' || typeof encObj.tag !== 'string') {
+      throw new Error('invalid-format');
+    }
+  } catch {
+    toast(t('toastInvalidFile') + ' (.fuin)');
+    return;
+  }
+
+  const applyDecryptedVault = async (parsed) => {
+    const list = (parsed && parsed.type === 'fuin/vault')
+      ? (parsed.entries || [])
+      : (Array.isArray(parsed) ? parsed : (parsed?.entries || []));
+    await processImportedEntries(list, 'Fuin (.fuin)');
+    toast(t('toastEncBackupRestored'));
+  };
+
+  try {
+    const parsed = await api.decrypt(encObj, master);
+    await applyDecryptedVault(parsed);
+  } catch {
+    // Mevcut ana şifre ile çözülemediyse yedeğin oluşturulduğu şifreyi sor
+    repromptCustomVerifier = async (val, msgEl, inpEl) => {
+      if (!val) return false;
+      try {
+        const parsed = await api.decrypt(encObj, val);
+        await applyDecryptedVault(parsed);
+        return true;
+      } catch {
+        if (msgEl) {
+          msgEl.textContent = t('repromptWrongPw');
+          msgEl.style.display = 'block';
+        }
+        if (inpEl) {
+          inpEl.select();
+          inpEl.focus();
+        }
+        return false;
+      }
+    };
+    const overlay = document.getElementById('repromptOverlay');
+    const inp = document.getElementById('repromptPwInp');
+    const msg = document.getElementById('repromptMsg');
+    if (inp) { inp.value = ''; inp.type = 'password'; }
+    if (msg) {
+      msg.textContent = t('promptEncBackupPassword');
+      msg.style.display = 'block';
+    }
+    overlay?.classList.add('open');
+    setTimeout(() => inp?.focus(), 80);
+  }
+}
+
 async function exportJSON() {
-  if(!confirm('DİKKAT: Bu işlem tüm şifrelerinizi şifrelenmemiş (plaintext) olarak dışa aktaracaktır.\n\nDevam etmek istiyor musunuz?')) return;
+  if(!confirm(t('confirmPlaintextExport'))) return;
   const exportEntries = await Promise.all(entries.map(async e => ({ ...e, password: await memDecrypt(e.password), totp: await memDecrypt(e.totp) })));
   const payload = { type: 'fuin/vault', categories: [], entries: exportEntries };
   const c=JSON.stringify(payload,null,2);
@@ -2091,7 +2409,7 @@ async function exportJSON() {
   toast(t('toastJsonExported'));
 }
 async function exportCSV() {
-  if(!confirm('DİKKAT: Bu işlem tüm şifrelerinizi şifrelenmemiş (plaintext) olarak dışa aktaracaktır.\n\nDevam etmek istiyor musunuz?')) return;
+  if(!confirm(t('confirmPlaintextExport'))) return;
   const rows=['site,category,username,password,url,note'];
   const exportEntries = await Promise.all(entries.map(async e => ({ ...e, password: await memDecrypt(e.password), totp: await memDecrypt(e.totp) })));
   exportEntries.forEach(e=>rows.push([e.site,e.category||'Diğer',e.username,e.password,e.url||'',e.note||''].map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',')));
@@ -2221,7 +2539,7 @@ function renderGenStrengthUI(res) {
     const crackText = isEn ? res.crackTime : res.crackTimeTr;
     const bitUnit = isEn ? 'bits' : 'bit';
     const tierText = labels[score] || '...';
-    const metaText = `${Math.round(res.entropy || 0)} ${bitUnit} · ${t('strengthCrackTime') || 'kırılma:'} ${crackText || ''}`;
+    const metaText = `${Math.round(res.entropy || 0)} ${bitUnit} · ${t('strengthCrackTime')} ${crackText || ''}`;
     fill.style.width = widths[score] || '20%';
     fill.style.background = colors[score] || 'var(--red)';
     label.innerHTML = `<span style="color:${colors[score] || 'var(--mu)'}">${esc(tierText)}</span><span style="color:var(--mu);font-weight:500">${esc(metaText)}</span>`;
@@ -2273,7 +2591,7 @@ function toast(msg){
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(pendingExtReveal)denyExtReveal();
-    closeModal('addOverlay');closeTOTP();closeForgot();closeHardReset();
+    closeModal('addOverlay');closeTOTP();closeForgot();closeHardReset();closeVerifyRecoveryModal();closeBackupHistoryModal();
     if(document.getElementById('pairOverlay')?.classList.contains('open')){
       document.getElementById('pairOverlay').classList.remove('open');
       if(api.stopLanSync) api.stopLanSync();
@@ -2295,11 +2613,23 @@ function refreshDynamicI18nLabels() {
   if (window.FuinWhatsNewController && typeof window.FuinWhatsNewController.onLanguageChanged === 'function') {
     window.FuinWhatsNewController.onLanguageChanged();
   }
+  if (window.FuinRecoveryUI && typeof window.FuinRecoveryUI.onLanguageChanged === 'function') {
+    window.FuinRecoveryUI.onLanguageChanged(t);
+  }
+  if (window.FuinLanSyncUI && typeof window.FuinLanSyncUI.onLanguageChanged === 'function') {
+    window.FuinLanSyncUI.onLanguageChanged(t);
+  }
+  if (window.FuinSyncAnimation && typeof window.FuinSyncAnimation.onLanguageChanged === 'function') {
+    window.FuinSyncAnimation.onLanguageChanged(t);
+  }
+  if (window.FuinUpdateManager && typeof window.FuinUpdateManager.onLanguageChanged === 'function') {
+    window.FuinUpdateManager.onLanguageChanged(t);
+  }
   if (!master) return; // kilit ekranındayken dinamik liste/kategori yok
   renderCategoryNav();
-  if (curView === 'all' || curView === 'fav') {
+  if (curView === 'all' || curView === 'fav' || curView === 'trash') {
     const el = document.getElementById('viewTitle');
-    if (el) el.textContent = curView === 'fav' ? t('viewTitleFav') : t('viewTitleAll');
+    if (el) el.textContent = curView === 'fav' ? t('viewTitleFav') : (curView === 'trash' ? t('viewTitleTrash') : t('viewTitleAll'));
   } else if (curView.startsWith('cat:')) {
     const el = document.getElementById('viewTitle');
     if (el) el.textContent = catLabel(curView.slice(4)).toUpperCase();
@@ -2307,12 +2637,17 @@ function refreshDynamicI18nLabels() {
   renderList();
   if (curView === 'settings') {
     refreshPairedDevicesList();
+    updateExtStatusUI();
+    refreshBackupSummaryBadge();
   }
   if (document.getElementById('addOverlay')?.classList.contains('open')) {
     document.getElementById('addModalTitle').textContent = editId ? t('modalEditEntry') : t('modalNewEntry');
   }
   if (document.getElementById('genOverlay')?.classList.contains('open') && _lastGenRes) {
     renderGenStrengthUI(_lastGenRes);
+  }
+  if (document.getElementById('backupHistoryOverlay')?.classList.contains('open')) {
+    renderBackupHistoryList();
   }
   const mode = localStorage.getItem('fuin-sync-mode') || 'lan';
   updateSyncModeUI(mode);
@@ -2407,7 +2742,7 @@ function initAppListeners() {
   document.getElementById('nav-all')?.addEventListener('click', function() { setView('all', this); });
   document.getElementById('nav-fav')?.addEventListener('click', function() { setView('fav', this); });
   document.getElementById('nav-settings')?.addEventListener('click', function() { setView('settings', this); });
-  document.getElementById('nav-trash')?.addEventListener('click', function() { setView('trash', this); document.getElementById('viewTitle').textContent = 'ÇÖP KUTUSU'; });
+  document.getElementById('nav-trash')?.addEventListener('click', function() { setView('trash', this); document.getElementById('viewTitle').textContent = t('viewTitleTrash'); });
   document.getElementById('nav-health')?.addEventListener('click', function() { setView('health', this); });
   document.getElementById('nav-security')?.addEventListener('click', function() { setView('security', this); });
   document.getElementById('nav-io')?.addEventListener('click', function() { setView('io', this); });
@@ -2466,12 +2801,22 @@ function initAppListeners() {
   document.getElementById('scanBtn')?.addEventListener('click', runHIBPScan);
 
   // IO buttons
+  document.getElementById('btnExportEncrypted')?.addEventListener('click', exportEncryptedBackup);
+  document.getElementById('btnImportEncrypted')?.addEventListener('click', importEncryptedBackup);
   document.getElementById('btnExportJSON')?.addEventListener('click', exportJSON);
   document.getElementById('btnExportCSV')?.addEventListener('click', exportCSV);
   document.getElementById('btnImportJSON')?.addEventListener('click', importJSON);
   document.getElementById('btnImportCSV')?.addEventListener('click', importCSV);
   document.getElementById('updateBtn')?.addEventListener('click', checkForUpdates);
   document.getElementById('btnBackupFolder')?.addEventListener('click', () => window.kekkai?.openBackupFolder());
+  document.getElementById('btnOpenBackupHistory')?.addEventListener('click', openBackupHistoryModal);
+  document.getElementById('btnCreateBackupNow')?.addEventListener('click', handleCreateManualBackup);
+  document.getElementById('btnModalCreateBackupNow')?.addEventListener('click', handleCreateManualBackup);
+  document.getElementById('btnCloseBackupHistory')?.addEventListener('click', closeBackupHistoryModal);
+  document.getElementById('btnDoneBackupHistory')?.addEventListener('click', closeBackupHistoryModal);
+  document.getElementById('backupHistoryOverlay')?.addEventListener('mousedown', (e) => {
+    if (e.target.id === 'backupHistoryOverlay') closeBackupHistoryModal();
+  });
   window.FuinWhatsNewController?.init();
 
   const toggleAutoUpdate = document.getElementById('toggleAutoUpdateCheck');
@@ -2504,7 +2849,7 @@ function initAppListeners() {
     if (pw) {
       await copySecure(pw, t('toastPwCopied'), 45000);
     } else {
-      toast('Şifre alanı boş');
+      toast(t('toastPwFieldEmpty'));
     }
   });
   document.getElementById('btnGenPw')?.addEventListener('click', genPw);
@@ -2523,7 +2868,7 @@ function initAppListeners() {
   document.getElementById('btnGenAdvCopy')?.addEventListener('click', async () => {
     const pw = document.getElementById('genPwResult').value;
     if (pw) {
-      await copySecure(pw, t('toastPwCopied') || 'Kopyalandı', 30000);
+      await copySecure(pw, t('toastPwCopied'), 30000);
     }
   });
   document.getElementById('genLen')?.addEventListener('input', (e) => {
@@ -2549,10 +2894,21 @@ function initAppListeners() {
   document.getElementById('btnCloseTOTP')?.addEventListener('click', closeTOTP);
   document.getElementById('totpCode')?.addEventListener('click', copyTOTP);
 
-  // Recovery modal & Emergency Kit
+  // Recovery modal, Self-Test & Emergency Kit
   document.getElementById('recoveryKeyDisplay')?.addEventListener('click', copyRecoveryKey);
   document.getElementById('btnCloseRecovery')?.addEventListener('click', () => closeModal('recoveryOverlay'));
   document.getElementById('btnRegenRecovery')?.addEventListener('click', handleRegenerateRecovery);
+  document.getElementById('btnVerifyRecoveryKey')?.addEventListener('click', openVerifyRecoveryModal);
+  document.getElementById('btnCloseVerifyRecovery')?.addEventListener('click', closeVerifyRecoveryModal);
+  document.getElementById('btnCancelVerifyRecovery')?.addEventListener('click', closeVerifyRecoveryModal);
+  document.getElementById('btnConfirmVerifyRecovery')?.addEventListener('click', handleVerifyRecoveryKey);
+  document.getElementById('verifyRecoveryInp')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleVerifyRecoveryKey();
+    else if (e.key === 'Escape') closeVerifyRecoveryModal();
+  });
+  document.getElementById('verifyRecoveryOverlay')?.addEventListener('mousedown', (e) => {
+    if (e.target.id === 'verifyRecoveryOverlay') closeVerifyRecoveryModal();
+  });
   document.getElementById('btnDownloadEmergencyKit')?.addEventListener('click', exportEmergencyKit);
   document.getElementById('btnModalEmergencyKit')?.addEventListener('click', exportEmergencyKit);
 
@@ -2621,7 +2977,7 @@ async function handleRegisterChromeExt() {
   if (!inp || !msg) return;
   const id = inp.value.trim().toLowerCase();
   if (!id || !/^[a-p]{32}$/.test(id)) {
-    msg.textContent = t('extInvalidId') || 'Geçersiz eklenti kimliği. 32 karakterlik küçük harflerden oluşmalıdır.';
+    msg.textContent = t('extInvalidId');
     msg.style.color = 'var(--red)';
     msg.style.display = 'block';
     return;
@@ -2629,19 +2985,19 @@ async function handleRegisterChromeExt() {
   try {
     const res = await api.registerChromeExtId(id);
     if (res?.ok) {
-      msg.textContent = t('extConnectedSuccess') || 'Eklenti başarıyla bağlandı! Tarayıcınızı tamamen kapatıp açabilirsiniz.';
+      msg.textContent = t('extConnectedSuccess');
       msg.style.color = 'var(--ac)';
       msg.style.display = 'block';
       inp.value = '';
-      toast(t('extConnectedSuccess') || 'Eklenti başarıyla bağlandı!');
+      toast(t('extConnectedSuccess'));
       updateExtStatusUI();
     } else {
-      msg.textContent = t('extInvalidId') || 'Kayıt başarısız.';
+      msg.textContent = t('extRegisterFailed');
       msg.style.color = 'var(--red)';
       msg.style.display = 'block';
     }
   } catch (err) {
-    msg.textContent = 'Hata: ' + (err?.message || err);
+    msg.textContent = t('toastError') + ': ' + (err?.message || err);
     msg.style.color = 'var(--red)';
     msg.style.display = 'block';
   }
@@ -2654,10 +3010,10 @@ async function updateExtStatusUI() {
     const status = await api.getExtensionStatus();
     if (status?.running) {
       const count = status.chromeOrigins?.length || 0;
-      badge.textContent = `Köprü Aktif (${count} Chrome ID)`;
+      badge.textContent = t('extStatusActiveCount', { count });
       badge.style.color = 'var(--ac)';
     } else {
-      badge.textContent = 'Köprü Pasif';
+      badge.textContent = t('extStatusInactive');
       badge.style.color = 'var(--mu)';
     }
   } catch {}
@@ -2742,9 +3098,9 @@ if (api.onLanSyncApplied) {
       await persist();
       renderList();
       await refreshPairedDevicesList();
-      toast(t('toastLanSyncCompleted') || 'Yerel ağ senkronizasyonu tamamlandı.');
+      toast(t('toastLanSyncCompleted'));
     } catch (e) {
-      toast((t('toastLanSyncProcessError') || 'Senkronize veriler işlenirken hata: ') + e.message);
+      toast(t('toastLanSyncProcessError') + e.message);
     }
   });
 }
@@ -2758,7 +3114,7 @@ if (api.onLanSyncClosed) {
     document.getElementById('lanSyncOverlay')?.classList.remove('open');
     document.getElementById('pairOverlay')?.classList.remove('open');
     if (reason === 'timeout') {
-      toast(t('toastLanSyncTimeout') || 'Yerel ağ eşitlemesi zaman aşımına uğradı (120s).');
+      toast(t('toastLanSyncTimeout'));
     }
   });
 }
@@ -2767,7 +3123,7 @@ if (api.onLanDevicePaired) {
   api.onLanDevicePaired(() => {
     document.getElementById('pairOverlay')?.classList.remove('open');
     refreshPairedDevicesList();
-    toast(t('toastDevicePaired') || 'Cihaz başarıyla eşlendi.');
+    toast(t('toastDevicePaired'));
   });
 }
 

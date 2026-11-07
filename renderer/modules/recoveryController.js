@@ -53,10 +53,21 @@
     document.getElementById('forgotOverlay')?.classList.add('open');
   }
 
+  function onLanguageChanged(t) {
+    if (typeof t !== 'function') return;
+    const forgotBtn = document.getElementById('forgotBtn');
+    const newPwGroup = document.getElementById('newPwGroup');
+    if (forgotBtn && newPwGroup) {
+      const isStep2 = newPwGroup.style.display !== 'none';
+      forgotBtn.textContent = isStep2 ? t('forgotChangePwBtn') : t('forgotVerifyBtn');
+    }
+  }
+
   window.FuinRecoveryUI = {
     generateRecoveryKey,
     showForgotMsg,
     resetForgotModalUI,
+    onLanguageChanged,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

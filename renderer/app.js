@@ -124,6 +124,7 @@ async function checkRecoveryStatus() {
       if (badge) {
         badge.textContent = t('recoveryStatusLegacy');
         badge.style.color = 'var(--amber)';
+        badge.style.display = 'inline-block';
       }
     } else {
       if (banner) banner.style.display = 'none';
@@ -131,6 +132,7 @@ async function checkRecoveryStatus() {
       if (badge) {
         badge.textContent = status.exists ? t('recoveryStatusPortable') : '';
         badge.style.color = 'var(--green)';
+        badge.style.display = status.exists ? 'inline-block' : 'none';
       }
     }
   } catch (err) {
@@ -1826,12 +1828,15 @@ async function refreshBackupSummaryBadge() {
     if (!snaps.length) {
       badge.textContent = t('backupHistoryEmpty');
       badge.style.color = 'var(--mu)';
+      badge.style.display = 'inline-block';
       return;
     }
     badge.textContent = t('backupSummaryCount', { count: snaps.length });
     badge.style.color = 'var(--green)';
+    badge.style.display = 'inline-block';
   } catch {
     badge.textContent = '';
+    badge.style.display = 'none';
   }
 }
 
@@ -1852,7 +1857,7 @@ async function renderBackupHistoryList() {
       }
     }
     if (!snaps.length) {
-      listEl.innerHTML = `<div style="font-family:var(--mono);font-size:12px;color:var(--mu);text-align:center;padding:18px;">${esc(t('backupHistoryEmpty'))}</div>`;
+      listEl.innerHTML = `<div style="font-family:var(--mono);font-size:12px;color:var(--mu);text-align:center;padding:20px 16px;">${esc(t('backupHistoryEmpty'))}</div>`;
       return;
     }
     listEl.innerHTML = snaps.map(snap => {
@@ -1864,17 +1869,17 @@ async function renderBackupHistoryList() {
       const isVerified = snap.verified !== false && Boolean(snap.sha256 || snap.fullSha256);
       const badgeLabel = isVerified ? t('backupVerifiedBadge') : t('backupCorruptBadge');
       return `
-        <div class="pw-history-item" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-          <div style="display:flex;flex-direction:column;gap:3px;overflow:hidden;flex:1;">
-            <div style="font-size:12px;font-weight:600;color:var(--tx);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="backup-history-item">
+          <div style="display:flex;flex-direction:column;gap:4px;overflow:hidden;flex:1;">
+            <div style="font-size:12px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span>${esc(d)}</span>
-              <span style="font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(90,154,110,0.14);color:var(--ac2);">${esc(reasonLabel)}</span>
+              <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(90,154,110,0.14);color:var(--ac2);">${esc(reasonLabel)}</span>
             </div>
             <div style="font-family:var(--mono);font-size:11px;color:var(--mu);">
               ${kb} KB · SHA-256: ${esc(hashShort)}… · ${esc(badgeLabel)}
             </div>
           </div>
-          <button type="button" class="btn-io" data-restore-snap="${esc(fname)}" style="font-size:11px;padding:6px 12px;flex-shrink:0;">
+          <button type="button" class="btn-io" data-restore-snap="${esc(fname)}" style="font-size:11px;">
             ${esc(t('backupRestoreBtn'))}
           </button>
         </div>

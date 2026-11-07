@@ -220,16 +220,21 @@
           
           <!-- ADV-03: Recovery Key Management Card -->
           <div class="io-card" id="recoverySettingCard">
-            <div class="io-title" data-i18n="settingRecoveryTitle">Kurtarma Anahtarı</div>
+            <div class="settings-card-header">
+              <div class="io-title" style="display:flex;align-items:center;gap:6px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                <span data-i18n="settingRecoveryTitle">Kurtarma Anahtarı</span>
+              </div>
+              <span id="recoveryStatusBadge" class="settings-status-pill"></span>
+            </div>
             <div class="io-sub" id="recoverySettingSub" data-i18n="settingRecoverySub">Ana şifrenizi unutmanız durumunda kasanızı kurtarmanızı sağlar. Anahtarınızı istediğiniz zaman test edebilir veya yenileyebilirsiniz.</div>
-            <div id="recoverySettingWarning" style="display:none; margin-top:8px; padding:8px 10px; background:rgba(176,112,32,0.1); border:1px solid rgba(176,112,32,0.25); border-radius:6px; font-size:11px; color:var(--amber); line-height:1.4;">
+            <div id="recoverySettingWarning" style="display:none; margin-top:4px; padding:8px 12px; background:rgba(176,112,32,0.1); border:1px solid rgba(176,112,32,0.25); border-radius:4px; font-size:11px; color:var(--amber); line-height:1.4;">
               <span data-i18n="recoveryLegacyWarnText">⚠ Eski Kurtarma Anahtarı: Kasanızı başka bir bilgisayarda da kurtarabilmek için kurtarma anahtarınızı yenileyin.</span>
             </div>
-            <div style="margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <div class="settings-action-bar">
               <button class="btn-io pri" id="btnVerifyRecoveryKey" data-i18n="btnVerifyRecoveryKey">Anahtarı Doğrula (Test Et)</button>
               <button class="btn-io" id="btnRegenRecovery" data-i18n="btnRegenRecovery">Kurtarma Anahtarını Yenile</button>
               <button class="btn-io" id="btnDownloadEmergencyKit" data-i18n="btnEmergencyKit">Acil Durum Kiti İndir (.html)</button>
-              <span id="recoveryStatusBadge" style="font-family:var(--mono); font-size:11px; color:var(--mu);"></span>
             </div>
           </div>
           
@@ -254,7 +259,7 @@
             </div>
             <div class="io-sub" id="sysUpdateCheckSub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.</div>
             <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;flex-wrap:wrap;">
-              <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
+              <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn" style="margin-top:0;">Şimdi Denetle</button>
               <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text);display:flex;align-items:center;flex-wrap:wrap;gap:6px;"></span>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--b);">
@@ -267,25 +272,27 @@
           </div>
           <div class="io-card">
             <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              <span data-i18n="sysBackupTitle">Otomatik Yedekler & Kurtarma</span>
-            </div>
-            <div class="io-sub" id="sysBackupSub" data-i18n="sysBackupSub">Sunucusuz koruma: Her değişiklikte alınan şifreli yedekleri görün, anlık yedek alın veya eski bir yedeğe dönün.</div>
-            <div id="backupSummaryBadge" style="font-family:var(--mono);font-size:11px;color:var(--ac);margin-top:8px;"></div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:12px;flex-wrap:wrap;">
-              <button class="btn-io pri" id="btnOpenBackupHistory" data-i18n="btnOpenBackupHistory">Yedek Geçmişi & Geri Yükle</button>
-              <button class="btn-io" id="btnCreateBackupNow" data-i18n="btnCreateBackupNow">Şimdi Yedek Al</button>
-              <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
-            </div>
-          </div>
-          <div class="io-card">
-            <div class="io-title" style="display:flex;align-items:center;gap:6px;">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               <span data-i18n="whatsNewTitle">Neler Yeni?</span>
             </div>
             <div class="io-sub" data-i18n="whatsNewSub">Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.</div>
             <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;">
-              <button class="btn-io" id="btnOpenWhatsNew" data-i18n="whatsNewBtn">Yama Notlarını Gör</button>
+              <button class="btn-io" id="btnOpenWhatsNew" data-i18n="whatsNewBtn" style="margin-top:0;">Yama Notlarını Gör</button>
+            </div>
+          </div>
+          <div class="io-card" style="grid-column: 1 / -1;">
+            <div class="settings-card-header">
+              <div class="io-title" style="display:flex;align-items:center;gap:6px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span data-i18n="sysBackupTitle">Otomatik Yedekler & Kurtarma</span>
+              </div>
+              <div id="backupSummaryBadge" class="settings-status-pill"></div>
+            </div>
+            <div class="io-sub" id="sysBackupSub" data-i18n="sysBackupSub">Sunucusuz koruma: Her değişiklikte alınan şifreli yedekleri görün, anlık yedek alın veya eski bir yedeğe dönün.</div>
+            <div class="settings-action-bar">
+              <button class="btn-io pri" id="btnOpenBackupHistory" data-i18n="btnOpenBackupHistory">Yedek Geçmişi & Geri Yükle</button>
+              <button class="btn-io" id="btnCreateBackupNow" data-i18n="btnCreateBackupNow">Şimdi Yedek Al</button>
+              <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
             </div>
           </div>
         </div>
@@ -962,20 +969,20 @@
   
 <!-- VERIFY RECOVERY KEY MODAL -->
 <div class="overlay" id="verifyRecoveryOverlay">
-  <div class="modal" style="max-width:420px">
+  <div class="modal" style="max-width:460px">
     <div class="modal-head">
       <div class="modal-title" data-i18n="verifyRecoveryModalTitle">KURTARMA ANAHTARI DOĞRULAMA</div>
       <button class="modal-close" id="btnCloseVerifyRecovery">✕</button>
     </div>
-    <div class="modal-body">
-      <div style="font-family:var(--mono);font-size:12px;color:var(--mu);line-height:1.7;margin-bottom:10px" data-i18n="verifyRecoveryModalDesc">Not ettiğiniz 32 karakterlik kurtarma anahtarını girerek doğruluğunu test edin. Bu işlem şifrenizi değiştirmez.</div>
-      <div class="fg">
-        <label data-i18n="forgotKeyLabel">Kurtarma Anahtarı</label>
-        <input class="fi" id="verifyRecoveryInp" placeholder="XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX" autocomplete="off">
+    <div class="modal-body" style="gap:16px">
+      <div class="verify-modal-desc" data-i18n="verifyRecoveryModalDesc">Not ettiğiniz 32 karakterlik kurtarma anahtarını girerek doğruluğunu test edin. Bu işlem şifrenizi değiştirmez.</div>
+      <div class="fg" style="gap:8px">
+        <label for="verifyRecoveryInp" data-i18n="forgotKeyLabel">Kurtarma Anahtarı</label>
+        <input class="fi verify-key-input" id="verifyRecoveryInp" placeholder="XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX" autocomplete="off" spellcheck="false">
       </div>
       <div class="forgot-msg" id="verifyRecoveryMsg" style="display:none"></div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer modal-footer-split">
       <button class="btn-cancel" id="btnCancelVerifyRecovery" data-i18n="btnClose">Kapat</button>
       <button class="btn-save" id="btnConfirmVerifyRecovery" data-i18n="verifyRecoveryBtn">Anahtarı Test Et</button>
     </div>
@@ -984,17 +991,17 @@
 
 <!-- AUTOMATIC BACKUP HISTORY & RESTORE MODAL -->
 <div class="overlay" id="backupHistoryOverlay">
-  <div class="modal" style="max-width:520px">
+  <div class="modal" style="max-width:540px">
     <div class="modal-head">
       <div class="modal-title" data-i18n="backupHistoryModalTitle">OTOMATİK YEDEKLER & GERİ YÜKLEME</div>
       <button class="modal-close" id="btnCloseBackupHistory">✕</button>
     </div>
-    <div class="modal-body">
-      <div style="font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:10px" data-i18n="backupHistoryModalDesc">Fuin, sunucusuz veri koruması için her değişiklikte kasanızın şifreli yedeğini alır ve bütünlüğünü (SHA-256) doğrular.</div>
-      <div id="backupAutoHealBanner" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(90,154,110,0.12);border:1px solid rgba(90,154,110,0.3);border-radius:6px;font-size:11px;color:var(--ac);font-family:var(--mono);"></div>
+    <div class="modal-body" style="gap:12px">
+      <div class="verify-modal-desc" data-i18n="backupHistoryModalDesc">Fuin, sunucusuz veri koruması için her değişiklikte kasanızın şifreli yedeğini alır ve bütünlüğünü (SHA-256) doğrular.</div>
+      <div id="backupAutoHealBanner" style="display:none;padding:10px 14px;background:rgba(90,154,110,0.12);border:1px solid rgba(90,154,110,0.3);border-radius:4px;font-size:11px;color:var(--ac);font-family:var(--mono);"></div>
       <div id="backupHistoryList" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;"></div>
     </div>
-    <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+    <div class="modal-footer modal-footer-split">
       <button class="btn-cancel" id="btnModalCreateBackupNow" data-i18n="btnCreateBackupNow">Şimdi Yedek Al</button>
       <button class="btn-save" id="btnDoneBackupHistory" data-i18n="btnClose">Kapat</button>
     </div>

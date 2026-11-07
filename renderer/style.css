@@ -1625,6 +1625,120 @@ select.fi option { background: var(--paper); }
   border-color: #3d3830;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   SETTINGS ACTION BARS, RECOVERY VERIFY & BACKUP HISTORY MODALS
+   ═══════════════════════════════════════════════════════════════════ */
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-status-pill {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--mono);
+  background: var(--paper);
+  border: 1px solid var(--b);
+  color: var(--mu);
+  white-space: nowrap;
+}
+
+.settings-action-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--b);
+  width: 100%;
+}
+
+.settings-action-bar .btn-io {
+  margin-top: 0;
+  min-height: 36px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.settings-action-bar .btn-io.pri {
+  font-weight: 600;
+}
+
+.verify-modal-desc {
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--mu);
+  line-height: 1.6;
+}
+
+.verify-key-input {
+  padding: 12px 14px;
+  font-size: 13px;
+  letter-spacing: 0.8px;
+  text-align: center;
+  border-radius: 4px;
+}
+
+.modal-footer-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--b);
+  background: var(--paper);
+  justify-content: stretch;
+}
+
+.modal-footer-split .btn-cancel,
+.modal-footer-split .btn-save {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 16px;
+  margin: 0;
+}
+
+.backup-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--b);
+  border-radius: 6px;
+  transition: border-color .12s;
+}
+
+.backup-history-item:hover {
+  border-color: var(--b2);
+}
+
+.backup-history-item .btn-io {
+  margin-top: 0;
+  height: 34px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+
 
 
 

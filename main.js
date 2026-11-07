@@ -103,6 +103,9 @@ function createWindow() {
 
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') {
+    try { app.setAppUserModelId('com.fuin.app'); } catch {}
+  }
   const { session } = require('electron');
   // Ek Güvenlik: Kamera, mikrofon, bildirim, konum gibi cihaz izinlerini tamamen reddet
   if (typeof session?.defaultSession?.setPermissionRequestHandler === 'function') {
@@ -222,6 +225,14 @@ function clearAuthoritativeVaultSession() {
   _authoritativeVaultSession = null;
 }
 
+function isWindowInactive() {
+  if (!mainWindow || (typeof mainWindow.isDestroyed === 'function' && mainWindow.isDestroyed())) return true;
+  if (typeof mainWindow.isVisible === 'function' && !mainWindow.isVisible()) return true;
+  if (typeof mainWindow.isMinimized === 'function' && mainWindow.isMinimized()) return true;
+  if (typeof mainWindow.isFocused === 'function' && !mainWindow.isFocused()) return true;
+  return false;
+}
+
 function triggerForceLock(reason) {
   powerMonitorManager.stopIdleWatcher();
   isUnlocked = false;
@@ -231,7 +242,7 @@ function triggerForceLock(reason) {
   }
   mainWindow?.webContents?.send('force-lock', reason);
   if (reason === 'idle' || reason === 'tray' || reason === 'lock-screen' || reason === 'suspend') {
-    if (!mainWindow || !mainWindow.isVisible() || (typeof mainWindow.isMinimized === 'function' && mainWindow.isMinimized())) {
+    if (isWindowInactive()) {
       trayManager.showNotification('vaultLocked');
     }
   }
@@ -251,7 +262,7 @@ ipcMain.handle('set-unlock-state', (_, unlocked) => {
       const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
       if (lastCopiedHash && currentHash === lastCopiedHash) {
         clipboard.writeText('');
-        if (!mainWindow || !mainWindow.isVisible() || (typeof mainWindow.isMinimized === 'function' && mainWindow.isMinimized())) {
+        if (isWindowInactive()) {
           trayManager.showNotification('clipboardCleared');
         }
       }
@@ -1186,7 +1197,7 @@ ipcMain.handle('copy-secure', (_, text, durationMs = 30000) => {
       const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
       if (lastCopiedHash && currentHash === lastCopiedHash) {
         clipboard.writeText('');
-        if (!mainWindow || !mainWindow.isVisible() || (typeof mainWindow.isMinimized === 'function' && mainWindow.isMinimized())) {
+        if (isWindowInactive()) {
           trayManager.showNotification('clipboardCleared');
         }
       }

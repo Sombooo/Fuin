@@ -1682,16 +1682,16 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
     gap: 16px;
   }
   .brand-hex {
-    width: 42px;
-    height: 42px;
-    color: var(--ac);
+    width: 44px;
+    height: 44px;
+    color: var(--text);
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--card);
     border: 1px solid var(--b);
-    border-radius: 4px;
+    border-radius: 10px;
   }
   .brand-title-row {
     display: flex;
@@ -1897,9 +1897,9 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
     <div class="doc-head">
       <div class="brand-wrap">
         <div class="brand-hex">
-          <svg width="24" height="24" viewBox="0 0 38 38" fill="none">
-            <polygon points="19,2 35,10.5 35,27.5 19,36 3,27.5 3,10.5" stroke="currentColor" stroke-width="2" fill="none"/>
-            <circle cx="19" cy="19" r="3" fill="currentColor"/>
+          <svg width="26" height="26" viewBox="0 0 38 38" fill="none">
+            <polygon points="10.5,4.3 27.5,4.3 36,19 27.5,33.7 10.5,33.7 2,19" stroke="currentColor" stroke-width="2.4" stroke-linejoin="miter" fill="none"/>
+            <circle cx="19" cy="19" r="3.2" fill="currentColor"/>
           </svg>
         </div>
         <div>

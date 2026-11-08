@@ -9,11 +9,64 @@
 
   const CHANGELOG_ENTRIES = [
     {
+      version: '1.0.0-beta.9',
+      tag: 'v1.0.0-beta.9',
+      date: 'Kasım 2026',
+      dateEn: 'November 2026',
+      isCurrent: true,
+      title: 'SHA-256 Yedek Geçmişi, Kurtarma Anahtarı Doğrulama & Acil Durum Kiti Yenilemesi',
+      titleEn: 'SHA-256 Backup History, Recovery Key Self-Test & Emergency Kit Redesign',
+      summary: 'SHA-256 bütünlük doğrulamalı kasa yedek günlüğü, anlık yedek geri yükleme, şifreli .fuin yedeği, Kurtarma Anahtarı kendi kendine doğrulama (Self-Test) ve yenilenen çevrimdışı Acil Durum Kiti sunar.',
+      summaryEn: 'Introduces SHA-256 integrity-verified backup history, point-in-time snapshot restore, encrypted .fuin vault backups, Recovery Key self-verification, and a redesigned offline Emergency Kit.',
+      highlights: [
+        {
+          badge: 'storage',
+          badgeText: 'YEDEKLEME',
+          badgeTextEn: 'BACKUP & WAL',
+          icon: 'database',
+          title: 'SHA-256 Yedek Geçmişi & Anlık Geri Yükleme',
+          titleEn: 'SHA-256 Backup History & Point-in-Time Restore',
+          desc: 'Otomatik ve manuel kasa yedekleri SHA-256 bütünlük imzasıyla kaydedilir; Ayarlar > Otomatik Yedekler üzerinden tek tıkla doğrulanıp geri yüklenebilir.',
+          descEn: 'Automatic and manual vault snapshots are tracked with SHA-256 integrity verification and one-click point-in-time restore.'
+        },
+        {
+          badge: 'crypto',
+          badgeText: 'KURTARMA',
+          badgeTextEn: 'RECOVERY',
+          icon: 'key',
+          title: 'Kurtarma Anahtarı Doğrulama (Self-Test) & .fuin Yedeği',
+          titleEn: 'Recovery Key Self-Test & Encrypted .fuin Backup',
+          desc: 'Kurtarma anahtarınızı kasanızı sıfırlamadan çevrimdışı test edebilir ve kasanızı Argon2id + AES-256-GCM şifreli .fuin dosyası olarak dışa/içe aktarabilirsiniz.',
+          descEn: 'Verify your Recovery Key offline without resetting your vault, and export/import portable Argon2id + AES-256-GCM encrypted .fuin backups.'
+        },
+        {
+          badge: 'ui',
+          badgeText: 'ACİL DURUM KİTİ',
+          badgeTextEn: 'EMERGENCY KIT',
+          icon: 'scroll',
+          title: 'Warm Dark & Warm Paper Acil Durum Kiti Tasarımı',
+          titleEn: 'Warm Dark & Warm Paper Emergency Kit Redesign',
+          desc: 'Acil Durum Kiti HTML çıktısı Fuin renk paleti, resmi altıgen logo, açık/koyu tema geçişi, A4 baskı optimizasyonu ve sıkı çevrimdışı CSP ile yenilendi.',
+          descEn: 'Redesigned Emergency Kit HTML with Fuin warm palette, official flat-top hexagon logo, light/dark toggle, A4 print layout, and strict offline CSP.'
+        },
+        {
+          badge: 'security',
+          badgeText: 'GÜVENLİK',
+          badgeTextEn: 'SECURITY',
+          icon: 'shield-check',
+          title: 'Derin Güvenlik Sertleştirmesi & Eklenti Bellek Korunumu',
+          titleEn: 'Deep Security Hardening & Extension Memory Scrubbing',
+          desc: 'Yedek IPC kilit doğrulaması, lstatSync sembolik bağ koruması, tarayıcı eklentisinde tohumlu özet (keyed digest) ve kilitlenmede tam DOM/closure temizliği eklendi.',
+          descEn: 'Enforced unlocked-vault guard and lstatSync symlink rejection on backup IPCs, keyed digests in extension memory, and full DOM/closure scrubbing on lock.'
+        }
+      ]
+    },
+    {
       version: '1.0.0-beta.8',
       tag: 'v1.0.0-beta.8',
       date: 'Kasım 2026',
       dateEn: 'November 2026',
-      isCurrent: true,
+      isCurrent: false,
       title: "Neler Yeni (What's New) Modalı, Dinamik Dil Senkronizasyonu & Gelişmiş UI Cilalaması",
       titleEn: "What's New Modal, Reactive Dynamic i18n Sync & UI Refinement",
       summary: "Kullanıcıların en son güncellemeleri ve güvenlik iyileştirmelerini çevrimdışı inceleyebileceği 'Neler Yeni?' yama modalı, yeniden başlatma gerektirmeyen anlık reaktif dil senkronizasyonu ve sadeleştirilmiş dikkatsiz-tasarım arayüzü sunar.",
@@ -174,49 +227,6 @@
           titleEn: 'Write-Ahead Log (WAL) Durability',
           desc: 'Beklenmeyen güç kesintisi veya işletim sistemi kapanmalarında kasa verisinin bozulmasını önleyen atomik yazma mimarisi.',
           descEn: 'Atomic crash-resilient persistence ensuring zero data corruption during unexpected system power loss.'
-        }
-      ]
-    },
-    {
-      version: '1.0.0-beta.5',
-      tag: 'v1.0.0-beta.5',
-      date: 'Ekim 2026',
-      dateEn: 'October 2026',
-      isCurrent: false,
-      title: 'NIST KAT Standartları & P2P Yerel Ağ Eşitlemesi',
-      titleEn: 'NIST KAT Standards & LAN P2P Sync',
-      summary: 'NIST SP 800-38D AES-GCM standart test vektörleri, tek seferlik optik QR cihaz eşleştirmesi, yerel ağ senkronizasyonu ve kilit ekranı RAM sıfırlama güvenliği.',
-      summaryEn: 'Validated against NIST SP 800-38D test vectors, one-time optical QR pairing, direct LAN encrypted sync, and in-memory RAM zeroization.',
-      highlights: [
-        {
-          badge: 'crypto',
-          badgeText: 'KRİPTO',
-          badgeTextEn: 'CRYPTO',
-          icon: 'key',
-          title: 'NIST SP 800-38D AES-GCM KAT Testleri',
-          titleEn: 'NIST SP 800-38D Known Answer Tests',
-          desc: 'Resmi NIST kriptografik test vektörleri ve 10.000 CSPRNG nonce çakışmasızlık doğrulaması eksiksiz onaylandı.',
-          descEn: 'Validated against NIST SP 800-38D standard test vectors with 10,000 CSPRNG collision-free IV generations.'
-        },
-        {
-          badge: 'sync',
-          badgeText: 'EŞİTLEME',
-          badgeTextEn: 'SYNC',
-          icon: 'wifi',
-          title: 'Hava Boşluklu QR & LAN Eşitlemesi',
-          titleEn: 'Air-Gapped QR & Direct LAN Sync',
-          desc: 'Cihazlar arası tek seferlik optik QR eşleştirme ve yerel ağ (Wi-Fi/Hotspot) üzerinden uçtan uca şifreli doğrudan kasa senkronizasyonu.',
-          descEn: 'One-time optical QR pairing followed by direct LAN/Hotspot encrypted vault sync without third-party servers.'
-        },
-        {
-          badge: 'security',
-          badgeText: 'GÜVENLİK',
-          badgeTextEn: 'SECURITY',
-          icon: 'lock',
-          title: 'RAM Bellek Sıfırlama (Zeroization)',
-          titleEn: 'In-Memory RAM Zeroization',
-          desc: 'Kasa kilitlendiğinde geçici oturum anahtarları ve şifre değişkenleri RAM arabelleğinden kalıcı olarak temizlenir.',
-          descEn: 'Ephemeral session keys and credentials wiped from memory immediately upon vault lock to prevent RAM dumping.'
         }
       ]
     }

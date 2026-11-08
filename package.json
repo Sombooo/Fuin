@@ -1,6 +1,6 @@
 {
   "name": "fuin",
-  "version": "1.0.0-beta.8",
+  "version": "1.0.0-beta.9",
   "description": "Offline-first password manager",
   "license": "AGPL-3.0-or-later",
   "main": "main.js",

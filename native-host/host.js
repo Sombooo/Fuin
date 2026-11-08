@@ -80,9 +80,9 @@ function forwardToFuin(request, cb) {
 
   let token;
   try {
-    // Güvenlik: Token dosyasının varlığını, tipini, izinlerini ve sahipliğini doğrula
-    const stat = fs.statSync(TOKEN_FILE);
-    if (!stat.isFile()) {
+    // Güvenlik: Token dosyasının varlığını, tipini (symlink reddi), izinlerini ve sahipliğini doğrula
+    const stat = fs.lstatSync(TOKEN_FILE);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
       return safeCb({ error: 'token-file-invalid' });
     }
     if (process.platform !== 'win32') {

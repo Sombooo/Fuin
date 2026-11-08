@@ -262,6 +262,8 @@ function lock() {
   master = null;
   sessionKey = null;
   entries = [];
+  repromptPendingAction = null;
+  repromptCustomVerifier = null;
   if (typeof revealT === 'object' && revealT) {
     Object.keys(revealT).forEach(k => { clearTimeout(revealT[k]); delete revealT[k]; });
     revealT = {};
@@ -279,6 +281,14 @@ function lock() {
   ['f-site','f-user','f-pw','f-note','f-url','f-totp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp','repromptPwInp','verifyRecoveryInp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
+  });
+  ['recoveryKeyDisplay','verifyRecoveryMsg','repromptMsg'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '';
+  });
+  ['pwHistoryList','backupHistoryList'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
   });
   ['addOverlay','totpOverlay','genOverlay','pairOverlay','lanSyncOverlay','newCategoryOverlay','changePwOverlay','backupOverlay','recoveryOverlay','repromptOverlay','pwHistoryOverlay','verifyRecoveryOverlay','backupHistoryOverlay'].forEach(id => {
     document.getElementById(id)?.classList.remove('open');
@@ -1489,6 +1499,8 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none';">
+<meta name="referrer" content="no-referrer">
 <title>${title}</title>
 <style>
   :root {

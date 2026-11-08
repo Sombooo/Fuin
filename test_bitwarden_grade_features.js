@@ -344,6 +344,44 @@ test('9. Recovery Key Self-Test & Backup History DOM IDs and IPC response keys m
   assert.ok(appJs.includes('extractSnapshotsFromResponse'), 'app.js must extract snapshots from getBackupList response');
 });
 
+// ── 10. Deep Security Hardening (SEC-01..SEC-05) Verification ───────────────
+test('10. Deep Security Audit Fixes (SEC-01..SEC-05: Backup Auth, Symlink Defense, Non-Plaintext Dismissal, Offline CSP, Lock Scrubbing)', () => {
+  const mainJs = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+  const appJs = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
+  const bgJs = fs.readFileSync(path.join(__dirname, 'browser-extension', 'background.js'), 'utf8');
+  const contentJs = fs.readFileSync(path.join(__dirname, 'browser-extension', 'content.js'), 'utf8');
+  const hostJs = fs.readFileSync(path.join(__dirname, 'native-host', 'host.js'), 'utf8');
+
+  // SEC-01: Backup IPCs require unlocked state & lstatSync symlink rejection
+  const restoreIdx = mainJs.indexOf("ipcMain.handle('restore-backup-snapshot'");
+  assert.ok(restoreIdx !== -1 && mainJs.slice(restoreIdx, restoreIdx + 600).includes('if (!isUnlocked)'), 'restore-backup-snapshot must enforce isUnlocked check');
+  const manualIdx = mainJs.indexOf("ipcMain.handle('create-manual-backup'");
+  assert.ok(manualIdx !== -1 && mainJs.slice(manualIdx, manualIdx + 300).includes('if (!isUnlocked)'), 'create-manual-backup must enforce isUnlocked check');
+  assert.ok(mainJs.slice(restoreIdx, restoreIdx + 1200).includes('fs.lstatSync(fullPath)'), 'restore-backup-snapshot must reject symlinks via lstatSync');
+  const exportIdx = mainJs.indexOf("ipcMain.handle('export-file'");
+  assert.ok(exportIdx !== -1 && mainJs.slice(exportIdx, exportIdx + 800).includes('writeAtomicSync(filePath'), 'export-file must use writeAtomicSync with 0o600 permissions');
+
+  // SEC-02: Extension background & content script never store plaintext passwords in dismissal maps
+  assert.ok(bgJs.includes('function hashDismissedKey('), 'background.js must hash dismissed credential keys');
+  assert.ok(!bgJs.includes('|${password}'), 'background.js must not concatenate plaintext password in dismissal keys');
+  assert.ok(bgJs.includes('sweepExpiredMemory();'), 'background.js must actively invoke sweepExpiredMemory()');
+  assert.ok(contentJs.includes('_localDigestSeed'), 'content.js must use keyed digest for local dismissal keys');
+  assert.ok(!contentJs.includes('|${String(password'), 'content.js must not store plaintext password in _dismissedKeys');
+
+  // SEC-03: Emergency Kit HTML includes strict offline CSP and no-referrer
+  assert.ok(appJs.includes('http-equiv="Content-Security-Policy" content="default-src \'none\';'), 'Emergency Kit HTML must include strict offline Content-Security-Policy');
+  assert.ok(appJs.includes('<meta name="referrer" content="no-referrer">'), 'Emergency Kit HTML must include no-referrer policy');
+
+  // SEC-04: Vault lock() scrubs pending reprompt closures & sensitive modal DOM nodes
+  const lockIdx = appJs.indexOf('function lock() {');
+  const lockBlock = appJs.slice(lockIdx, lockIdx + 1800);
+  assert.ok(lockBlock.includes('repromptPendingAction = null;') && lockBlock.includes('repromptCustomVerifier = null;'), 'lock() must clear reprompt closures');
+  assert.ok(lockBlock.includes("'recoveryKeyDisplay'") && lockBlock.includes("'pwHistoryList'"), 'lock() must scrub sensitive modal DOM contents');
+
+  // SEC-05: native-host/host.js uses lstatSync on fuin.ext-token
+  assert.ok(hostJs.includes('fs.lstatSync(TOKEN_FILE)') && hostJs.includes('stat.isSymbolicLink()'), 'native-host must reject symlinked token file via lstatSync');
+});
+
 console.log('═'.repeat(75));
 console.log(`TOTAL PASSES: ${passes}`);
 console.log(`TOTAL FAILURES: ${failures}`);

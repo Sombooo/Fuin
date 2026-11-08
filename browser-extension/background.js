@@ -129,6 +129,44 @@ const excludedDomainsMemory = new Set(); // normalized domains excluded via "Nev
 const DISMISS_TTL_MS = 60 * 60 * 1000; // 1 saat boyunca aynı şifre için tekrar sorma
 const PENDING_SAVE_TTL_MS = 90 * 1000; // Yönlendirme veya kilit açma sonrası en fazla 90 saniye tut
 const STAGED_USER_TTL_MS = 2 * 60 * 1000; // 2 adımlı girişte kullanıcı adını en fazla 2 dakika tut
+const MAX_TRACKED_TABS = 64;
+const MAX_DISMISSED_KEYS = 256;
+
+const SESSION_DIGEST_SEED = (() => {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const arr = new Uint32Array(4);
+      crypto.getRandomValues(arr);
+      return [arr[0] || 0x9e3779b9, arr[1] || 0x85ebca6b, arr[2] || 0xc2b2ae35, arr[3] || 0x27d4eb2f];
+    }
+  } catch {}
+  return [0x9e3779b9, 0x85ebca6b, 0xc2b2ae35, 0x27d4eb2f];
+})();
+
+function hashDismissedKey(domain, username, password) {
+  const input = `${domain}\0${String(username || '').trim().toLowerCase()}\0${String(password || '')}`;
+  let h1 = SESSION_DIGEST_SEED[0] ^ 0xdeadbeef;
+  let h2 = SESSION_DIGEST_SEED[1] ^ 0x41c6ce57;
+  let h3 = SESSION_DIGEST_SEED[2] ^ 0x9e3779b9;
+  let h4 = SESSION_DIGEST_SEED[3] ^ 0x85ebca6b;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+    h3 = Math.imul(h3 ^ (ch + i), 2246822507);
+    h4 = Math.imul(h4 ^ (ch ^ i), 3266489909);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  h3 = Math.imul(h3 ^ (h3 >>> 16), 2246822507) ^ Math.imul(h4 ^ (h4 >>> 13), 3266489909);
+  h4 = Math.imul(h4 ^ (h4 >>> 16), 2246822507) ^ Math.imul(h3 ^ (h3 >>> 13), 3266489909);
+  return (
+    (h1 >>> 0).toString(16).padStart(8, '0') +
+    (h2 >>> 0).toString(16).padStart(8, '0') +
+    (h3 >>> 0).toString(16).padStart(8, '0') +
+    (h4 >>> 0).toString(16).padStart(8, '0')
+  );
+}
 
 const MULTI_TENANT_SUFFIXES = new Set([
   'github.io', 'pages.dev', 'vercel.app', 'netlify.app', 'gitlab.io',
@@ -190,9 +228,15 @@ function isSameSiteSafe(domainA, domainB) {
 function recordDismissedCredential(domain, username, password) {
   const nd = normDomainKey(domain);
   if (!nd || !password) return;
+  sweepExpiredMemory();
+  while (dismissedFingerprints.size >= MAX_DISMISSED_KEYS) {
+    const oldestKey = dismissedFingerprints.keys().next().value;
+    if (oldestKey === undefined) break;
+    dismissedFingerprints.delete(oldestKey);
+  }
   const now = Date.now();
-  dismissedFingerprints.set(`${nd}|${String(username || '').trim().toLowerCase()}|${password}`, now);
-  dismissedFingerprints.set(`${nd}||${password}`, now);
+  dismissedFingerprints.set(hashDismissedKey(nd, username, password), now);
+  dismissedFingerprints.set(hashDismissedKey(nd, '', password), now);
 }
 
 function isCredentialDismissed(domain, username, password) {
@@ -201,8 +245,8 @@ function isCredentialDismissed(domain, username, password) {
   if (excludedDomainsMemory.has(nd)) return true;
   if (!password) return false;
   const now = Date.now();
-  const k1 = `${nd}|${String(username || '').trim().toLowerCase()}|${password}`;
-  const k2 = `${nd}||${password}`;
+  const k1 = hashDismissedKey(nd, username, password);
+  const k2 = hashDismissedKey(nd, '', password);
   for (const k of [k1, k2]) {
     const ts = dismissedFingerprints.get(k);
     if (ts) {
@@ -240,11 +284,23 @@ function sweepExpiredMemory() {
       pendingSaveByTab.delete(tabId);
     }
   }
+  while (pendingSaveByTab.size > MAX_TRACKED_TABS) {
+    const oldestTab = pendingSaveByTab.keys().next().value;
+    if (oldestTab === undefined) break;
+    clearPendingForTab(oldestTab, false);
+  }
   for (const [tabId, staged] of stagedUsernameByTab.entries()) {
     if (now - staged.timestamp > STAGED_USER_TTL_MS) {
       staged.username = '';
       stagedUsernameByTab.delete(tabId);
     }
+  }
+  while (stagedUsernameByTab.size > MAX_TRACKED_TABS) {
+    const oldestTab = stagedUsernameByTab.keys().next().value;
+    if (oldestTab === undefined) break;
+    const oldStaged = stagedUsernameByTab.get(oldestTab);
+    if (oldStaged) oldStaged.username = '';
+    stagedUsernameByTab.delete(oldestTab);
   }
   for (const [key, ts] of dismissedFingerprints.entries()) {
     if (now - ts > DISMISS_TTL_MS) {
@@ -256,6 +312,7 @@ function sweepExpiredMemory() {
 if (typeof chrome !== 'undefined' && chrome.tabs) {
   if (chrome.tabs.onUpdated) {
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      sweepExpiredMemory();
       if (pendingReveal && pendingReveal.tabId === tabId) {
         const urlChanged = changeInfo.url && changeInfo.url !== pendingReveal.url;
         const loadingNew = changeInfo.status === 'loading' && (!tab?.url || tab.url !== pendingReveal.url);
@@ -354,6 +411,7 @@ if (typeof chrome !== 'undefined' && chrome.commands?.onCommand) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Güvenlik: Yalnızca Fuin uzantısının kendi ID'sinden gelen mesajları kabul et
   if (sender.id !== chrome.runtime.id) return;
+  sweepExpiredMemory();
 
   const isInternalExtension = sender.id === chrome.runtime.id && !sender.tab;
   

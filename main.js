@@ -1346,8 +1346,15 @@ function recoverZeroByteFile(targetFile, prefix) {
 
   const files = fs.readdirSync(backupDir)
     .filter(f => f.startsWith(prefix) && f.endsWith('.bak'))
-    .map(f => ({ name: f, path: path.join(backupDir, f), stat: fs.statSync(path.join(backupDir, f)) }))
-    .filter(f => f.stat.size > 0)
+    .map(f => {
+      try {
+        const p = path.join(backupDir, f);
+        return { name: f, path: p, stat: fs.lstatSync(p) };
+      } catch {
+        return null;
+      }
+    })
+    .filter(f => f && f.stat.isFile() && !f.stat.isSymbolicLink() && f.stat.size > 0 && f.stat.size <= 50 * 1024 * 1024)
     .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime());
 
   if (files.length === 0) return null;
@@ -1391,6 +1398,7 @@ ipcMain.handle('load-data', () => {
   return fs.readFileSync(DATA_FILE, 'utf8');
 });
 ipcMain.handle('save-data', (_, enc) => { 
+  isUnlocked = true;
   backupFile(DATA_FILE, 'auto-save');
   writeAtomicSync(DATA_FILE, enc, { encoding: 'utf8', mode: 0o600 }); 
   if (_authoritativeVaultSession) {
@@ -1496,29 +1504,35 @@ function listVaultBackups(userDataDir = app.getPath('userData')) {
   const files = fs.readdirSync(backupDir)
     .filter(f => f.startsWith('fuin.enc.') && f.endsWith('.bak'))
     .map(f => {
-      const fullPath = path.join(backupDir, f);
-      const stat = fs.statSync(fullPath);
-      const logEntry = log.entries.find(e => e && e.file === f);
-      let actualSha = '';
-      if (stat.size > 0) {
-        try {
-          actualSha = crypto.createHash('sha256').update(fs.readFileSync(fullPath)).digest('hex');
-        } catch {}
+      try {
+        const fullPath = path.join(backupDir, f);
+        const stat = fs.lstatSync(fullPath);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 50 * 1024 * 1024) return null;
+        const logEntry = log.entries.find(e => e && e.file === f);
+        let actualSha = '';
+        if (stat.size > 0) {
+          try {
+            actualSha = crypto.createHash('sha256').update(fs.readFileSync(fullPath)).digest('hex');
+          } catch {}
+        }
+        const verified = stat.size > 0 && (!!actualSha) && (!logEntry || !logEntry.sha256 || logEntry.sha256 === actualSha);
+        return {
+          file: f,
+          filename: f,
+          timestamp: logEntry?.timestamp || stat.mtime.getTime(),
+          iso: logEntry?.iso || stat.mtime.toISOString(),
+          size: stat.size,
+          sha256: actualSha ? actualSha.slice(0, 12) : '',
+          fullSha256: actualSha,
+          reason: logEntry?.reason || 'auto-save',
+          verified,
+          integrityOk: verified,
+        };
+      } catch {
+        return null;
       }
-      const verified = stat.size > 0 && (!!actualSha) && (!logEntry || !logEntry.sha256 || logEntry.sha256 === actualSha);
-      return {
-        file: f,
-        filename: f,
-        timestamp: logEntry?.timestamp || stat.mtime.getTime(),
-        iso: logEntry?.iso || stat.mtime.toISOString(),
-        size: stat.size,
-        sha256: actualSha ? actualSha.slice(0, 12) : '',
-        fullSha256: actualSha,
-        reason: logEntry?.reason || 'auto-save',
-        verified,
-        integrityOk: verified,
-      };
     })
+    .filter(Boolean)
     .sort((a, b) => b.timestamp - a.timestamp);
 
   return {
@@ -1542,6 +1556,9 @@ ipcMain.handle('get-backup-list', () => {
 });
 
 ipcMain.handle('create-manual-backup', () => {
+  if (!isUnlocked) {
+    return { ok: false, error: 'vault-locked' };
+  }
   const bData = backupFile(DATA_FILE, 'manual-snapshot');
   if (fs.existsSync(RECOVERY_FILE)) backupFile(RECOVERY_FILE, 'manual-snapshot');
   if (fs.existsSync(MASTER_ENC_FILE)) backupFile(MASTER_ENC_FILE, 'manual-snapshot');
@@ -1557,8 +1574,11 @@ ipcMain.handle('restore-backup-snapshot', (_, payload) => {
   if (!filename || typeof filename !== 'string') {
     return { ok: false, error: 'invalid-filename' };
   }
-  if (path.basename(filename) !== filename || !filename.startsWith('fuin.enc.') || !filename.endsWith('.bak')) {
+  if (path.basename(filename) !== filename || !/^fuin\.enc\.[0-9A-Za-z_-]+\.bak$/.test(filename)) {
     return { ok: false, error: 'invalid-filename' };
+  }
+  if (!isUnlocked) {
+    return { ok: false, error: 'vault-locked' };
   }
   const userDataDir = app.getPath('userData');
   const backupDir = path.join(userDataDir, 'backups');
@@ -1566,11 +1586,19 @@ ipcMain.handle('restore-backup-snapshot', (_, payload) => {
   if (!fs.existsSync(fullPath)) {
     return { ok: false, error: 'not-found' };
   }
-  const stat = fs.statSync(fullPath);
-  if (!stat.isFile() || stat.size === 0) {
+  let stat;
+  try {
+    stat = fs.lstatSync(fullPath);
+  } catch {
+    return { ok: false, error: 'not-found' };
+  }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0 || stat.size > 50 * 1024 * 1024) {
     return { ok: false, error: 'corrupted-backup' };
   }
   const ciphertext = fs.readFileSync(fullPath, 'utf8');
+  if (typeof ciphertext !== 'string' || ciphertext.trim().length === 0) {
+    return { ok: false, error: 'corrupted-backup' };
+  }
   const actualSha = crypto.createHash('sha256').update(Buffer.from(ciphertext, 'utf8')).digest('hex');
   const log = loadBackupLog(userDataDir);
   const logEntry = log.entries.find(e => e && e.file === filename);
@@ -1595,7 +1623,7 @@ ipcMain.handle('export-file', async (_, { content, defaultName, filters }) => {
   if (typeof content !== 'string' || content.length > 100 * 1024 * 1024) return false;
   const { filePath } = await dialog.showSaveDialog(mainWindow, { defaultPath: defaultName, filters });
   if (filePath) {
-    fs.writeFileSync(filePath, content, { encoding: 'utf8', mode: 0o600 });
+    writeAtomicSync(filePath, content, { encoding: 'utf8', mode: 0o600 });
     return true;
   }
   return false;
@@ -1604,8 +1632,8 @@ ipcMain.handle('import-file', async (_, { filters }) => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, { filters, properties: ['openFile'] });
   if (filePaths?.[0]) {
     try {
-      const stat = fs.statSync(filePaths[0]);
-      if (!stat.isFile()) return null;
+      const stat = fs.lstatSync(filePaths[0]);
+      if (!stat.isFile() || stat.isSymbolicLink()) return null;
       if (stat.size > 50 * 1024 * 1024) throw new Error('File exceeds maximum size limit');
       return fs.readFileSync(filePaths[0], 'utf8');
     } catch {

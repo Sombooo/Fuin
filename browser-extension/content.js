@@ -432,9 +432,29 @@
   let _passwordDirty = false;
   let _domainExcluded = false;
   const _dismissedKeys = new Set();
+  const _localDigestSeed = (() => {
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const arr = new Uint32Array(2);
+        crypto.getRandomValues(arr);
+        return [arr[0] || 0x9e3779b9, arr[1] || 0x85ebca6b];
+      }
+    } catch {}
+    return [0x9e3779b9, 0x85ebca6b];
+  })();
 
   function makeCredKey(username, password) {
-    return `${String(username || '').trim().toLowerCase()}|${String(password || '')}`;
+    const raw = `${String(username || '').trim().toLowerCase()}\0${String(password || '')}`;
+    let h1 = _localDigestSeed[0] ^ 0xdeadbeef;
+    let h2 = _localDigestSeed[1] ^ 0x41c6ce57;
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0');
   }
 
   function markLocalDismissed(username, password) {

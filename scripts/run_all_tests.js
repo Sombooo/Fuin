@@ -34,7 +34,14 @@ const TEST_FILES = [
   'test_adversarial_challenger_1.js',
   'test_adversarial_remediation_challenge.js',
   'test_autofill_heuristics_and_shortcuts.js',
-  'test_whats_new_changelog.js'
+  'test_whats_new_changelog.js',
+  'test_cybersecurity_enterprise_grade.js',
+  'test_phase3_1_remediation.js',
+  'test_sync_roundtrip.js',
+  'test_sync_v2_phase1.js',
+  'test_sync_v2_phase2.js',
+  'test_sync_v2_phase3.js',
+  'test_sync_v2_phase4.js'
 ];
 
 let totalPassedSuites = 0;

@@ -157,7 +157,7 @@
     if (!overlay) return;
 
     const entries = window.FuinChangelog?.CHANGELOG_ENTRIES || [];
-    const targetVer = ver || (entries[0] ? entries[0].version : '1.0.0-beta.9');
+    const targetVer = ver || (entries[0] ? entries[0].version : '1.0.0-beta.10');
     selectVersion(targetVer);
 
     overlay.classList.add('open');
@@ -165,7 +165,7 @@
 
   function onLanguageChanged() {
     const entries = window.FuinChangelog?.CHANGELOG_ENTRIES || [];
-    const targetVer = currentSelectedVersion || (entries[0] ? entries[0].version : '1.0.0-beta.9');
+    const targetVer = currentSelectedVersion || (entries[0] ? entries[0].version : '1.0.0-beta.10');
     renderTabs(entries, targetVer);
     const entry = window.FuinChangelog?.getEntryByVersion(targetVer) || entries[0];
     if (entry) renderContent(entry);
@@ -180,12 +180,12 @@
 
   function markSeen(ver) {
     const entries = window.FuinChangelog?.CHANGELOG_ENTRIES || [];
-    const target = ver || (entries[0] ? entries[0].version : '1.0.0-beta.9');
+    const target = ver || (entries[0] ? entries[0].version : '1.0.0-beta.10');
     localStorage.setItem('fuin_last_seen_changelog', target);
   }
 
   function checkOnUnlock(currentAppVersion) {
-    const ver = String(currentAppVersion || '1.0.0-beta.9').trim().replace(/^v/i, '');
+    const ver = String(currentAppVersion || '1.0.0-beta.10').trim().replace(/^v/i, '');
     const lastSeen = localStorage.getItem('fuin_last_seen_changelog');
 
     // If never seen or newer version exists, show changelog
@@ -218,7 +218,7 @@
     if (dismissBtn) {
       dismissBtn.addEventListener('click', () => {
         const entries = window.FuinChangelog?.CHANGELOG_ENTRIES || [];
-        const latest = entries[0] ? entries[0].version : '1.0.0-beta.9';
+        const latest = entries[0] ? entries[0].version : '1.0.0-beta.10';
         markSeen(latest);
         closeModal();
       });

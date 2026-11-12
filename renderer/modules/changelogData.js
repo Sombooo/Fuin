@@ -9,11 +9,64 @@
 
   const CHANGELOG_ENTRIES = [
     {
+      version: '1.0.0-beta.10',
+      tag: 'v1.0.0-beta.10',
+      date: 'Kasım 2026',
+      dateEn: 'November 2026',
+      isCurrent: true,
+      title: 'Kredi Kartı & Güvenli Not Kasası, Otomatik Formatlama ve Kurumsal Güvenlik Denetimi',
+      titleEn: 'Credit Card & Secure Note Vault, Auto-Formatting, and Enterprise Security Audit',
+      summary: 'Kredi kartı ve şifreli güvenli not kasa türleri, otomatik 4\'lü kart numarası/CVV/SKT formatlayıcı, dinamik TR/EN anlık dil desteği ve kurumsal seviye siber güvenlik denetimi doğrulaması getirir.',
+      summaryEn: 'Introduces Credit Card and Secure Note vault item types, auto-formatting for card numbers/CVV/expiry, dynamic TR/EN live language switching, and comprehensive enterprise security audit verification.',
+      highlights: [
+        {
+          badge: 'vault',
+          badgeText: 'KART KASASI',
+          badgeTextEn: 'CARD VAULT',
+          icon: 'credit-card',
+          title: 'Kredi Kartı Kasası & Akıllı Otomatik Formatlama',
+          titleEn: 'Credit Card Vault & Smart Auto-Formatting',
+          desc: 'Kart numaralarını yazarken otomatik 4\'lü gruplama, AA/YY son kullanma tarihi ve CVV maskeleme; Visa, Mastercard, Troy marka tespiti ve tek tıkla güvenli kopyalama eklendi.',
+          descEn: 'Auto-formats card numbers into 4-digit groups, MM/YY expiry and CVV masks; automatically detects Visa, Mastercard, Troy, and provides one-click secure clipboard copy.'
+        },
+        {
+          badge: 'notes',
+          badgeText: 'GÜVENLİ NOT',
+          badgeTextEn: 'SECURE NOTE',
+          icon: 'file-text',
+          title: 'AES-256-GCM Şifreli Güvenli Notlar',
+          titleEn: 'AES-256-GCM Encrypted Secure Notes',
+          desc: 'Kurtarma kodları, sunucu anahtarları veya özel notlar için sıfır bilgi mimarisinde güvenli not saklama ve kopyalama desteği sunuldu.',
+          descEn: 'Store private recovery codes, server keys, or confidential notes with zero-knowledge AES-256-GCM encryption and one-click copy.'
+        },
+        {
+          badge: 'ui',
+          badgeText: 'ARAYÜZ & İ18N',
+          badgeTextEn: 'UI & I18N',
+          icon: 'layout',
+          title: 'Dinamik Çoklu Dil Eşliği ve Arayüz Cilalaması',
+          titleEn: 'Dynamic Multi-Language Parity & UI Polish',
+          desc: 'Kart/Not modalı açıkken anlık TR/EN dil geçişi, nötr İsim Soyisim yer tutucusu, 2FA flexbox boşluğu ve kenarlıksız Touch ID butonu ile kusursuz Warm Dark UX sağlandı.',
+          descEn: 'Live TR/EN language switching in open modals, neutral name placeholders, 2FA flexbox spacing, and borderless Touch ID styling aligned with Fuin design guidelines.'
+        },
+        {
+          badge: 'security',
+          badgeText: 'GÜVENLİK',
+          badgeTextEn: 'SECURITY',
+          icon: 'shield-check',
+          title: 'Kapsamlı Güvenlik Denetimi & Depo Hijyeni',
+          titleEn: 'Comprehensive Security Audit & Repo Hygiene',
+          desc: 'AST regex sızıntı taraması (0 sızıntı), işletim sistemi kalıntılarının temizliği, electron-builder kurulum boyutu optimizasyonu ve 29/29 test paketi ile sıfır regresyon garantilendi.',
+          descEn: 'AST regex secret leak scanning (0 leaks found), OS artifact purge, electron-builder packaging optimization, and 29/29 test suite pass guaranteeing zero regressions.'
+        }
+      ]
+    },
+    {
       version: '1.0.0-beta.9',
       tag: 'v1.0.0-beta.9',
       date: 'Kasım 2026',
       dateEn: 'November 2026',
-      isCurrent: true,
+      isCurrent: false,
       title: 'SHA-256 Yedek Geçmişi, Kurtarma Anahtarı Doğrulama & Acil Durum Kiti Yenilemesi',
       titleEn: 'SHA-256 Backup History, Recovery Key Self-Test & Emergency Kit Redesign',
       summary: 'SHA-256 bütünlük doğrulamalı kasa yedek günlüğü, anlık yedek geri yükleme, şifreli .fuin yedeği, Kurtarma Anahtarı kendi kendine doğrulama (Self-Test) ve yenilenen çevrimdışı Acil Durum Kiti sunar.',

@@ -26,6 +26,33 @@ async function memDecrypt(encObj) {
   } catch { return ''; }
 }
 
+async function serializeEntryPlain(e) {
+  return {
+    ...e,
+    type: e.type || 'login',
+    password: await memDecrypt(e.password),
+    totp: await memDecrypt(e.totp),
+    cardNumber: await memDecrypt(e.cardNumber),
+    cardCvv: await memDecrypt(e.cardCvv),
+    cardPin: await memDecrypt(e.cardPin),
+    secureNote: await memDecrypt(e.secureNote)
+  };
+}
+
+async function hydrateEntryMemory(e, id = null) {
+  return {
+    ...e,
+    id: id || e.id || crypto.randomUUID(),
+    type: e.type || 'login',
+    password: await memEncrypt(e.password || ''),
+    totp: await memEncrypt(e.totp || ''),
+    cardNumber: await memEncrypt(e.cardNumber || ''),
+    cardCvv: await memEncrypt(e.cardCvv || ''),
+    cardPin: await memEncrypt(e.cardPin || ''),
+    secureNote: await memEncrypt(e.secureNote || '')
+  };
+}
+
 let revealT = {};
 
 // ── Platforma göre pencere kontrolleri (macOS: solda/renkli daire,
@@ -205,7 +232,7 @@ async function unlock() {
            let id = e.id;
            while(seenIds.has(id) || !id) id = crypto.randomUUID();
            seenIds.add(id);
-           return { ...e, id, password: await memEncrypt(e.password), totp: await memEncrypt(e.totp) };
+           return hydrateEntryMemory(e, id);
         }));
         if (hadCorruptArtifact) {
           setTimeout(() => { if (master) persist().catch(() => {}); }, 200);
@@ -241,7 +268,7 @@ async function unlock() {
   if (exists && window.FuinWhatsNewController) {
     (async () => {
       try {
-        const curVer = (window.kekkai?.getAppVersion ? await window.kekkai.getAppVersion() : '1.0.0-beta.9') || '1.0.0-beta.9';
+        const curVer = (window.kekkai?.getAppVersion ? await window.kekkai.getAppVersion() : '1.0.0-beta.10') || '1.0.0-beta.10';
         window.FuinWhatsNewController.checkOnUnlock(curVer);
       } catch {}
     })();
@@ -275,9 +302,14 @@ function lock() {
   const pwListEl = document.getElementById('pwList');
   if (pwListEl) pwListEl.innerHTML = '';
   const catNavEl = document.getElementById('categoryNav');
-  if (catNavEl) catNavEl.innerHTML = '';
+  if (catNavEl) { catNavEl.innerHTML = ''; catNavEl.style.display = 'none'; }
   const catSecEl = document.getElementById('categoryNavSection');
   if (catSecEl) catSecEl.style.display = 'none';
+  const catDivEl = document.getElementById('catDividerTop');
+  if (catDivEl) catDivEl.style.display = 'none';
+  isCategoriesExpanded = false;
+  const catIcon = document.getElementById('catToggleIcon');
+  if (catIcon) catIcon.style.transform = 'rotate(0deg)';
   ['f-site','f-user','f-pw','f-note','f-url','f-totp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp','repromptPwInp','verifyRecoveryInp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -817,7 +849,7 @@ document.getElementById('masterInp').addEventListener('keydown', e => e.key==='E
 
 async function persist() {
   if (!master) return;
-  const exportEntries = await Promise.all(entries.map(async entry => ({ ...entry, password: await memDecrypt(entry.password), totp: await memDecrypt(entry.totp) })));
+  const exportEntries = await Promise.all(entries.map(serializeEntryPlain));
   const payload = { type: 'fuin/vault', categories: [], entries: exportEntries };
   const enc = await api.encrypt(payload, master);
   await api.saveData(enc);
@@ -838,20 +870,44 @@ function catLabel(raw) {
   return key ? t(key) : raw; // özel/bilinmeyen kategori adı ise olduğu gibi bırak
 }
 
+let isCategoriesExpanded = false;
+
+function toggleCategories(forceState) {
+  isCategoriesExpanded = typeof forceState === 'boolean' ? forceState : !isCategoriesExpanded;
+  const wrap = document.getElementById('categoryNav');
+  const icon = document.getElementById('catToggleIcon');
+  if (wrap) wrap.style.display = isCategoriesExpanded ? 'block' : 'none';
+  if (icon) icon.style.transform = isCategoriesExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
 function renderCategoryNav() {
   const section = document.getElementById('categoryNavSection');
   const wrap    = document.getElementById('categoryNav');
+  const badge   = document.getElementById('catTotalBadge');
+  const divider = document.getElementById('catDividerTop');
+  if (!section || !wrap) return;
+
   const counts  = {};
   entries.forEach(e => { const c = e.category || 'Diğer'; counts[c] = (counts[c]||0)+1; });
   
   const allCats = new Set([...Object.keys(counts)]);
   const cats = Array.from(allCats).sort((a,b)=>a.localeCompare('tr'));
 
-  section.style.display='block';
+  if (cats.length === 0) {
+    section.style.display = 'none';
+    if (divider) divider.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  if (divider) divider.style.display = 'block';
+  if (badge) badge.textContent = `${cats.length}`;
+  wrap.style.display = isCategoriesExpanded ? 'block' : 'none';
+
   wrap.innerHTML = cats.map(c => `
     <div style="display:flex; align-items:center;">
-      <button class="nav-item" style="flex:1;" data-action="set-view" data-val="cat:${esc(c)}">
-        <span class="icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polyline points="9 18 15 12 9 6"/></svg></span> ${esc(catLabel(c))} <span style="margin-left:auto;color:var(--mu);font-size:11px">${counts[c] || 0}</span>
+      <button class="nav-item nav-sub-item" style="flex:1;" data-action="set-view" data-val="cat:${esc(c)}">
+        <span class="icon" style="font-size:12px; width:16px; opacity:0.6;">•</span> ${esc(catLabel(c))} <span style="margin-left:auto;color:var(--mu);font-size:11px">${counts[c] || 0}</span>
       </button>
     </div>`).join('');
 }
@@ -860,20 +916,25 @@ function renderCategoryNav() {
 function setView(v, btn) {
   curView = v;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  btn.classList.add('active');
+  const targetBtn = btn || (v === 'settings' || v === 'security' ? document.getElementById('nav-settings') : (v === 'io' ? document.getElementById('nav-io') : (v === 'health' ? document.getElementById('nav-health') : null)));
+  if (targetBtn) targetBtn.classList.add('active');
   ['passwords','health','security','io','settings'].forEach(id => {
     const el = document.getElementById('view-'+id);
     if (el) el.style.display = 'none';
   });
-  if (v==='all'||v==='fav'||v==='trash') {
+  if (v==='all'||v==='fav'||v==='trash'||v.startsWith('type:')) {
     document.getElementById('view-passwords').style.display='flex';
     document.getElementById('btnAddNew').style.display = (v === 'trash') ? 'none' : 'block';
     
     if (v==='fav') document.getElementById('viewTitle').textContent = t('viewTitleFav');
     else if (v==='trash') document.getElementById('viewTitle').textContent = t('viewTitleTrash');
+    else if (v==='type:login') document.getElementById('viewTitle').textContent = t('viewTitleLogins');
+    else if (v==='type:card') document.getElementById('viewTitle').textContent = t('viewTitleCards');
+    else if (v==='type:note') document.getElementById('viewTitle').textContent = t('viewTitleNotes');
     else document.getElementById('viewTitle').textContent = t('viewTitleAll');
     renderList();
   } else if (v.startsWith('cat:')) {
+    toggleCategories(true);
     document.getElementById('view-passwords').style.display='flex';
     document.getElementById('btnAddNew').style.display='block';
     document.getElementById('viewTitle').textContent = catLabel(v.slice(4)).toUpperCase();
@@ -947,8 +1008,17 @@ async function renderList() {
     list = list.filter(e => !e.isDeleted);
     if (curView==='fav') list = list.filter(e=>e.fav);
     else if (curView.startsWith('cat:')) { const cat=curView.slice(4); list = list.filter(e=>(e.category||'Diğer')===cat); }
+    else if (curView.startsWith('type:')) { const type=curView.slice(5); list = list.filter(e=>(e.type||'login')===type); }
   }
-  if (q) list = list.filter(e=>(e.site+e.username).toLowerCase().includes(q));
+  if (q) {
+    list = list.filter(e => {
+      const site = (e.site || '').toLowerCase();
+      const user = (e.username || '').toLowerCase();
+      const holder = (e.cardholderName || '').toLowerCase();
+      const note = (e.note || '').toLowerCase();
+      return site.includes(q) || user.includes(q) || holder.includes(q) || note.includes(q);
+    });
+  }
 
   const wrap = document.getElementById('pwList');
   if (!list.length) {
@@ -960,6 +1030,7 @@ async function renderList() {
   }
 
   const scores = await Promise.all(list.map(async e => {
+    if (e.type && e.type !== 'login') return 4;
     if (e.password && typeof e.password === 'object') {
       const cached = _pwScoreCache.get(e.password);
       if (typeof cached === 'number') return cached;
@@ -971,31 +1042,95 @@ async function renderList() {
   }));
   const dotClass = s => s>=3?'strong':s>=2?'medium':'weak';
 
-  wrap.innerHTML = list.map((e,i) => `
-    <div class="pw-card" data-id="${esc(e.id)}" style="animation-delay:${i*15}ms">
-      <div class="pw-icon">${esc(e.site.slice(0,2).toUpperCase())}</div>
-      <div class="pw-info">
-        <div class="pw-site">${e.fav ? `<span class="fav-star" title="${esc(t('navFav'))}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}<span class="pw-site-name">${esc(e.site)}</span>${e.reprompt ? `<span class="reprompt-badge" title="${esc(t('badgeReprompt'))}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>` : ''}${e.url && /^http:\/\//i.test(e.url.trim()) ? `<span class="insecure-http-badge" title="${esc(t('warnInsecureHttp'))}">HTTP</span>` : ''}</div>
-        <div class="pw-meta">
-          <span class="pw-user">${esc(e.username)||'—'}</span>
-          <span class="pw-cat">${esc(catLabel(e.category||'Diğer'))}</span>
-          <span class="pw-dots" id="dot-${esc(e.id)}" title="${esc(t('clickToRevealPw'))}">••••••</span>
-          <div class="str-dot ${dotClass(scores[i])}"></div>
-        </div>
-      </div>
-      <div class="pw-actions">
-        ${curView === 'trash' ? `
-          <button class="act-btn" data-action="restore-pw" data-val="${esc(e.id)}" title="${esc(t('btnRestore'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
-          <button class="act-btn del" data-action="perm-del-pw" data-val="${esc(e.id)}" title="${esc(t('btnPermDel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        ` : `
-          ${e.totp?`<button class="act-btn" data-action="show-totp" data-val="${esc(e.id)}" title="2FA"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>`:''}
-          <button class="act-btn" data-action="copy-pw" data-val="${esc(e.id)}" title="${esc(t('btnCopy'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-          <button class="act-btn" data-action="reveal-pw" data-val="${esc(e.id)}" title="${esc(t('showPwTitle'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          <button class="act-btn" data-action="edit-pw" data-val="${esc(e.id)}" title="${esc(t('btnEdit'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-          <button class="act-btn del" data-action="del-pw" data-val="${esc(e.id)}" title="${esc(t('btnDel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
-        `}
-      </div>
-    </div>`).join('');
+    wrap.innerHTML = list.map((e,i) => {
+        const type = e.type || 'login';
+        const isCard = type === 'card';
+        const isNote = type === 'note';
+
+        let iconHtml = '';
+        if (isCard) {
+          iconHtml = `<div class="pw-icon" style="background:rgba(200,128,64,0.15); color:var(--amber); display:flex; align-items:center; justify-content:center;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          </div>`;
+        } else if (isNote) {
+          iconHtml = `<div class="pw-icon" style="background:rgba(90,154,110,0.15); color:var(--ac); display:flex; align-items:center; justify-content:center;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>`;
+        } else {
+          iconHtml = `<div class="pw-icon">${esc(e.site.slice(0,2).toUpperCase())}</div>`;
+        }
+
+        let userLabel = '';
+        let dotsPreview = '';
+        if (isCard) {
+          userLabel = esc(e.cardholderName || e.username || t('typeCard'));
+          const rawNum = (e.cardNumber && typeof e.cardNumber === 'string') ? e.cardNumber.replace(/\D/g, '') : '';
+          const l4 = e.cardLastFour || rawNum.slice(-4) || '••••';
+          const brandInfo = detectCardBrand(rawNum);
+          const brandName = (brandInfo && brandInfo.name) ? brandInfo.name : (e.cardBrand ? e.cardBrand.toUpperCase() : '');
+          dotsPreview = `${brandName ? brandName + ' ' : ''}•••• ${esc(l4)}`;
+        } else if (isNote) {
+          userLabel = esc(t('typeNote'));
+          dotsPreview = '••••••';
+        } else {
+          userLabel = esc(e.username) || '—';
+          dotsPreview = '••••••';
+        }
+
+        let actionButtons = '';
+        if (curView === 'trash') {
+          actionButtons = `
+            <button class="act-btn" data-action="restore-pw" data-val="${esc(e.id)}" title="${esc(t('btnRestore'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+            <button class="act-btn del" data-action="perm-del-pw" data-val="${esc(e.id)}" title="${esc(t('btnPermDel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          `;
+        } else if (isCard) {
+          actionButtons = `
+            <button class="act-btn" data-action="copy-card-num" data-val="${esc(e.id)}" title="${esc(t('btnCopyCardNum'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <button class="act-btn" data-action="copy-cvv" data-val="${esc(e.id)}" title="${esc(t('btnCopyCvv'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></button>
+            <button class="act-btn" data-action="reveal-pw" data-val="${esc(e.id)}" title="${esc(t('showPwTitle'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            <button class="act-btn" data-action="edit-pw" data-val="${esc(e.id)}" title="${esc(t('btnEdit'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="act-btn del" data-action="del-pw" data-val="${esc(e.id)}" title="${esc(t('btnDel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          `;
+        } else if (isNote) {
+          actionButtons = `
+            <button class="act-btn" data-action="copy-note" data-val="${esc(e.id)}" title="${esc(t('btnCopyNote'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <button class="act-btn" data-action="reveal-pw" data-val="${esc(e.id)}" title="${esc(t('showPwTitle'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            <button class="act-btn" data-action="edit-pw" data-val="${esc(e.id)}" title="${esc(t('btnEdit'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="act-btn del" data-action="del-pw" data-val="${esc(e.id)}" title="${esc(t('btnDel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          `;
+        } else {
+          actionButtons = `
+            ${e.totp?`<button class="act-btn" data-action="show-totp" data-val="${esc(e.id)}" title="2FA"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>`:''}
+            <button class="act-btn" data-action="copy-pw" data-val="${esc(e.id)}" title="${esc(t('btnCopy'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <button class="act-btn" data-action="reveal-pw" data-val="${esc(e.id)}" title="${esc(t('showPwTitle'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            <button class="act-btn" data-action="edit-pw" data-val="${esc(e.id)}" title="${esc(t('btnEdit'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="act-btn del" data-action="del-pw" data-val="${esc(e.id)}" title="${esc(t('btnDel'))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          `;
+        }
+
+        return `
+          <div class="pw-card" data-id="${esc(e.id)}" style="animation-delay:${i*15}ms">
+            ${iconHtml}
+            <div class="pw-info">
+              <div class="pw-site">
+                ${e.fav ? `<span class="fav-star" title="${esc(t('navFav'))}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}
+                <span class="pw-site-name">${esc(e.site)}</span>
+                ${e.reprompt ? `<span class="reprompt-badge" title="${esc(t('badgeReprompt'))}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>` : ''}
+                ${e.url && /^http:\/\//i.test(e.url.trim()) ? `<span class="insecure-http-badge" title="${esc(t('warnInsecureHttp'))}">HTTP</span>` : ''}
+              </div>
+              <div class="pw-meta">
+                <span class="pw-user">${userLabel}</span>
+                <span class="pw-cat">${esc(catLabel(e.category||(isCard?'Finans':'Diğer')))}</span>
+                <span class="pw-dots" id="dot-${esc(e.id)}" title="${esc(t('clickToRevealPw'))}">${dotsPreview}</span>
+                ${!isCard && !isNote ? `<div class="str-dot ${dotClass(scores[i])}"></div>` : ''}
+              </div>
+            </div>
+            <div class="pw-actions">
+              ${actionButtons}
+            </div>
+          </div>
+        `;
+      }).join('');
 }
 
 // ── SECURITY VIEW ─────────────────────────────────────────────────
@@ -1030,6 +1165,162 @@ async function renderSecurity() {
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────
+let currentModalType = 'login';
+
+function detectCardBrand(digits) {
+  if (!digits) return null;
+  const d = String(digits).replace(/\D/g, '');
+  if (!d) return null;
+  if (/^9792/.test(d)) return { name: 'TROY', brand: 'troy', maxLen: 16, format: [4, 4, 4, 4] };
+  if (/^4/.test(d)) return { name: 'VISA', brand: 'visa', maxLen: 16, format: [4, 4, 4, 4] };
+  if (/^(5[1-5]|2[2-7])/.test(d)) return { name: 'MASTERCARD', brand: 'mastercard', maxLen: 16, format: [4, 4, 4, 4] };
+  if (/^3[47]/.test(d)) return { name: 'AMEX', brand: 'amex', maxLen: 15, format: [4, 6, 5] };
+  if (/^(6011|65|64[4-9])/.test(d)) return { name: 'DISCOVER', brand: 'discover', maxLen: 16, format: [4, 4, 4, 4] };
+  if (/^35(2[89]|[3-8][0-9])/.test(d)) return { name: 'JCB', brand: 'jcb', maxLen: 16, format: [4, 4, 4, 4] };
+  if (/^(50|5[6-8]|6)/.test(d)) return { name: 'MAESTRO', brand: 'maestro', maxLen: 19, format: [4, 4, 4, 4, 3] };
+  return { name: '', brand: 'generic', maxLen: 19, format: [4, 4, 4, 4, 3] };
+}
+
+function formatCardNumber(val) {
+  const digits = String(val || '').replace(/\D/g, '');
+  const info = detectCardBrand(digits);
+  const maxDigits = (info && info.maxLen) ? info.maxLen : 19;
+  const cleanDigits = digits.slice(0, maxDigits);
+
+  let formatted = '';
+  if (info && info.brand === 'amex') {
+    const p1 = cleanDigits.slice(0, 4);
+    const p2 = cleanDigits.slice(4, 10);
+    const p3 = cleanDigits.slice(10, 15);
+    formatted = [p1, p2, p3].filter(Boolean).join(' ');
+  } else {
+    const parts = [];
+    for (let i = 0; i < cleanDigits.length; i += 4) {
+      parts.push(cleanDigits.slice(i, i + 4));
+    }
+    formatted = parts.join(' ');
+  }
+  return { formatted, brandInfo: info, rawDigits: cleanDigits };
+}
+
+function formatCardExpiry(val) {
+  let digits = String(val || '').replace(/\D/g, '').slice(0, 4);
+  if (!digits) return '';
+  if (digits.length === 1 && parseInt(digits[0], 10) > 1) {
+    return `0${digits}/`;
+  }
+  if (digits.length >= 2) {
+    let month = parseInt(digits.slice(0, 2), 10);
+    if (month > 12) month = 12;
+    if (month === 0) month = 1;
+    const mm = month.toString().padStart(2, '0');
+    const yy = digits.slice(2);
+    return yy ? `${mm}/${yy}` : `${mm}/`;
+  }
+  return digits;
+}
+
+function updateCardFormatting() {
+  const cardInp = document.getElementById('f-card-number');
+  const brandBadge = document.getElementById('cardBrandBadge');
+  const cvvInp = document.getElementById('f-card-cvv');
+
+  if (!cardInp) return;
+  const { formatted, brandInfo } = formatCardNumber(cardInp.value);
+  cardInp.value = formatted;
+
+  if (brandBadge) {
+    if (brandInfo && brandInfo.name) {
+      brandBadge.textContent = brandInfo.name;
+      brandBadge.setAttribute('data-brand', brandInfo.brand);
+      brandBadge.style.display = 'inline-flex';
+    } else {
+      brandBadge.style.display = 'none';
+      brandBadge.removeAttribute('data-brand');
+      brandBadge.textContent = '';
+    }
+  }
+
+  if (cvvInp) {
+    cvvInp.maxLength = (brandInfo && brandInfo.brand === 'amex') ? 4 : 3;
+    if (cvvInp.value.length > cvvInp.maxLength) {
+      cvvInp.value = cvvInp.value.slice(0, cvvInp.maxLength);
+    }
+  }
+}
+
+function resetCardFormatting() {
+  const brandBadge = document.getElementById('cardBrandBadge');
+  if (brandBadge) {
+    brandBadge.style.display = 'none';
+    brandBadge.removeAttribute('data-brand');
+    brandBadge.textContent = '';
+  }
+  const cvvInp = document.getElementById('f-card-cvv');
+  if (cvvInp) cvvInp.maxLength = 4;
+}
+
+function setModalType(type) {
+  currentModalType = type || 'login';
+  const btnLogin = document.getElementById('btnTypeLogin');
+  const btnCard = document.getElementById('btnTypeCard');
+  const btnNote = document.getElementById('btnTypeNote');
+  if (btnLogin) btnLogin.classList.toggle('active', currentModalType === 'login');
+  if (btnCard) btnCard.classList.toggle('active', currentModalType === 'card');
+  if (btnNote) btnNote.classList.toggle('active', currentModalType === 'note');
+
+  const lblSite = document.getElementById('lbl-site');
+  const fSite = document.getElementById('f-site');
+  const secLogin = document.getElementById('section-login-fields');
+  const secCard = document.getElementById('section-card-fields');
+  const secNote = document.getElementById('section-note-fields');
+  const sec2fa = document.getElementById('section-2fa-wrap');
+  const fCat = document.getElementById('f-category');
+
+  if (currentModalType === 'card') {
+    if (lblSite) {
+      lblSite.setAttribute('data-i18n', 'fieldCardTitle');
+      lblSite.textContent = t('fieldCardTitle');
+    }
+    if (fSite) {
+      fSite.setAttribute('data-i18n-placeholder', 'fieldCardTitlePh');
+      fSite.placeholder = t('fieldCardTitlePh');
+    }
+    if (secLogin) secLogin.style.display = 'none';
+    if (secCard) secCard.style.display = 'flex';
+    if (secNote) secNote.style.display = 'none';
+    if (sec2fa) sec2fa.style.display = 'none';
+    if (fCat && (!editId || fCat.value === 'Diğer')) fCat.value = 'Finans';
+  } else if (currentModalType === 'note') {
+    if (lblSite) {
+      lblSite.setAttribute('data-i18n', 'fieldNoteTitle');
+      lblSite.textContent = t('fieldNoteTitle');
+    }
+    if (fSite) {
+      fSite.setAttribute('data-i18n-placeholder', 'fieldNoteTitlePh');
+      fSite.placeholder = t('fieldNoteTitlePh');
+    }
+    if (secLogin) secLogin.style.display = 'none';
+    if (secCard) secCard.style.display = 'none';
+    if (secNote) secNote.style.display = 'flex';
+    if (sec2fa) sec2fa.style.display = 'none';
+  } else {
+    // login
+    if (lblSite) {
+      lblSite.setAttribute('data-i18n', 'fieldSite');
+      lblSite.textContent = t('fieldSite');
+    }
+    if (fSite) {
+      fSite.setAttribute('data-i18n-placeholder', 'fieldSitePh');
+      fSite.placeholder = t('fieldSitePh');
+    }
+    if (secLogin) secLogin.style.display = 'flex';
+    if (secCard) secCard.style.display = 'none';
+    if (secNote) secNote.style.display = 'none';
+    if (sec2fa) sec2fa.style.display = 'flex';
+  }
+}
+
 async function openAddModal(id=null, force=false) {
   if (id && !force) {
     const target = entries.find(x => x.id === id);
@@ -1050,38 +1341,62 @@ async function openAddModal(id=null, force=false) {
   }).join('');
   
   if(id) {
-    const e=entries.find(x=>x.id===id);
-    document.getElementById('f-site').value=e.site;
-    sel.value=e.category||'Diğer';
-    document.getElementById('f-user').value=e.username;
-    const pwEl = document.getElementById('f-pw');
-    pwEl.type = 'password';
-    pwEl.value=await memDecrypt(e.password);
-    document.getElementById('f-note').value=e.note||'';
-    document.getElementById('f-url').value=e.url||'';
-    document.getElementById('f-2fa-toggle').checked=!!e.totp;
-    document.getElementById('f-totp').value=await memDecrypt(e.totp)||'';
-    document.getElementById('f-fav').checked=!!e.fav;
-    document.getElementById('f-reprompt').checked=!!e.reprompt;
+    const e = entries.find(x=>x.id===id);
+    const type = e.type || 'login';
+    setModalType(type);
+    document.getElementById('f-site').value = e.site || '';
+    sel.value = e.category || (type === 'card' ? 'Finans' : 'Diğer');
+    document.getElementById('f-note').value = e.note || '';
+    document.getElementById('f-fav').checked = !!e.fav;
+    document.getElementById('f-reprompt').checked = !!e.reprompt;
+
+    if (type === 'card') {
+      document.getElementById('f-cardholder').value = e.cardholderName || '';
+      document.getElementById('f-card-number').value = await memDecrypt(e.cardNumber);
+      document.getElementById('f-card-expiry').value = e.cardExpiry || '';
+      document.getElementById('f-card-cvv').value = await memDecrypt(e.cardCvv);
+      document.getElementById('f-card-pin').value = await memDecrypt(e.cardPin);
+      updateCardFormatting();
+    } else if (type === 'note') {
+      document.getElementById('f-secure-note').value = await memDecrypt(e.secureNote);
+    } else {
+      document.getElementById('f-user').value = e.username || '';
+      const pwEl = document.getElementById('f-pw');
+      pwEl.type = 'password';
+      pwEl.value = await memDecrypt(e.password);
+      document.getElementById('f-url').value = e.url || '';
+      document.getElementById('f-2fa-toggle').checked = !!e.totp;
+      document.getElementById('f-totp').value = await memDecrypt(e.totp) || '';
+      document.getElementById('totp-section').style.display = e.totp ? 'block' : 'none';
+      onPwInput();
+    }
+
     const histBtn = document.getElementById('f-pw-history-row');
     const histCount = e.history && Array.isArray(e.history) ? e.history.length : 0;
     if (histBtn) {
-      histBtn.style.display = 'block';
+      histBtn.style.display = (type === 'login') ? 'block' : 'none';
       const labelEl = document.getElementById('pwHistoryBtnLabel');
       if (labelEl) labelEl.textContent = `${t('btnPwHistory')} (${histCount})`;
     }
-    document.getElementById('totp-section').style.display=e.totp?'block':'none';
-    onPwInput();
   } else {
-    ['f-site','f-user','f-pw','f-note','f-url','f-totp'].forEach(i=>document.getElementById(i).value='');
-    sel.value='Diğer';
-    document.getElementById('f-2fa-toggle').checked=false;
-    document.getElementById('f-fav').checked=false;
-    document.getElementById('f-reprompt').checked=false;
+    ['f-site','f-user','f-pw','f-note','f-url','f-totp','f-cardholder','f-card-number','f-card-expiry','f-card-cvv','f-card-pin','f-secure-note'].forEach(i => {
+      const el = document.getElementById(i);
+      if (el) el.value = '';
+    });
+    let defaultType = 'login';
+    if (curView === 'type:card') defaultType = 'card';
+    else if (curView === 'type:note') defaultType = 'note';
+    setModalType(defaultType);
+
+    sel.value = defaultType === 'card' ? 'Finans' : 'Diğer';
+    document.getElementById('f-2fa-toggle').checked = false;
+    document.getElementById('f-fav').checked = false;
+    document.getElementById('f-reprompt').checked = false;
     const histBtn = document.getElementById('f-pw-history-row');
     if (histBtn) histBtn.style.display = 'none';
-    document.getElementById('totp-section').style.display='none';
-    document.getElementById('zxcvbnWrap').style.display='none';
+    document.getElementById('totp-section').style.display = 'none';
+    document.getElementById('zxcvbnWrap').style.display = 'none';
+    resetCardFormatting();
   }
   const btnEye = document.getElementById('btnEyePw');
   if (btnEye) {
@@ -1097,12 +1412,14 @@ document.getElementById('addOverlay').addEventListener('mousedown', e=>{if(e.tar
 
 async function saveEntry() {
   const site=document.getElementById('f-site').value.trim();
+  if(!site){toast(t('toastSiteRequired'));return;}
   const pw=document.getElementById('f-pw').value;
-  if(!site||!pw){toast(t('toastSiteRequired'));return;}
+  if(currentModalType==='login' && !pw){toast(t('toastSiteRequired'));return;}
+  
   const now = Date.now();
   const existing = editId ? entries.find(x=>x.id===editId) : null;
   let history = existing && Array.isArray(existing.history) ? [...existing.history] : [];
-  if (existing) {
+  if (existing && currentModalType==='login') {
     const oldPw = await memDecrypt(existing.password);
     if (oldPw && oldPw !== pw) {
       history.unshift({
@@ -1112,14 +1429,13 @@ async function saveEntry() {
       if (history.length > 5) history = history.slice(0, 5);
     }
   }
+
   const entry={
-    id: editId||crypto.randomUUID(), site,
+    id: editId||crypto.randomUUID(),
+    type: currentModalType,
+    site,
     category: document.getElementById('f-category').value,
-    username: document.getElementById('f-user').value.trim(),
-    password: await memEncrypt(pw),
     note:     document.getElementById('f-note').value.trim(),
-    url:      document.getElementById('f-url').value.trim(),
-    totp:     await memEncrypt(document.getElementById('f-2fa-toggle').checked ? document.getElementById('f-totp').value.trim() : ''),
     fav:      document.getElementById('f-fav').checked,
     reprompt: document.getElementById('f-reprompt').checked,
     updated:  now,
@@ -1130,10 +1446,47 @@ async function saveEntry() {
     isDeleted: false,
     history:  history
   };
+
+  if (currentModalType === 'card') {
+    const rawNum = document.getElementById('f-card-number').value.replace(/\s+/g, ' ').trim();
+    const digitsOnly = rawNum.replace(/\D/g, '');
+    const brandInfo = detectCardBrand(digitsOnly);
+    entry.cardholderName = document.getElementById('f-cardholder').value.trim();
+    entry.cardNumber = await memEncrypt(rawNum);
+    entry.cardLastFour = digitsOnly ? digitsOnly.slice(-4) : '';
+    entry.cardBrand = (brandInfo && brandInfo.brand) ? brandInfo.brand : 'generic';
+    entry.cardExpiry = document.getElementById('f-card-expiry').value.trim();
+    entry.cardCvv = await memEncrypt(document.getElementById('f-card-cvv').value.trim());
+    entry.cardPin = await memEncrypt(document.getElementById('f-card-pin').value.trim());
+    entry.username = entry.cardholderName;
+    entry.password = await memEncrypt('');
+    entry.totp = await memEncrypt('');
+    entry.url = '';
+  } else if (currentModalType === 'note') {
+    entry.secureNote = await memEncrypt(document.getElementById('f-secure-note').value);
+    entry.username = '';
+    entry.password = await memEncrypt('');
+    entry.totp = await memEncrypt('');
+    entry.url = '';
+  } else {
+    // login
+    entry.username = document.getElementById('f-user').value.trim();
+    entry.password = await memEncrypt(pw);
+    entry.url = document.getElementById('f-url').value.trim();
+    entry.totp = await memEncrypt(document.getElementById('f-2fa-toggle').checked ? document.getElementById('f-totp').value.trim() : '');
+  }
+
   if(editId){const i=entries.findIndex(x=>x.id===editId);entries[i]=entry;}
   else entries.unshift(entry);
   await persist(); closeModal('addOverlay'); renderList();
-  toast(editId?t('toastUpdated'):t('toastSaved'));
+  
+  if (editId) {
+    toast(t('toastUpdated'));
+  } else {
+    if (currentModalType === 'card') toast(t('toastCardSaved'));
+    else if (currentModalType === 'note') toast(t('toastNoteSaved'));
+    else toast(t('toastSaved'));
+  }
 }
 
 async function delEntry(id) {
@@ -1180,17 +1533,92 @@ async function copyPw(id) {
   }
 }
 
+async function copyCardNum(id) {
+  const e = entries.find(x=>x.id===id);
+  if (!e) return;
+  const doCopy = async () => {
+    const num = await memDecrypt(e.cardNumber);
+    await copySecure(num, t('toastCardCopied'), 30000);
+  };
+  if (e.reprompt) {
+    requireReprompt(id, doCopy);
+  } else {
+    await doCopy();
+  }
+}
+
+async function copyCardCvv(id) {
+  const e = entries.find(x=>x.id===id);
+  if (!e) return;
+  const doCopy = async () => {
+    const cvv = await memDecrypt(e.cardCvv);
+    await copySecure(cvv, t('toastCvvCopied'), 20000);
+  };
+  if (e.reprompt) {
+    requireReprompt(id, doCopy);
+  } else {
+    await doCopy();
+  }
+}
+
+async function copyNote(id) {
+  const e = entries.find(x=>x.id===id);
+  if (!e) return;
+  const doCopy = async () => {
+    const content = await memDecrypt(e.secureNote);
+    await copySecure(content, t('toastNoteCopied'), 45000);
+  };
+  if (e.reprompt) {
+    requireReprompt(id, doCopy);
+  } else {
+    await doCopy();
+  }
+}
+
 async function revealPw(id) {
   const el=document.getElementById('dot-'+id); if(!el)return;
   const e=entries.find(x=>x.id===id);
   if (!e) return;
+  const type = e.type || 'login';
   const doReveal = async () => {
     if(el.classList.contains('pw-reveal')){
-      el.textContent='••••••'; el.classList.remove('pw-reveal'); clearTimeout(revealT[id]);
-    } else {
-      el.textContent=await memDecrypt(e.password); el.classList.add('pw-reveal');
+      if (type === 'card') {
+        const rawNum = (e.cardNumber && typeof e.cardNumber === 'string') ? e.cardNumber.replace(/\D/g, '') : '';
+        const l4 = e.cardLastFour || rawNum.slice(-4) || '••••';
+        const brandInfo = detectCardBrand(rawNum);
+        const brandName = (brandInfo && brandInfo.name) ? brandInfo.name : (e.cardBrand ? e.cardBrand.toUpperCase() : '');
+        el.textContent = `${brandName ? brandName + ' ' : ''}•••• ${l4}`;
+      } else {
+        el.textContent='••••••';
+      }
+      el.classList.remove('pw-reveal');
       clearTimeout(revealT[id]);
-      revealT[id]=setTimeout(()=>{el.textContent='••••••';el.classList.remove('pw-reveal');},8000);
+    } else {
+      if (type === 'card') {
+        const num = await memDecrypt(e.cardNumber);
+        const cvv = await memDecrypt(e.cardCvv);
+        const exp = e.cardExpiry || '';
+        el.textContent = `${num}${exp ? ' (' + exp + ')' : ''}${cvv ? ' CVV:' + cvv : ''}`;
+      } else if (type === 'note') {
+        const content = await memDecrypt(e.secureNote);
+        el.textContent = content ? (content.length > 30 ? content.slice(0, 30) + '...' : content) : '—';
+      } else {
+        el.textContent=await memDecrypt(e.password);
+      }
+      el.classList.add('pw-reveal');
+      clearTimeout(revealT[id]);
+      revealT[id]=setTimeout(()=>{
+        if (type === 'card') {
+          const rawNum = (e.cardNumber && typeof e.cardNumber === 'string') ? e.cardNumber.replace(/\D/g, '') : '';
+          const l4 = e.cardLastFour || rawNum.slice(-4) || '••••';
+          const brandInfo = detectCardBrand(rawNum);
+          const brandName = (brandInfo && brandInfo.name) ? brandInfo.name : (e.cardBrand ? e.cardBrand.toUpperCase() : '');
+          el.textContent = `${brandName ? brandName + ' ' : ''}•••• ${l4}`;
+        } else {
+          el.textContent='••••••';
+        }
+        el.classList.remove('pw-reveal');
+      },8000);
     }
   };
   if (e.reprompt && !el.classList.contains('pw-reveal')) {
@@ -2277,14 +2705,15 @@ async function confirmHardReset() {
 
 // ── HEALTH ────────────────────────────────────────────────────────
 async function renderHealth() {
-  const decryptedPws = await Promise.all(entries.map(e=>memDecrypt(e.password)));
+  const loginEntries = entries.filter(e => !e.isDeleted && (e.type || 'login') === 'login');
+  const decryptedPws = await Promise.all(loginEntries.map(e=>memDecrypt(e.password)));
   const scores=await Promise.all(decryptedPws.map(pw=>getScore(pw)));
-  const weak=entries.filter((_,i)=>scores[i]<=1);
-  const medium=entries.filter((_,i)=>scores[i]===2);
-  const strong=entries.filter((_,i)=>scores[i]>=3);
+  const weak=loginEntries.filter((_,i)=>scores[i]<=1);
+  const medium=loginEntries.filter((_,i)=>scores[i]===2);
+  const strong=loginEntries.filter((_,i)=>scores[i]>=3);
   const pwHashes=await Promise.all(decryptedPws.map(pw=>pw ? sha1hex(pw) : Promise.resolve('')));
   const pwMap={};
-  entries.forEach((e, i)=>{(pwMap[pwHashes[i]]=pwMap[pwHashes[i]]||[]).push(e);});
+  loginEntries.forEach((e, i)=>{if(pwHashes[i]) (pwMap[pwHashes[i]]=pwMap[pwHashes[i]]||[]).push(e);});
   const dupGroups=Object.values(pwMap).filter(v=>v.length>1);
   const dups=dupGroups.flat();
 
@@ -2293,8 +2722,8 @@ async function renderHealth() {
     <div class="h-card"><div class="h-num amber">${medium.length}</div><div class="h-label">${t('healthMedium')}</div></div>
     <div class="h-card"><div class="h-num green">${strong.length}</div><div class="h-label">${t('healthStrong')}</div></div>
     <div class="h-card"><div class="h-num amber">${dups.length}</div><div class="h-label">${t('healthDup')}</div></div>
-    <div class="h-card"><div class="h-num green">${entries.filter(e=>e.totp).length}</div><div class="h-label">${t('health2FA')}</div></div>
-    <div class="h-card"><div class="h-num" style="color:var(--ac2)">${entries.length}</div><div class="h-label">${t('healthTotal')}</div></div>
+    <div class="h-card"><div class="h-num green">${loginEntries.filter(e=>e.totp).length}</div><div class="h-label">${t('health2FA')}</div></div>
+    <div class="h-card"><div class="h-num" style="color:var(--ac2)">${entries.filter(e=>!e.isDeleted).length}</div><div class="h-label">${t('healthTotal')}</div></div>
   `;
 
   let html='';
@@ -2651,11 +3080,7 @@ async function openPairingModal() {
 async function exportEncryptedBackup() {
   if (!master) { toast(t('toastLoginFirst')); return; }
   try {
-    const exportEntries = await Promise.all(entries.map(async e => ({
-      ...e,
-      password: await memDecrypt(e.password),
-      totp: await memDecrypt(e.totp)
-    })));
+    const exportEntries = await Promise.all(entries.map(serializeEntryPlain));
     const payload = {
       type: 'fuin/vault',
       exportedAt: Date.now(),
@@ -2738,7 +3163,7 @@ async function importEncryptedBackup() {
 
 async function exportJSON() {
   if(!confirm(t('confirmPlaintextExport'))) return;
-  const exportEntries = await Promise.all(entries.map(async e => ({ ...e, password: await memDecrypt(e.password), totp: await memDecrypt(e.totp) })));
+  const exportEntries = await Promise.all(entries.map(serializeEntryPlain));
   const payload = { type: 'fuin/vault', categories: [], entries: exportEntries };
   const c=JSON.stringify(payload,null,2);
   await api.exportFile({content:c,defaultName:'fuin-yedek.json',filters:[{name:'JSON',extensions:['json']}]});
@@ -2746,7 +3171,7 @@ async function exportJSON() {
 }
 async function exportCSV() {
   if(!confirm(t('confirmPlaintextExport'))) return;
-  const exportEntries = await Promise.all(entries.map(async e => ({ ...e, password: await memDecrypt(e.password), totp: await memDecrypt(e.totp) })));
+  const exportEntries = await Promise.all(entries.map(serializeEntryPlain));
   const content = window.FuinBackupController?.buildPlaintextCsv
     ? window.FuinBackupController.buildPlaintextCsv(exportEntries)
     : ['site,category,username,password,url,note', ...exportEntries.map(e=>[e.site,e.category||'Diğer',e.username,e.password,e.url||'',e.note||''].map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(','))].join('\n');
@@ -2764,12 +3189,12 @@ async function processImportedEntries(imported, label) {
   );
 
   let newEntries = imported.filter(x =>
-    x.site && x.password &&
+    x.site && (x.password || x.type === 'note' || x.type === 'card') &&
     !currentDecrypted.find(e => e.site === x.site && e.username === x.username && e.password === x.password)
   );
 
   newEntries = await Promise.all(
-    newEntries.map(async e => ({ ...e, password: await memEncrypt(e.password), totp: await memEncrypt(e.totp) }))
+    newEntries.map(e => hydrateEntryMemory(e))
   );
 
   entries = [...newEntries, ...entries];
@@ -2968,6 +3393,15 @@ function refreshDynamicI18nLabels() {
   if (curView === 'all' || curView === 'fav' || curView === 'trash') {
     const el = document.getElementById('viewTitle');
     if (el) el.textContent = curView === 'fav' ? t('viewTitleFav') : (curView === 'trash' ? t('viewTitleTrash') : t('viewTitleAll'));
+  } else if (curView === 'type:login') {
+    const el = document.getElementById('viewTitle');
+    if (el) el.textContent = t('viewTitleLogins');
+  } else if (curView === 'type:card') {
+    const el = document.getElementById('viewTitle');
+    if (el) el.textContent = t('viewTitleCards');
+  } else if (curView === 'type:note') {
+    const el = document.getElementById('viewTitle');
+    if (el) el.textContent = t('viewTitleNotes');
   } else if (curView.startsWith('cat:')) {
     const el = document.getElementById('viewTitle');
     if (el) el.textContent = catLabel(curView.slice(4)).toUpperCase();
@@ -2983,8 +3417,18 @@ function refreshDynamicI18nLabels() {
       if (sub) sub.textContent = `${t('sysUpdateCheckSub')} ${t('sysUpdateCurrent', { v: normalizeVersion(ver) })}`;
     });
   }
+  if (typeof setModalType === 'function') {
+    setModalType(currentModalType);
+  }
   if (document.getElementById('addOverlay')?.classList.contains('open')) {
-    document.getElementById('addModalTitle').textContent = editId ? t('modalEditEntry') : t('modalNewEntry');
+    const addModalTitle = document.getElementById('addModalTitle');
+    if (addModalTitle) addModalTitle.textContent = editId ? t('modalEditEntry') : t('modalNewEntry');
+    const labelEl = document.getElementById('pwHistoryBtnLabel');
+    if (labelEl && editId) {
+      const e = entries.find(x => x.id === editId);
+      const histCount = e && e.history && Array.isArray(e.history) ? e.history.length : 0;
+      labelEl.textContent = `${t('btnPwHistory')} (${histCount})`;
+    }
   }
   if (document.getElementById('genOverlay')?.classList.contains('open') && _lastGenRes) {
     renderGenStrengthUI(_lastGenRes);
@@ -3006,7 +3450,7 @@ function isNewerVersion(latest, current) {
 }
 
 async function getLocalAppVersion() {
-  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.9';
+  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.10';
 }
 
 async function silentCheckForUpdates() {
@@ -3043,6 +3487,9 @@ document.addEventListener('click', (e) => {
   else if (action === 'set-view') setView(val, btn);
   else if (action === 'show-totp') showTOTP(val);
   else if (action === 'copy-pw') copyPw(val);
+  else if (action === 'copy-card-num') copyCardNum(val);
+  else if (action === 'copy-cvv') copyCardCvv(val);
+  else if (action === 'copy-note') copyNote(val);
   else if (action === 'reveal-pw') revealPw(val);
   else if (action === 'edit-pw') openAddModal(val);
   else if (action === 'del-pw') delEntry(val);
@@ -3083,7 +3530,53 @@ function initAppListeners() {
 
   // Sidebar nav
   document.getElementById('nav-all')?.addEventListener('click', function() { setView('all', this); });
+  document.getElementById('nav-logins')?.addEventListener('click', function() { setView('type:login', this); });
+  document.getElementById('nav-cards')?.addEventListener('click', function() { setView('type:card', this); });
+  document.getElementById('nav-notes')?.addEventListener('click', function() { setView('type:note', this); });
   document.getElementById('nav-fav')?.addEventListener('click', function() { setView('fav', this); });
+
+  // Modal type switcher & eye toggles
+  document.getElementById('btnTypeLogin')?.addEventListener('click', () => setModalType('login'));
+  document.getElementById('btnTypeCard')?.addEventListener('click', () => setModalType('card'));
+  document.getElementById('btnTypeNote')?.addEventListener('click', () => setModalType('note'));
+  document.getElementById('btnEyeCard')?.addEventListener('click', () => {
+    const inp = document.getElementById('f-card-number');
+    if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+
+  // Card auto-formatting & brand detection event listeners
+  const cardNumInp = document.getElementById('f-card-number');
+  if (cardNumInp) {
+    cardNumInp.addEventListener('input', updateCardFormatting);
+    cardNumInp.addEventListener('paste', () => setTimeout(updateCardFormatting, 0));
+  }
+
+  const cardExpInp = document.getElementById('f-card-expiry');
+  if (cardExpInp) {
+    let lastExpVal = '';
+    cardExpInp.addEventListener('keydown', () => { lastExpVal = cardExpInp.value; });
+    cardExpInp.addEventListener('input', (e) => {
+      if (e.inputType === 'deleteContentBackward' && lastExpVal.endsWith('/') && cardExpInp.value.length === 2) {
+        cardExpInp.value = cardExpInp.value.slice(0, 1);
+        return;
+      }
+      cardExpInp.value = formatCardExpiry(cardExpInp.value);
+    });
+  }
+
+  const cardCvvInp = document.getElementById('f-card-cvv');
+  if (cardCvvInp) {
+    cardCvvInp.addEventListener('input', () => {
+      cardCvvInp.value = cardCvvInp.value.replace(/\D/g, '').slice(0, cardCvvInp.maxLength || 4);
+    });
+  }
+
+  const cardPinInp = document.getElementById('f-card-pin');
+  if (cardPinInp) {
+    cardPinInp.addEventListener('input', () => {
+      cardPinInp.value = cardPinInp.value.replace(/\D/g, '').slice(0, 6);
+    });
+  }
   document.getElementById('nav-settings')?.addEventListener('click', function() { setView('settings', this); });
   document.getElementById('nav-trash')?.addEventListener('click', function() { setView('trash', this); document.getElementById('viewTitle').textContent = t('viewTitleTrash'); });
   document.getElementById('nav-health')?.addEventListener('click', function() { setView('health', this); });
@@ -3091,6 +3584,23 @@ function initAppListeners() {
   document.getElementById('nav-io')?.addEventListener('click', function() { setView('io', this); });
   document.getElementById('nav-sync')?.addEventListener('click', handleSyncClick);
   document.getElementById('nav-lock')?.addEventListener('click', lock);
+
+  // Categories accordion & Settings quick-tools
+  document.getElementById('btnToggleCategories')?.addEventListener('click', () => {
+    toggleCategories();
+  });
+  document.getElementById('btnGoToIO')?.addEventListener('click', () => {
+    setView('io', document.getElementById('nav-settings'));
+  });
+  document.getElementById('btnGoToSecurity')?.addEventListener('click', () => {
+    setView('security', document.getElementById('nav-settings'));
+  });
+  document.getElementById('btnBackFromIO')?.addEventListener('click', () => {
+    setView('settings', document.getElementById('nav-settings'));
+  });
+  document.getElementById('btnBackFromSec')?.addEventListener('click', () => {
+    setView('settings', document.getElementById('nav-settings'));
+  });
 
   // Pairing & LAN Sync UI listeners
   document.getElementById('btnOpenPairModal')?.addEventListener('click', openPairingModal);
@@ -3432,11 +3942,7 @@ if (api.onLanSyncApplied) {
       }
 
       entries = await Promise.all(
-        dedupedMerged.map(async e => ({
-          ...e,
-          password: await memEncrypt(e.password),
-          totp: await memEncrypt(e.totp)
-        }))
+        dedupedMerged.map(e => hydrateEntryMemory(e))
       );
       await persist();
       renderList();

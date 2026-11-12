@@ -295,7 +295,7 @@ function mergeHistories(winnerHistory, loserHistory, loserEntry) {
 
   function addSnapshot(snap) {
     if (!snap || typeof snap !== 'object') return;
-    const key = `${snap.updatedAt || snap.updated || 0}_${snap.site || ''}_${snap.username || ''}_${snap.password || ''}_${snap.note || ''}_${snap.totp || ''}_${snap.deletedAt || (snap.isDeleted ? 'del' : 'act')}`;
+    const key = `${snap.updatedAt || snap.updated || 0}_${snap.type || 'login'}_${snap.site || ''}_${snap.username || ''}_${snap.password || ''}_${snap.cardNumber || ''}_${snap.secureNote || ''}_${snap.note || ''}_${snap.totp || ''}_${snap.deletedAt || (snap.isDeleted ? 'del' : 'act')}`;
     if (!seen.has(key)) {
       seen.add(key);
       const { history: _ignored, ...cleanSnap } = snap;
@@ -330,6 +330,13 @@ function areCoreFieldsEqual(a, b) {
     (a.note || '') === (b.note || '') &&
     (a.url || '') === (b.url || '') &&
     (a.totp || '') === (b.totp || '') &&
+    (a.type || 'login') === (b.type || 'login') &&
+    (a.cardholderName || '') === (b.cardholderName || '') &&
+    (a.cardNumber || '') === (b.cardNumber || '') &&
+    (a.cardExpiry || '') === (b.cardExpiry || '') &&
+    (a.cardCvv || '') === (b.cardCvv || '') &&
+    (a.cardPin || '') === (b.cardPin || '') &&
+    (a.secureNote || '') === (b.secureNote || '') &&
     Boolean(a.fav) === Boolean(b.fav) &&
     (a.deletedAt || null) === (b.deletedAt || null) &&
     Boolean(a.isDeleted) === Boolean(b.isDeleted)

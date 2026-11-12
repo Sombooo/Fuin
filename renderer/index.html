@@ -76,39 +76,60 @@
 
     <!-- SIDEBAR -->
     <div class="sidebar">
-      <div class="sidebar-section">
-        <div class="sidebar-label" data-i18n="navSectionView">Görünüm</div>
-        <button class="nav-item active" id="nav-all">
-          <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span> <span data-i18n="navAll">Tüm Kayıtlar</span>
-        </button>
-        <button class="nav-item" id="nav-fav">
-          <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> <span data-i18n="navFav">Favoriler</span>
-        </button>
-      </div>
-      <div class="nav-divider"></div>
-      <div class="sidebar-section" id="categoryNavSection" style="display:none">
-        <div class="sidebar-label" data-i18n="navSectionCategories">Kategoriler</div>
-        <div id="categoryNav"></div>
-      </div>
-      <div class="nav-divider"></div>
-      <div class="sidebar-section">
-        <button class="nav-item" id="nav-trash">
-          <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span> <span data-i18n="navTrash">Çöp Kutusu</span>
-        </button>
-      </div>
-      <div class="nav-divider"></div>
-      <div class="sidebar-section">
-        <div class="sidebar-label" data-i18n="navSectionTools">Araçlar</div>
-        <button class="nav-item" id="nav-health"><span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> <span data-i18n="navHealth">Sağlık Raporu</span></button>
-        <button class="nav-item" id="nav-io"><span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polyline points="17 1 21 5 17 9"/><path d="M3 5h18"/><polyline points="7 23 3 19 7 15"/><path d="M21 19H3"/></svg></span> <span data-i18n="navIO">Dışa / İçe Aktar</span></button>
-        <button class="nav-item" id="nav-security"><span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> <span data-i18n="navSecurity">Güvenlik Bilgisi</span></button>
-        <button class="nav-item" id="nav-settings"><span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> <span data-i18n="navSettings">Ayarlar</span><div id="navUpdateBadge" style="display:none; position:absolute; top:8px; right:12px; width:8px; height:8px; background:var(--red); border-radius:50%"></div></button>
-        <button class="nav-item" id="nav-sync">
-          <span class="icon" id="navSyncIcon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></span> <span id="navSyncText" data-i18n="navSync">Eşitle</span>
-        </button>
+      <div class="sidebar-scroll">
+        <div class="sidebar-section">
+          <div class="sidebar-label" data-i18n="navSectionView">Kasa</div>
+          <button class="nav-item active" id="nav-all">
+            <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span> <span data-i18n="navAll">Tüm Kayıtlar</span>
+          </button>
+          <button class="nav-item" id="nav-logins">
+            <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></span> <span data-i18n="navLogins">Girişler</span>
+          </button>
+          <button class="nav-item" id="nav-cards">
+            <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span> <span data-i18n="navCards">Kartlar</span>
+          </button>
+          <button class="nav-item" id="nav-notes">
+            <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span> <span data-i18n="navNotes">Güvenli Notlar</span>
+          </button>
+          <button class="nav-item" id="nav-fav">
+            <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span> <span data-i18n="navFav">Favoriler</span>
+          </button>
+          <button class="nav-item" id="nav-trash">
+            <span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span> <span data-i18n="navTrash">Çöp Kutusu</span>
+          </button>
+        </div>
+
+        <div class="nav-divider" id="catDividerTop" style="display:none;"></div>
+
+        <!-- CATEGORIES (Collapsible Accordion) -->
+        <div class="sidebar-section" id="categoryNavSection" style="display:none">
+          <button class="nav-item" id="btnToggleCategories" type="button" style="justify-content:flex-start;">
+            <span class="icon" id="catToggleIcon" style="transition: transform .12s ease; display:inline-flex; align-items:center; justify-content:center;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+            <span data-i18n="navSectionCategories">Kategoriler</span>
+            <span id="catTotalBadge" style="margin-left:auto; font-size:11px; color:var(--mu); font-family:var(--mono);"></span>
+          </button>
+          <div id="categoryNav" style="display:none; padding-left: 6px; margin-top:2px;"></div>
+        </div>
+
+        <div class="nav-divider"></div>
+
+        <!-- TOOLS & SETTINGS -->
+        <div class="sidebar-section">
+          <div class="sidebar-label" data-i18n="navSectionTools">Araçlar</div>
+          <button class="nav-item" id="nav-health"><span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> <span data-i18n="navHealth">Sağlık Raporu</span></button>
+          <button class="nav-item" id="nav-io"><span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><polyline points="17 1 21 5 17 9"/><path d="M3 5h18"/><polyline points="7 23 3 19 7 15"/><path d="M21 19H3"/></svg></span> <span data-i18n="navIO">Dışa / İçe Aktar</span></button>
+          <button class="nav-item" id="nav-settings"><span class="icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> <span data-i18n="navSettings">Ayarlar</span><div id="navUpdateBadge" style="display:none; position:absolute; top:8px; right:12px; width:8px; height:8px; background:var(--red); border-radius:50%"></div></button>
+          <!-- Hidden compatibility targets -->
+          <button class="nav-item" id="nav-security" style="display:none;"></button>
+        </div>
       </div>
       <div class="sidebar-bottom">
-        <div class="slogan" style="text-align:center; opacity:0.3; font-family:var(--mono); font-size:10px; margin-bottom:12px; cursor:default; user-select:none; letter-spacing:0.5px;" data-i18n="slogan">Quietly secure.</div>
+        <button class="btn-sync-side" id="nav-sync">
+          <span class="icon" id="navSyncIcon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></span> <span id="navSyncText" data-i18n="navSync">Eşitle</span>
+        </button>
+        <div class="slogan" style="text-align:center; opacity:0.35; font-family:var(--mono); font-size:10px; margin: 4px 0 2px 0; cursor:default; user-select:none; letter-spacing:0.5px;" data-i18n="slogan">Quietly secure.</div>
         <button class="btn-lock-side" id="nav-lock" data-action="lock"><span class="icon" style="margin-right:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span data-i18n="navLock">Kilitle</span></button>
       </div>
     </div>
@@ -151,8 +172,11 @@
       </div>
 
       <!-- security info view -->
-      <div id="view-security" style="display:none;padding:16px 20px;background:var(--bg);overflow-y:auto;flex:1">
-        <div class="main-title" style="margin-bottom:14px" data-i18n="securityTitle">GÜVENLİK BİLGİSİ</div>
+      <div id="view-security" style="display:none;padding:16px 20px;background:var(--bg);overflow-y:auto;flex:1;min-height:0;box-sizing:border-box;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+          <button class="btn-sub-back" id="btnBackFromSec" style="background:transparent;border:1px solid var(--b);color:var(--mu);padding:4px 10px;border-radius:4px;cursor:pointer;font-family:var(--mono);font-size:11px;" data-i18n="btnBackToSettings">← Ayarlara Dön</button>
+          <div class="main-title" data-i18n="securityTitle">GÜVENLİK BİLGİSİ</div>
+        </div>
         <div class="sec-grid" id="secGrid"></div>
         <div class="info-box" style="margin-top:0" data-i18n="securityInfoBox">Tüm şifreleme işlemleri cihazınızın güvenli sistem katmanında yapılır. Şifreleriniz hiçbir zaman buluta veya dış sunuculara gönderilmez.</div>
       </div>
@@ -368,6 +392,23 @@
             </div>
           </div>
         </div>
+
+        <div class="main-title" style="margin-top:28px; margin-bottom:14px;" data-i18n="settingSecuritySectionTitle">GÜVENLİK & KRİPTOGRAFİ</div>
+        <div class="io-grid" style="grid-template-columns: 1fr;">
+          <!-- Security Info (placed at the bottom of Settings) -->
+          <div class="io-card" id="securityInfoCard">
+            <div class="settings-card-header">
+              <div class="io-title" style="display:flex;align-items:center;gap:6px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span data-i18n="navSecurity">Güvenlik Bilgisi</span>
+              </div>
+            </div>
+            <div class="io-sub" data-i18n="settingSecCardSub">Argon2id KDF, AES-256-GCM ve sıfır-bilgi kanıtı detaylarını görüntüleyin.</div>
+            <div class="settings-action-bar single-col">
+              <button class="btn-io" id="btnGoToSecurity" data-i18n="btnView">Görüntüle →</button>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -382,8 +423,29 @@
       <button class="modal-close" id="btnCloseAddModal">✕</button>
     </div>
     <div class="modal-body">
-      <div class="fg"><label data-i18n="fieldSite">Site / Uygulama</label><input class="fi" id="f-site" data-i18n-placeholder="fieldSitePh" placeholder="Gmail, GitHub..."></div>
-      <div class="fg"><label data-i18n="fieldCategory">Kategori</label>
+      <!-- TYPE SELECTOR -->
+      <div class="type-selector" id="modalTypeSelector">
+        <button type="button" class="type-btn active" data-type="login" id="btnTypeLogin">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          <span data-i18n="typeLogin">Giriş</span>
+        </button>
+        <button type="button" class="type-btn" data-type="card" id="btnTypeCard">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          <span data-i18n="typeCard">Kredi Kartı</span>
+        </button>
+        <button type="button" class="type-btn" data-type="note" id="btnTypeNote">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span data-i18n="typeNote">Güvenli Not</span>
+        </button>
+      </div>
+
+      <div class="fg">
+        <label id="lbl-site" data-i18n="fieldSite">Site / Uygulama</label>
+        <input class="fi" id="f-site" data-i18n-placeholder="fieldSitePh" placeholder="Gmail, GitHub...">
+      </div>
+
+      <div class="fg" id="fg-category">
+        <label data-i18n="fieldCategory">Kategori</label>
         <select class="fi" id="f-category">
           <option value="Sosyal Medya" data-i18n="cat_social">Sosyal Medya</option>
           <option value="E-posta" data-i18n="cat_email">E-posta</option>
@@ -395,60 +457,112 @@
           <option value="Diğer" data-i18n="cat_other" selected>Diğer</option>
         </select>
       </div>
-      <div class="fg"><label data-i18n="fieldUser">Kullanıcı Adı / E-posta</label><input class="fi" id="f-user" data-i18n-placeholder="fieldUserPh" placeholder="kullanici@email.com"></div>
-      <div class="fg">
-        <label data-i18n="fieldPassword">Şifre</label>
-        <div class="pw-row">
-          <input class="fi" id="f-pw" type="password" placeholder="••••••••">
-          <div class="pw-row-btns">
-            <button type="button" class="icon-btn" id="btnEyePw" data-i18n-title="showPwTitle" title="Göster / Gizle">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-            <button type="button" class="icon-btn" id="btnCopyModalPw" data-i18n-title="copyPwTitle" title="Şifreyi Kopyala">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
-            <button class="icon-btn" id="btnGenPw" data-i18n-title="genPwTitle" title="Üret">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m2 21 9.6-9.6"/>
-                <path d="m7.5 15.5 2.3 2.3a1 1 0 0 1 0 1.4l-2.1 2.1a1 1 0 0 1-1.4 0L4 19"/>
-                <circle cx="15.5" cy="7.5" r="5.5"/>
-              </svg>
-            </button>
+
+      <!-- LOGIN FIELDS -->
+      <div id="section-login-fields" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="fg"><label data-i18n="fieldUser">Kullanıcı Adı / E-posta</label><input class="fi" id="f-user" data-i18n-placeholder="fieldUserPh" placeholder="kullanici@email.com"></div>
+        <div class="fg">
+          <label data-i18n="fieldPassword">Şifre</label>
+          <div class="pw-row">
+            <input class="fi" id="f-pw" type="password" placeholder="••••••••">
+            <div class="pw-row-btns">
+              <button type="button" class="icon-btn" id="btnEyePw" data-i18n-title="showPwTitle" title="Göster / Gizle">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button type="button" class="icon-btn" id="btnCopyModalPw" data-i18n-title="copyPwTitle" title="Şifreyi Kopyala">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button class="icon-btn" id="btnGenPw" data-i18n-title="genPwTitle" title="Üret">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m2 21 9.6-9.6"/>
+                  <path d="m7.5 15.5 2.3 2.3a1 1 0 0 1 0 1.4l-2.1 2.1a1 1 0 0 1-1.4 0L4 19"/>
+                  <circle cx="15.5" cy="7.5" r="5.5"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- zxcvbn strength -->
+          <div class="zxcvbn-wrap" id="zxcvbnWrap" style="display:none">
+            <div class="zxcvbn-bars">
+              <div class="zxcvbn-seg" id="zs0"></div>
+              <div class="zxcvbn-seg" id="zs1"></div>
+              <div class="zxcvbn-seg" id="zs2"></div>
+              <div class="zxcvbn-seg" id="zs3"></div>
+            </div>
+            <div class="zxcvbn-label">
+              <span id="zxcvbnLabel">—</span>
+              <span class="zxcvbn-crack" id="zxcvbnCrack"></span>
+            </div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--red);margin-top:3px" id="zxcvbnWarn"></div>
           </div>
         </div>
-        <!-- zxcvbn strength -->
-        <div class="zxcvbn-wrap" id="zxcvbnWrap" style="display:none">
-          <div class="zxcvbn-bars">
-            <div class="zxcvbn-seg" id="zs0"></div>
-            <div class="zxcvbn-seg" id="zs1"></div>
-            <div class="zxcvbn-seg" id="zs2"></div>
-            <div class="zxcvbn-seg" id="zs3"></div>
+        <div class="fg"><label data-i18n="fieldUrl">URL (opsiyonel)</label><input class="fi" id="f-url" placeholder="https://..."></div>
+      </div>
+
+      <!-- CARD FIELDS -->
+      <div id="section-card-fields" style="display:none; flex-direction:column; gap:12px;">
+        <div class="fg">
+          <label data-i18n="fieldCardholder">Kart Üzerindeki İsim</label>
+          <input class="fi" id="f-cardholder" data-i18n-placeholder="fieldCardholderPh" placeholder="İsim Soyisim" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="fg">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label data-i18n="fieldCardNumber" style="margin-bottom:0;">Kart Numarası</label>
+            <span id="cardBrandBadge" class="card-brand-badge" style="display:none;"></span>
           </div>
-          <div class="zxcvbn-label">
-            <span id="zxcvbnLabel">—</span>
-            <span class="zxcvbn-crack" id="zxcvbnCrack"></span>
+          <div class="pw-row">
+            <input class="fi" id="f-card-number" data-i18n-placeholder="fieldCardNumberPh" placeholder="•••• •••• •••• ••••" autocomplete="off" spellcheck="false" maxlength="23">
+            <div class="pw-row-btns">
+              <button type="button" class="icon-btn" id="btnEyeCard" data-i18n-title="showPwTitle" title="Göster / Gizle">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
           </div>
-          <div style="font-family:var(--mono);font-size:10px;color:var(--red);margin-top:3px" id="zxcvbnWarn"></div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+          <div class="fg">
+            <label data-i18n="fieldCardExpiry">Son Kullanma Tarihi</label>
+            <input class="fi" id="f-card-expiry" data-i18n-placeholder="fieldCardExpiryPh" placeholder="AA/YY" maxlength="5" autocomplete="off">
+          </div>
+          <div class="fg">
+            <label data-i18n="fieldCardCvv">Güvenlik Kodu (CVV)</label>
+            <input class="fi" id="f-card-cvv" type="password" data-i18n-placeholder="fieldCardCvvPh" placeholder="•••" maxlength="4" autocomplete="off">
+          </div>
+        </div>
+        <div class="fg">
+          <label data-i18n="fieldCardPin">Kart Şifresi (PIN, opsiyonel)</label>
+          <input class="fi" id="f-card-pin" type="password" data-i18n-placeholder="fieldCardPinPh" placeholder="••••" maxlength="6" autocomplete="off">
         </div>
       </div>
+
+      <!-- NOTE FIELDS -->
+      <div id="section-note-fields" style="display:none; flex-direction:column; gap:12px;">
+        <div class="fg">
+          <label data-i18n="fieldSecureNoteContent">Güvenli Not İçeriği</label>
+          <textarea class="fi" id="f-secure-note" data-i18n-placeholder="fieldSecureNoteContentPh" placeholder="Yalnızca sizin görebileceğiniz şifrelenmiş metinler..." rows="6" style="resize:vertical; min-height:120px; line-height:1.5; font-family:var(--mono);"></textarea>
+        </div>
+      </div>
+
       <div class="fg"><label data-i18n="fieldNote">Not (opsiyonel)</label><input class="fi" id="f-note" data-i18n-placeholder="fieldNotePh" placeholder="güvenlik sorusu, ipucu..."></div>
-      <div class="fg"><label data-i18n="fieldUrl">URL (opsiyonel)</label><input class="fi" id="f-url" placeholder="https://..."></div>
-      <div class="modal-divider"></div>
-      <div class="modal-section" data-i18n="section2FA">İki Faktörlü Doğrulama</div>
-      <div class="toggle-row">
-        <div class="toggle-info">
-          <div class="toggle-title">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toggle-ico"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <span data-i18n="toggle2FALabel">2FA Kodu Sakla</span>
+
+      <div id="section-2fa-wrap" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="modal-divider"></div>
+        <div class="modal-section" data-i18n="section2FA">İki Faktörlü Doğrulama</div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="toggle-ico"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span data-i18n="toggle2FALabel">2FA Kodu Sakla</span>
+            </div>
+            <div class="toggle-sub" data-i18n="toggle2FASub">TOTP secret key</div>
           </div>
-          <div class="toggle-sub" data-i18n="toggle2FASub">TOTP secret key</div>
+          <label class="toggle"><input type="checkbox" id="f-2fa-toggle"><span class="slider"></span></label>
         </div>
-        <label class="toggle"><input type="checkbox" id="f-2fa-toggle"><span class="slider"></span></label>
-      </div>
-      <div id="totp-section" style="display:none">
-        <div class="fg" style="margin-top:4px">
-          <label data-i18n="fieldTotpLabel">2FA Kurulum Anahtarı</label>
-          <input class="fi" id="f-totp" placeholder="JBSWY3DPEHPK3PXP">
+        <div id="totp-section" style="display:none">
+          <div class="fg" style="margin-top:4px">
+            <label data-i18n="fieldTotpLabel">2FA Kurulum Anahtarı</label>
+            <input class="fi" id="f-totp" placeholder="JBSWY3DPEHPK3PXP">
+          </div>
         </div>
       </div>
       <div class="modal-divider"></div>

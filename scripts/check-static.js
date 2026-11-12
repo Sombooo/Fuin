@@ -59,6 +59,7 @@ const JS_TARGETS = [
   'renderer/modules/recoveryController.js',
   'renderer/modules/changelogData.js',
   'renderer/modules/whatsNewController.js',
+  'renderer/modules/backupController.js',
   'browser-extension/background.js',
   'browser-extension/content.js',
   'browser-extension/popup.js',

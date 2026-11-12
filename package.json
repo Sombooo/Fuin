@@ -11,7 +11,7 @@
     "checksums": "node scripts/generate_checksums.js",
     "package": "electron-builder --dir",
     "build-mac": "electron-builder --mac",
-    "build-win": "electron-builder --win --x64",
+    "build-win": "electron-builder --win --x64 && npx electron-builder install-app-deps",
     "build-linux": "electron-builder --linux"
   },
   "devDependencies": {

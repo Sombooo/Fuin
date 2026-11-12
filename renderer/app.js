@@ -2119,6 +2119,9 @@ async function handleVerifyRecoveryKey() {
 
 // ── AUTOMATIC BACKUP HISTORY & SNAPSHOT RESTORE ───────────────────
 function formatBackupReason(reason) {
+  if (window.FuinBackupController?.formatBackupReason) {
+    return window.FuinBackupController.formatBackupReason(reason, t);
+  }
   if (reason === 'manual' || reason === 'manual-snapshot') return t('backupReasonManual');
   if (reason === 'pre-restore') return t('backupReasonPreRestore');
   if (reason === 'pre-reset' || reason === 'recovery-regen' || reason === 'recovery-rotation' || reason === 'recovery-save') return t('backupReasonRecovery');
@@ -2126,6 +2129,9 @@ function formatBackupReason(reason) {
 }
 
 function extractSnapshotsFromResponse(res) {
+  if (window.FuinBackupController?.extractSnapshotsFromResponse) {
+    return window.FuinBackupController.extractSnapshotsFromResponse(res);
+  }
   if (!res) return [];
   if (Array.isArray(res.backups)) return res.backups;
   if (Array.isArray(res.snapshots)) return res.snapshots;
@@ -2159,51 +2165,18 @@ async function renderBackupHistoryList() {
   if (!listEl || !api.getBackupList) return;
   try {
     const res = await api.getBackupList();
-    const snaps = extractSnapshotsFromResponse(res);
-    if (healBanner) {
-      if (res?.lastAutoHeal?.timestamp) {
-        const d = new Date(res.lastAutoHeal.timestamp).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'tr-TR');
-        healBanner.textContent = `${t('backupAutoHealNotice')} (${d})`;
-        healBanner.style.display = 'block';
-      } else {
-        healBanner.style.display = 'none';
-      }
-    }
-    if (!snaps.length) {
-      listEl.innerHTML = `<div style="font-family:var(--mono);font-size:12px;color:var(--mu);text-align:center;padding:20px 16px;">${esc(t('backupHistoryEmpty'))}</div>`;
+    if (window.FuinBackupController?.renderBackupHistoryItems) {
+      window.FuinBackupController.renderBackupHistoryItems({
+        listEl,
+        healBanner,
+        res,
+        lang: document.documentElement.lang,
+        t,
+        esc,
+        onRestoreSnapshot: restoreSnapshotByFilename,
+      });
       return;
     }
-    listEl.innerHTML = snaps.map(snap => {
-      const fname = snap.file || snap.filename || '';
-      const d = new Date(snap.timestamp).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'tr-TR');
-      const kb = Math.max(1, Math.round((snap.size || 0) / 1024));
-      const hashShort = (snap.fullSha256 || snap.sha256 || '').slice(0, 10) || '—';
-      const reasonLabel = formatBackupReason(snap.reason);
-      const isVerified = snap.verified !== false && Boolean(snap.sha256 || snap.fullSha256);
-      const badgeLabel = isVerified ? t('backupVerifiedBadge') : t('backupCorruptBadge');
-      return `
-        <div class="backup-history-item">
-          <div style="display:flex;flex-direction:column;gap:4px;overflow:hidden;flex:1;">
-            <div style="font-size:12px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span>${esc(d)}</span>
-              <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(90,154,110,0.14);color:var(--ac2);">${esc(reasonLabel)}</span>
-            </div>
-            <div style="font-family:var(--mono);font-size:11px;color:var(--mu);">
-              ${kb} KB · SHA-256: ${esc(hashShort)}… · ${esc(badgeLabel)}
-            </div>
-          </div>
-          <button type="button" class="btn-io" data-restore-snap="${esc(fname)}" style="font-size:11px;">
-            ${esc(t('backupRestoreBtn'))}
-          </button>
-        </div>
-      `;
-    }).join('');
-    listEl.querySelectorAll('[data-restore-snap]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const fname = btn.getAttribute('data-restore-snap');
-        if (fname) restoreSnapshotByFilename(fname);
-      });
-    });
   } catch {
     listEl.innerHTML = `<div style="font-family:var(--mono);font-size:12px;color:var(--red);text-align:center;padding:16px;">${esc(t('toastError'))}</div>`;
   }
@@ -2690,15 +2663,12 @@ async function exportEncryptedBackup() {
       entries: exportEntries
     };
     const ciphertext = await api.encrypt(payload, master);
-    const envelope = {
-      format: 'fuin-encrypted-backup',
-      version: 1,
-      exportedAt: Date.now(),
-      ciphertext
-    };
+    const content = window.FuinBackupController?.buildEncryptedBackupEnvelope
+      ? window.FuinBackupController.buildEncryptedBackupEnvelope(ciphertext)
+      : JSON.stringify({ format: 'fuin-encrypted-backup', version: 1, exportedAt: Date.now(), ciphertext }, null, 2);
     const datePart = new Date().toISOString().slice(0, 10);
     const ok = await api.exportFile({
-      content: JSON.stringify(envelope, null, 2),
+      content,
       defaultName: `fuin-kasa-${datePart}.fuin`,
       filters: [{ name: 'Fuin Encrypted Backup', extensions: ['fuin', 'bak', 'enc'] }]
     });
@@ -2716,22 +2686,7 @@ async function importEncryptedBackup() {
   if (!raw) return;
   let ciphertext = '';
   try {
-    const trimmed = String(raw).trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('"')) {
-      const parsedJson = JSON.parse(trimmed);
-      if (typeof parsedJson === 'string') {
-        ciphertext = parsedJson;
-      } else if (parsedJson && typeof parsedJson.ciphertext === 'string') {
-        ciphertext = parsedJson.ciphertext;
-      } else if (parsedJson && typeof parsedJson.data === 'string' && !parsedJson.iv) {
-        ciphertext = parsedJson.data;
-      }
-    } else {
-      ciphertext = trimmed;
-    }
-    if (typeof ciphertext !== 'string' || ciphertext.length < 80) {
-      throw new Error('invalid-format');
-    }
+    ciphertext = window.FuinBackupController.extractCiphertextFromFuinFile(raw);
   } catch {
     toast(t('toastInvalidFile') + ' (.fuin)');
     return;
@@ -2791,10 +2746,11 @@ async function exportJSON() {
 }
 async function exportCSV() {
   if(!confirm(t('confirmPlaintextExport'))) return;
-  const rows=['site,category,username,password,url,note'];
   const exportEntries = await Promise.all(entries.map(async e => ({ ...e, password: await memDecrypt(e.password), totp: await memDecrypt(e.totp) })));
-  exportEntries.forEach(e=>rows.push([e.site,e.category||'Diğer',e.username,e.password,e.url||'',e.note||''].map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',')));
-  await api.exportFile({content:rows.join('\n'),defaultName:'fuin-yedek.csv',filters:[{name:'CSV',extensions:['csv']}]});
+  const content = window.FuinBackupController?.buildPlaintextCsv
+    ? window.FuinBackupController.buildPlaintextCsv(exportEntries)
+    : ['site,category,username,password,url,note', ...exportEntries.map(e=>[e.site,e.category||'Diğer',e.username,e.password,e.url||'',e.note||''].map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+  await api.exportFile({content,defaultName:'fuin-yedek.csv',filters:[{name:'CSV',extensions:['csv']}]});
   toast(t('toastCsvExported'));
 }
 // ── İçe Aktarım İşleyicileri (FuinImporters Servisi ile) ───────────

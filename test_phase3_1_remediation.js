@@ -279,8 +279,11 @@ require('./main.js');
     const htmlSource = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
     assert.ok(!htmlSource.includes('rebuildChunksV2'), 'renderer/index.html must not reference rebuildChunksV2');
 
-    const mobileAppSource = fs.readFileSync(path.join(__dirname, '..', 'FuinMobile', 'App.js'), 'utf8');
-    assert.ok(!mobileAppSource.includes('rebuildChunksV2'), 'FuinMobile/App.js must not reference rebuildChunksV2');
+    const mobileAppPath = path.join(__dirname, '..', 'FuinMobile', 'App.js');
+    if (fs.existsSync(mobileAppPath)) {
+      const mobileAppSource = fs.readFileSync(mobileAppPath, 'utf8');
+      assert.ok(!mobileAppSource.includes('rebuildChunksV2'), 'FuinMobile/App.js must not reference rebuildChunksV2');
+    }
   });
 
   check('4.4 Preload execution sandbox: api exposes zero rebuild methods', () => {

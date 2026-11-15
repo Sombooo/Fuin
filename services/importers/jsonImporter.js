@@ -41,138 +41,292 @@
     });
   }
 
+  function deriveTitleFromUrl(url) {
+    if (!url) return '';
+    var androidMatch = String(url).match(/^android:\/\/[^@]+@([^/\s?#]+)/i);
+    if (androidMatch && androidMatch[1]) {
+      return androidMatch[1];
+    }
+    try {
+      return new URL(url).hostname || url;
+    } catch (_) {
+      return url;
+    }
+  }
+
+  function normalizeCardLastFour(cardNumber, providedLastFour) {
+    if (providedLastFour) return String(providedLastFour).trim();
+    var digits = String(cardNumber || '').replace(/\D/g, '');
+    return digits.length >= 4 ? digits.slice(-4) : '';
+  }
+
+  function formatBitwardenExpiry(expMonth, expYear) {
+    var m = expMonth != null ? String(expMonth).replace(/\D/g, '') : '';
+    var y = expYear != null ? String(expYear).replace(/\D/g, '') : '';
+    if (!m && !y) return '';
+    if (m && y) return m.padStart(2, '0') + '/' + (y.length > 2 ? y.slice(-2) : y.padStart(2, '0'));
+    return m || y;
+  }
+
+  function buildNormalizedEntry(fields, options) {
+    options = options || {};
+    var now = typeof options.now === 'number' && !isNaN(options.now) ? options.now : Date.now();
+    var id = (fields.id && typeof fields.id === 'string' && fields.id.length >= 10)
+      ? fields.id
+      : (typeof options.generateId === 'function' ? options.generateId() : generateUUID());
+    if (!id || typeof id !== 'string') id = generateUUID();
+
+    var created = typeof fields.created === 'number' && !isNaN(fields.created) && fields.created > 0 ? fields.created : now;
+    var updated = typeof fields.updated === 'number' && !isNaN(fields.updated) && fields.updated > 0 ? fields.updated : now;
+    var notes = fields.notes != null ? String(fields.notes) : '';
+
+    var entry = {
+      id: id,
+      type: fields.type || 'login',
+      title: fields.title,
+      site: fields.title,
+      username: fields.username || '',
+      password: fields.password || '',
+      url: fields.url || '',
+      notes: notes,
+      note: notes,
+      totp: fields.totp || '',
+      category: fields.category,
+      fav: Boolean(fields.fav),
+      reprompt: Boolean(fields.reprompt),
+      isDeleted: Boolean(fields.isDeleted),
+      deletedAt: fields.deletedAt || null,
+      created: created,
+      createdAt: fields.createdAt || created,
+      updated: updated,
+      updatedAt: fields.updatedAt || updated
+    };
+
+    if (entry.type === 'card') {
+      entry.cardholderName = fields.cardholderName || '';
+      entry.cardNumber = fields.cardNumber || '';
+      entry.cardExpiry = fields.cardExpiry || '';
+      entry.cardCvv = fields.cardCvv || '';
+      entry.cardPin = fields.cardPin || '';
+      if (fields.cardBrand) entry.cardBrand = fields.cardBrand;
+      var last4 = normalizeCardLastFour(entry.cardNumber, fields.cardLastFour);
+      if (last4) entry.cardLastFour = last4;
+    } else if (entry.type === 'note') {
+      entry.secureNote = fields.secureNote != null ? String(fields.secureNote) : notes;
+    }
+
+    return entry;
+  }
+
   /**
    * Convert a single Bitwarden item object to a normalized Fuin vault entry.
+   * Supports Login (type 1), Secure Note (type 2), and Card (type 3).
    * Defensively sanitizes null, undefined, or missing values for all fields.
    * @param {object} item Bitwarden item.
    * @param {Map<string, string>|object} [folderMap] Map of folder IDs to folder names.
    * @param {object} [options] Custom options.
-   * @returns {object|null} Normalized entry or null if invalid (missing title or password).
+   * @returns {object|null} Normalized entry or null if unsupported/invalid.
    */
   function bitwardenItemToEntry(item, folderMap, options) {
     if (!item || typeof item !== 'object') return null;
+
+    options = options || {};
+    var folderName = '';
+    if (item.folderId && folderMap) {
+      folderName = (typeof folderMap.get === 'function') ? folderMap.get(item.folderId) : folderMap[item.folderId];
+    }
+    var defaultCat = options.defaultCategory || 'Diğer';
+    var notes = item.notes != null ? String(item.notes) : '';
+    var title = String(item.name || '').trim();
+    var fav = Boolean(item.favorite);
+    var reprompt = Boolean(item.reprompt);
+
+    if (item.type === 3 && item.card && typeof item.card === 'object' && !item.login) {
+      var card = item.card;
+      var cardholderName = String(card.cardholderName || '').trim();
+      var cardNumber = String(card.number || '').trim();
+      var cardExpiry = formatBitwardenExpiry(card.expMonth, card.expYear);
+      var cardCvv = String(card.code || '').trim();
+      var cardPin = String(card.pin || '').trim();
+      var cardBrand = String(card.brand || '').trim();
+      if (!title) title = cardBrand || cardholderName;
+      if (!title || !(cardNumber || cardholderName || notes)) return null;
+
+      var cardCat = String(folderName || defaultCat).trim() || defaultCat;
+      return buildNormalizedEntry({
+        type: 'card',
+        title: title,
+        notes: notes,
+        category: cardCat,
+        fav: fav,
+        reprompt: reprompt,
+        cardholderName: cardholderName,
+        cardNumber: cardNumber,
+        cardExpiry: cardExpiry,
+        cardCvv: cardCvv,
+        cardPin: cardPin,
+        cardBrand: cardBrand
+      }, options);
+    }
+
+    if (item.type === 2 && !item.login) {
+      if (!title || !notes) return null;
+      var noteCat = String(folderName || defaultCat).trim() || defaultCat;
+      return buildNormalizedEntry({
+        type: 'note',
+        title: title,
+        notes: notes,
+        secureNote: notes,
+        category: noteCat,
+        fav: fav,
+        reprompt: reprompt
+      }, options);
+    }
+
     var login = item.login;
     if (!login || typeof login !== 'object') return null;
 
-    options = options || {};
-    var title = String(item.name || '').trim();
     var password = login.password != null ? String(login.password) : '';
-
     var firstUri = Array.isArray(login.uris) && login.uris.length > 0 ? login.uris[0] : null;
     var rawUrl = (firstUri && typeof firstUri === 'object') ? firstUri.uri : (typeof firstUri === 'string' ? firstUri : '');
     var url = String(rawUrl || '').trim();
 
-    // Fallback: URL hostname or URL as title if name is empty
     if (!title && url) {
-      try {
-        title = new URL(url).hostname || url;
-      } catch (_) {
-        title = url;
-      }
+      title = deriveTitleFromUrl(url);
     }
 
     if (!title || !password) return null;
 
     var username = (login.username != null ? String(login.username) : '').trim();
-    var notes = item.notes != null ? String(item.notes) : '';
     var totp = (login.totp != null ? String(login.totp) : '').trim();
+    var category = String(folderName || defaultCat).trim() || defaultCat;
 
-    var folderName = '';
-    if (item.folderId && folderMap) {
-      folderName = (typeof folderMap.get === 'function') ? folderMap.get(item.folderId) : folderMap[item.folderId];
-    }
-    var category = String(folderName || options.defaultCategory || 'Diğer').trim() || 'Diğer';
-    var fav = Boolean(item.favorite);
-
-    var now = typeof options.now === 'number' && !isNaN(options.now) ? options.now : Date.now();
-    var id = typeof options.generateId === 'function' ? options.generateId() : generateUUID();
-    if (!id || typeof id !== 'string') id = generateUUID();
-
-    return {
-      id: id,
+    return buildNormalizedEntry({
+      type: 'login',
       title: title,
-      site: title,
       username: username,
       password: password,
       url: url,
       notes: notes,
-      note: notes,
       totp: totp,
       category: category,
       fav: fav,
-      isDeleted: false,
-      deletedAt: null,
-      created: now,
-      createdAt: now,
-      updated: now,
-      updatedAt: now
-    };
+      reprompt: reprompt
+    }, options);
   }
 
   /**
    * Convert a single Fuin item/entry object to a normalized Fuin vault entry.
+   * Preserves login, card, and secure note entries without dropping card/note items.
    * Defensively sanitizes null, undefined, or missing values for all fields.
    * @param {object} e Raw Fuin entry object.
    * @param {object} [options] Custom options.
-   * @returns {object|null} Normalized entry or null if invalid (missing title or password).
+   * @returns {object|null} Normalized entry or null if invalid.
    */
   function fuinItemToEntry(e, options) {
     if (!e || typeof e !== 'object') return null;
 
     options = options || {};
+    var defaultCat = options.defaultCategory || 'Diğer';
+    var rawType = String(e.type || '').trim().toLowerCase();
+    var entryType = (rawType === 'card' || rawType === 'note' || rawType === 'login')
+      ? rawType
+      : (e.cardNumber ? 'card' : (e.secureNote !== undefined && !e.password ? 'note' : 'login'));
+
     var title = String(e.site || e.title || '').trim();
+    var notes = String(e.note != null ? e.note : (e.notes != null ? e.notes : ''));
+    var category = String(e.category || defaultCat).trim() || defaultCat;
+    var fav = Boolean(e.fav);
+    var reprompt = Boolean(e.reprompt);
+    var isDeleted = Boolean(e.isDeleted);
+    var d = e.deletedAt != null ? Number(e.deletedAt) : null;
+    var deletedAt = (typeof d === 'number' && !isNaN(d) && d > 0) ? d : null;
+    var c = Number(e.created || e.createdAt);
+    var created = !isNaN(c) && c > 0 ? c : undefined;
+    var u = Number(e.updated || e.updatedAt);
+    var updated = !isNaN(u) && u > 0 ? u : undefined;
+
+    if (entryType === 'card') {
+      var cardholderName = String(e.cardholderName || e.username || '').trim();
+      var cardNumber = String(e.cardNumber || '').trim();
+      var cardExpiry = String(e.cardExpiry || '').trim();
+      var cardCvv = String(e.cardCvv || '').trim();
+      var cardPin = String(e.cardPin || '').trim();
+      var cardBrand = String(e.cardBrand || '').trim();
+      if (!title) title = cardBrand || cardholderName;
+      if (!title || !(cardNumber || cardholderName || cardExpiry || cardCvv || cardPin || notes)) return null;
+
+      return buildNormalizedEntry({
+        id: e.id,
+        type: 'card',
+        title: title,
+        notes: notes,
+        category: category,
+        fav: fav,
+        reprompt: reprompt,
+        isDeleted: isDeleted,
+        deletedAt: deletedAt,
+        created: created,
+        updated: updated,
+        cardholderName: cardholderName,
+        cardNumber: cardNumber,
+        cardExpiry: cardExpiry,
+        cardCvv: cardCvv,
+        cardPin: cardPin,
+        cardBrand: cardBrand,
+        cardLastFour: e.cardLastFour
+      }, options);
+    }
+
+    if (entryType === 'note') {
+      var secureNote = e.secureNote != null ? String(e.secureNote) : notes;
+      if (!title || !secureNote) return null;
+
+      return buildNormalizedEntry({
+        id: e.id,
+        type: 'note',
+        title: title,
+        notes: notes || secureNote,
+        secureNote: secureNote,
+        category: category,
+        fav: fav,
+        reprompt: reprompt,
+        isDeleted: isDeleted,
+        deletedAt: deletedAt,
+        created: created,
+        updated: updated
+      }, options);
+    }
+
     var password = e.password != null ? String(e.password) : '';
     var url = String(e.url || '').trim();
 
     if (!title && url) {
-      try {
-        title = new URL(url).hostname || url;
-      } catch (_) {
-        title = url;
-      }
+      title = deriveTitleFromUrl(url);
     }
 
     if (!title || !password) return null;
 
     var username = (e.username != null ? String(e.username) : '').trim();
-    var notes = String(e.note != null ? e.note : (e.notes != null ? e.notes : ''));
     var totp = (e.totp != null ? String(e.totp) : '').trim();
-    var category = String(e.category || options.defaultCategory || 'Diğer').trim() || 'Diğer';
-    var fav = Boolean(e.fav);
-    var isDeleted = Boolean(e.isDeleted);
-    var d = e.deletedAt != null ? Number(e.deletedAt) : null;
-    var deletedAt = (typeof d === 'number' && !isNaN(d) && d > 0) ? d : null;
 
-    var now = typeof options.now === 'number' && !isNaN(options.now) ? options.now : Date.now();
-    var c = Number(e.created || e.createdAt);
-    var created = !isNaN(c) && c > 0 ? c : now;
-    var u = Number(e.updated || e.updatedAt);
-    var updated = !isNaN(u) && u > 0 ? u : now;
-
-    var id = (e.id && typeof e.id === 'string' && e.id.length >= 10)
-      ? e.id
-      : (typeof options.generateId === 'function' ? options.generateId() : generateUUID());
-    if (!id || typeof id !== 'string') id = generateUUID();
-
-    return {
-      id: id,
+    return buildNormalizedEntry({
+      id: e.id,
+      type: 'login',
       title: title,
-      site: title,
       username: username,
       password: password,
       url: url,
       notes: notes,
-      note: notes,
       totp: totp,
       category: category,
       fav: fav,
+      reprompt: reprompt,
       isDeleted: isDeleted,
       deletedAt: deletedAt,
       created: created,
-      createdAt: created,
-      updated: updated,
-      updatedAt: updated
-    };
+      updated: updated
+    }, options);
   }
 
   /**
@@ -302,10 +456,24 @@
 
     var existingEntries = Array.isArray(options.existingEntries) ? options.existingEntries : [];
     var isDuplicate = function (candidate) {
+      var candType = candidate.type || 'login';
       return existingEntries.some(function (e) {
-        return e && (e.site === candidate.site || e.title === candidate.title) &&
-          e.username === candidate.username &&
-          e.password === candidate.password;
+        if (!e || e.isDeleted) return false;
+        var eType = e.type || 'login';
+        if (eType !== candType) return false;
+        if (e.site !== candidate.site && e.title !== candidate.title) return false;
+        if (candType === 'card') {
+          var eNum = String(e.cardNumber || '').replace(/[\s-]/g, '');
+          var cNum = String(candidate.cardNumber || '').replace(/[\s-]/g, '');
+          return eNum === cNum && (e.cardholderName || '') === (candidate.cardholderName || '');
+        }
+        if (candType === 'note') {
+          var eNote = e.secureNote != null ? String(e.secureNote) : String(e.note || e.notes || '');
+          var cNote = candidate.secureNote != null ? String(candidate.secureNote) : String(candidate.note || candidate.notes || '');
+          return eNote === cNote;
+        }
+        return (e.username || '') === (candidate.username || '') &&
+          (e.password || '') === (candidate.password || '');
       });
     };
 

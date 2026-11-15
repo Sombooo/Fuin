@@ -35,6 +35,18 @@
 
   var RFC_BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
+  var _customCrypto = null;
+  var _customBuffer = null;
+
+  /**
+   * Registers a platform crypto provider (e.g. react-native-quick-crypto in React Native).
+   * Keeps the core UMD engine runtime-agnostic without hardcoded native requires.
+   */
+  function setCryptoProvider(cryptoProvider, bufferClass) {
+    _customCrypto = cryptoProvider || null;
+    _customBuffer = bufferClass || null;
+  }
+
   /**
    * Detects Node.js runtime environment with native crypto module.
    */
@@ -51,12 +63,25 @@
   }
 
   function getNodeCrypto() {
+    if (_customCrypto && typeof _customCrypto.createHmac === 'function') {
+      return _customCrypto;
+    }
     if (!hasNodeCrypto()) return null;
     try {
       return require('crypto');
     } catch (_) {
       return null;
     }
+  }
+
+  function getBufferClass() {
+    if (_customBuffer && typeof _customBuffer.from === 'function') {
+      return _customBuffer;
+    }
+    if (typeof Buffer !== 'undefined' && typeof Buffer.from === 'function') {
+      return Buffer;
+    }
+    return null;
   }
 
   /**
@@ -97,6 +122,105 @@
       }
     }
     return str;
+  }
+
+  /**
+   * Parses an otpauth://totp/... QR payload or raw Base32 secret string.
+   * Extracts secret, optional issuer, account label, digits, and period.
+   *
+   * @param {string} input
+   * @returns {{ valid: boolean, secret: string, issuer: string, account: string, digits: number, period: number, error?: string }}
+   */
+  function parseOtpAuthUri(input) {
+    if (typeof input !== 'string' || !input.trim()) {
+      return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'empty' };
+    }
+    var trimmed = input.trim();
+    if (/^otpauth:\/\//i.test(trimmed)) {
+      if (!/^otpauth:\/\/totp(\/|\?|$)/i.test(trimmed)) {
+        return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'unsupported-otp-type' };
+      }
+      var rest = trimmed.replace(/^otpauth:\/\/totp\/?/i, '');
+      var qIdx = rest.indexOf('?');
+      var rawLabel = qIdx >= 0 ? rest.slice(0, qIdx) : rest;
+      var queryStr = qIdx >= 0 ? rest.slice(qIdx + 1) : '';
+
+      var decodedLabel = rawLabel;
+      try { decodedLabel = decodeURIComponent(rawLabel); } catch (_) {}
+
+      var labelIssuer = '';
+      var labelAccount = decodedLabel.trim();
+      var colonIdx = decodedLabel.indexOf(':');
+      if (colonIdx >= 0) {
+        labelIssuer = decodedLabel.slice(0, colonIdx).trim();
+        labelAccount = decodedLabel.slice(colonIdx + 1).trim();
+      }
+
+      var params = {};
+      if (queryStr) {
+        var pairs = queryStr.split('&');
+        for (var i = 0; i < pairs.length; i++) {
+          if (!pairs[i]) continue;
+          var eqIdx = pairs[i].indexOf('=');
+          var rawK = eqIdx >= 0 ? pairs[i].slice(0, eqIdx) : pairs[i];
+          var rawV = eqIdx >= 0 ? pairs[i].slice(eqIdx + 1) : '';
+          try {
+            var k = decodeURIComponent(rawK).toLowerCase();
+            var v = decodeURIComponent(rawV.replace(/\+/g, ' '));
+            params[k] = v;
+          } catch (_) {}
+        }
+      }
+
+      var rawSecret = String(params.secret || '').toUpperCase().replace(/[\s=-]/g, '');
+      if (!rawSecret || !/^[A-Z2-7]+$/.test(rawSecret)) {
+        return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'invalid-secret' };
+      }
+      try {
+        if (base32Decode(rawSecret).length === 0) {
+          return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'invalid-secret' };
+        }
+      } catch (_) {
+        return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'invalid-secret' };
+      }
+
+      var digits = parseInt(params.digits, 10);
+      if (!Number.isFinite(digits) || digits < 6 || digits > 8) digits = 6;
+      var period = parseInt(params.period, 10);
+      if (!Number.isFinite(period) || period <= 0) period = 30;
+
+      return {
+        valid: true,
+        secret: rawSecret,
+        issuer: String(params.issuer || labelIssuer || '').trim(),
+        account: String(labelAccount || '').trim(),
+        digits: digits,
+        period: period
+      };
+    }
+
+    if (/[/:{}]/.test(trimmed)) {
+      return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'invalid-totp-qr' };
+    }
+    var cleaned = trimmed.toUpperCase().replace(/[\s=-]/g, '');
+    if (cleaned.length < 8 || !/^[A-Z2-7]+$/.test(cleaned)) {
+      return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'invalid-totp-qr' };
+    }
+    try {
+      if (base32Decode(cleaned).length < 5) {
+        return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'invalid-totp-qr' };
+      }
+    } catch (_) {
+      return { valid: false, secret: '', issuer: '', account: '', digits: 6, period: 30, error: 'invalid-totp-qr' };
+    }
+    return {
+      valid: true,
+      secret: cleaned,
+      issuer: '',
+      account: '',
+      digits: 6,
+      period: 30
+    };
   }
 
   /**
@@ -241,8 +365,9 @@
     }
     var algoMap = { 'SHA-1': 'sha1', 'SHA-256': 'sha256', 'SHA-512': 'sha512' };
     var algo = algoMap[algorithm.toUpperCase()] || 'sha1';
-    var hmac = nodeCrypto.createHmac(algo, Buffer.from(keyBytes));
-    hmac.update(Buffer.from(messageBytes));
+    var Buf = getBufferClass();
+    var hmac = nodeCrypto.createHmac(algo, Buf ? Buf.from(keyBytes) : keyBytes);
+    hmac.update(Buf ? Buf.from(messageBytes) : messageBytes);
     return new Uint8Array(hmac.digest());
   }
 
@@ -515,8 +640,10 @@
     verifyTOTP: verifyTOTP,
     formatToken: formatToken,
     extractSecret: extractSecret,
+    parseOtpAuthUri: parseOtpAuthUri,
     computeHMACNode: computeHMACNode,
     computeHMACWebCrypto: computeHMACWebCrypto,
+    setCryptoProvider: setCryptoProvider,
     // Legacy renderer aliases
     getTOTP: getTOTP,
     b32dec: base32Decode

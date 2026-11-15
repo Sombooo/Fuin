@@ -9,11 +9,64 @@
 
   const CHANGELOG_ENTRIES = [
     {
+      version: '1.0.0-beta.11',
+      tag: 'v1.0.0-beta.11',
+      date: 'Kasım 2026',
+      dateEn: 'November 2026',
+      isCurrent: true,
+      title: '2FA QR Tarayıcı, Eklenti Protokol Kontrolü & Kart/Not Kopyalama ve Taşınabilir Yedek Eşliği',
+      titleEn: '2FA QR Scanner, Extension Protocol Handshake & Card/Note Copy, and Portable Backup Parity',
+      summary: 'Native-Host ↔ Eklenti protokol sürüm el sıkışması, eklenti açılır penceresinde sıfır-bilgi Kredi Kartı & Güvenli Not kopyalama, Mobil 2FA QR tarayıcı, tek adım biyometrik kilit açma, çapraz platform .fuin yedekleme eşliği ve LAN Eşitleme Hotspot rehberliği sunar.',
+      summaryEn: 'Brings Native-Host <-> Extension protocol version handshake, zero-knowledge Credit Card & Secure Note copy in the extension popup, Mobile 2FA QR scanner, single-step biometric unlock, cross-platform .fuin backup parity, and LAN Sync AP Isolation / Hotspot guidance.',
+      highlights: [
+        {
+          badge: 'extension',
+          badgeText: 'EKLENTİ & KÖPRÜ',
+          badgeTextEn: 'EXTENSION & BRIDGE',
+          icon: 'puzzle',
+          title: 'Protokol Sürüm Kontrolü & Eklentide Kart/Not Kopyalama',
+          titleEn: 'Protocol Version Handshake & Extension Card/Note Copy',
+          desc: 'Native Host ve tarayıcı eklentisi arasında zorunlu protokol el sıkışması (PROTOCOL_VERSION=1) devreye alındı; eklenti açılır penceresine Girişler, Kartlar ve Notlar sekmeleri eklenerek 30 sn otomatik temizlemeli sıfır-bilgi kopyalama sağlandı.',
+          descEn: 'Enforces protocol version handshake (PROTOCOL_VERSION=1) between Native Host and browser extension; adds Logins, Cards, and Notes tabs in the popup with 30s auto-clearing zero-knowledge copy via Desktop.'
+        },
+        {
+          badge: 'crypto',
+          badgeText: 'İÇE AKTAR & 2FA',
+          badgeTextEn: 'IMPORT & 2FA',
+          icon: 'key',
+          title: 'Evrensel 2FA QR Çözücü & Taşınabilir .fuin / CSV / JSON Aktarım',
+          titleEn: 'Universal 2FA QR Parser & Portable .fuin / CSV / JSON Import Parity',
+          desc: 'Masaüstü ve Mobilde otpauth:// QR URI ayrıştırma, Bitwarden/1Password/Chrome CSV-JSON kart ve güvenli not içe aktarma ile Argon2id/PBKDF2 çapraz şifreli .fuin yedek uyumluluğu tamamlandı.',
+          descEn: 'Unifies otpauth:// QR URI parsing, Bitwarden/1Password/Chrome CSV & JSON card/note importers, and cross-platform Argon2id/PBKDF2 .fuin backup portability across Desktop and Mobile.'
+        },
+        {
+          badge: 'mobile',
+          badgeText: 'MOBİL',
+          badgeTextEn: 'MOBILE',
+          icon: 'smartphone',
+          title: 'Fuin Mobile 2FA QR Tarayıcı, Canlı TOTP & Tek Adım Biyometrik Kilit',
+          titleEn: 'Fuin Mobile 2FA QR Scanner, Live TOTP & Single-Step Biometric Unlock',
+          desc: 'Android tam ekran kamera düzeni düzeltildi, canlı 30 sn 2FA TOTP sayacı kartlara eklendi ve kilit açılışındaki çift biyometrik onay tek adıma indirildi.',
+          descEn: 'Fixes full-screen Android QR camera layout, adds live 30s 2FA TOTP countdown codes directly to vault items, and streamlines unlock to a single biometric prompt.'
+        },
+        {
+          badge: 'security',
+          badgeText: 'AĞ & GÜVENLİK',
+          badgeTextEn: 'SYNC & SECURITY',
+          icon: 'shield-check',
+          title: 'AP İzolasyonu (Hotspot) Rehberliği & Reprompt Koruması',
+          titleEn: 'LAN Sync AP Isolation Guidance & Reprompt Protection',
+          desc: 'Kurumsal/yurt Wi-Fi ağlarında LAN eşitlemesi zaman aşımı ve hata pencerelerine Kişisel Erişim Noktası (Hotspot) rehberliği eklendi; korumalı kart/not kayıtlarının eklentiden sessiz kopyalanması engellendi.',
+          descEn: 'Adds Personal Hotspot guidance for AP-isolated corporate/dorm Wi-Fi during LAN sync and blocks silent extension copy on reprompt-protected cards and notes.'
+        }
+      ]
+    },
+    {
       version: '1.0.0-beta.10',
       tag: 'v1.0.0-beta.10',
       date: 'Kasım 2026',
       dateEn: 'November 2026',
-      isCurrent: true,
+      isCurrent: false,
       title: 'Kredi Kartı & Güvenli Not Kasası, Otomatik Formatlama ve Kurumsal Güvenlik Denetimi',
       titleEn: 'Credit Card & Secure Note Vault, Auto-Formatting, and Enterprise Security Audit',
       summary: 'Kredi kartı ve şifreli güvenli not kasa türleri, otomatik 4\'lü kart numarası/CVV/SKT formatlayıcı, dinamik TR/EN anlık dil desteği ve kurumsal seviye siber güvenlik denetimi doğrulaması getirir.',

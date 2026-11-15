@@ -19,31 +19,75 @@ async function checkHostHandshake(force = false) {
   }
   const res = await askFuin({
     type: 'handshake',
-    clientVersion: chrome.runtime?.getManifest?.()?.version || '1.0.0',
+    clientVersion: chrome.runtime?.getManifest?.()?.version || '1.0.3',
     protocolVersion: PROTOCOL_VERSION
   });
   if (res && res.ok) {
+    const remoteProto = res.protocolVersion != null ? Number(res.protocolVersion) : PROTOCOL_VERSION;
+    const compatible = (res.compatible !== false) && (remoteProto === PROTOCOL_VERSION);
     hostHandshakeState = {
       ok: true,
-      compatible: res.compatible !== false,
-      protocolVersion: res.protocolVersion || 1,
+      compatible,
+      protocolVersion: remoteProto,
       appVersion: res.appVersion || 'unknown',
       unlocked: !!res.unlocked,
       lastChecked: now,
-      error: null
+      error: compatible ? null : 'protocol-mismatch'
     };
   } else {
+    const hostProto = res?.hostProtocolVersion != null ? Number(res.hostProtocolVersion) : null;
+    const compatible = (res?.error === 'protocol-mismatch')
+      ? false
+      : (hostProto !== null ? hostProto === PROTOCOL_VERSION : true);
     hostHandshakeState = {
       ok: false,
-      compatible: res?.hostOk ? true : false,
-      protocolVersion: res?.hostProtocolVersion || null,
+      compatible,
+      protocolVersion: hostProto,
       appVersion: null,
       unlocked: false,
       lastChecked: now,
-      error: res?.error || 'unreachable'
+      error: compatible ? (res?.error || 'unreachable') : 'protocol-mismatch'
     };
   }
   return hostHandshakeState;
+}
+
+async function askFuinWithProtocol(payload) {
+  if (hostHandshakeState && hostHandshakeState.compatible === false) {
+    const refreshed = await checkHostHandshake(true);
+    if (refreshed && refreshed.compatible === false) {
+      return {
+        error: 'protocol-mismatch',
+        protocolVersion: refreshed.protocolVersion,
+        clientProtocolVersion: PROTOCOL_VERSION,
+        appVersion: refreshed.appVersion
+      };
+    }
+  }
+  const res = await askFuin(payload);
+  const resProto = res?.protocolVersion ?? res?.hostProtocolVersion;
+  const mismatchProto = resProto != null && Number.isFinite(Number(resProto)) && Number(resProto) !== PROTOCOL_VERSION;
+  if (res && (res.error === 'protocol-mismatch' || mismatchProto)) {
+    const remoteVer = resProto != null ? Number(resProto) : null;
+    hostHandshakeState = {
+      ok: false,
+      compatible: false,
+      protocolVersion: remoteVer,
+      appVersion: res.appVersion || null,
+      unlocked: false,
+      lastChecked: Date.now(),
+      error: 'protocol-mismatch'
+    };
+    if (res.error !== 'protocol-mismatch') {
+      return {
+        error: 'protocol-mismatch',
+        protocolVersion: remoteVer,
+        clientProtocolVersion: PROTOCOL_VERSION,
+        appVersion: res.appVersion || null
+      };
+    }
+  }
+  return res;
 }
 
 try {
@@ -51,6 +95,9 @@ try {
 } catch {}
 
 function askFuin(payload) {
+  const wirePayload = (payload && typeof payload === 'object' && payload.protocolVersion === undefined)
+    ? { ...payload, protocolVersion: PROTOCOL_VERSION }
+    : payload;
   return new Promise((resolve) => {
     const api = typeof browser !== 'undefined' && browser.runtime?.sendNativeMessage ? browser : chrome;
     let resolved = false;
@@ -61,7 +108,7 @@ function askFuin(payload) {
       }
     };
     try {
-      const p = api.runtime.sendNativeMessage(HOST_NAME, payload, (response) => {
+      const p = api.runtime.sendNativeMessage(HOST_NAME, wirePayload, (response) => {
         if (chrome.runtime?.lastError) {
           console.error('[Fuin] Native messaging hatası:', chrome.runtime.lastError.message);
           safeResolve({ error: 'native-host-unreachable', detail: chrome.runtime.lastError.message });
@@ -417,20 +464,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   
   if (isInternalExtension) {
     if (msg.type === 'fuin-lookup' && msg.domain) {
-      askFuin({ type: 'lookup', domain: String(msg.domain).slice(0, 253) }).then(sendResponse);
+      askFuinWithProtocol({ type: 'lookup', domain: String(msg.domain).slice(0, 253) }).then(sendResponse);
       return true;
     }
     if (msg.type === 'fuin-reveal' && msg.entryId && msg.domain) {
-      askFuin({ type: 'reveal', entryId: String(msg.entryId).slice(0, 128), domain: String(msg.domain).slice(0, 253) }).then(sendResponse);
+      askFuinWithProtocol({ type: 'reveal', entryId: String(msg.entryId).slice(0, 128), domain: String(msg.domain).slice(0, 253) }).then(sendResponse);
       return true;
     }
-    if (msg.type === 'fuin-copy-secure' && msg.entryId && msg.domain) {
-      askFuin({
+    if (msg.type === 'fuin-copy-secure' && msg.entryId) {
+      const allowedFields = new Set(['username', 'password', 'cardNumber', 'cardCvv', 'secureNote']);
+      const field = allowedFields.has(msg.field) ? msg.field : 'password';
+      if ((field === 'username' || field === 'password') && !msg.domain) return;
+      askFuinWithProtocol({
         type: 'copy-secure',
         entryId: String(msg.entryId).slice(0, 128),
-        domain: String(msg.domain).slice(0, 253),
-        field: msg.field === 'username' ? 'username' : 'password'
+        domain: String(msg.domain || '').slice(0, 253),
+        field
       }).then(sendResponse);
+      return true;
+    }
+    if (msg.type === 'fuin-list-vault-items') {
+      askFuinWithProtocol({ type: 'list-vault-items' }).then(sendResponse);
       return true;
     }
     if (msg.type === 'fuin-open-app') {
@@ -457,7 +511,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'fuin-save-credential' && msg.password) {
       if (typeof msg.password !== 'string' || msg.password.length > 1024) return;
       const tabId = msg.tabId;
-      askFuin({
+      askFuinWithProtocol({
         type: 'save-credential',
         domain: String(msg.domain || '').slice(0, 253),
         username: String(msg.username || '').slice(0, 512),
@@ -508,7 +562,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!actualDomain || typeof actualDomain !== 'string' || actualDomain.length > 253) return;
 
   if (msg.type === 'fuin-lookup') {
-    askFuin({ type: 'lookup', domain: actualDomain }).then(sendResponse);
+    askFuinWithProtocol({ type: 'lookup', domain: actualDomain }).then(sendResponse);
     return true;
   }
   if (msg.type === 'fuin-open-app') {
@@ -565,7 +619,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const targetDom = normDomainKey(existing?.domain || actualDomain);
     if (targetDom && targetDom.length <= 253) {
       excludedDomainsMemory.add(targetDom);
-      askFuin({ type: 'exclude-domain', domain: targetDom }).catch(() => {});
+      askFuinWithProtocol({ type: 'exclude-domain', domain: targetDom }).catch(() => {});
     }
     clearPendingForTab(tabId, true);
     sendResponse({ ok: true });
@@ -588,7 +642,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ shouldPrompt: false, dismissed: true });
       return true;
     }
-    askFuin({
+    askFuinWithProtocol({
       type: 'check-save-candidate',
       domain: actualDomain,
       username: cleanUser,
@@ -631,7 +685,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'fuin-check-save-candidate' && msg.password) {
     if (typeof msg.password !== 'string' || msg.password.length > 1024) return;
-    askFuin({
+    askFuinWithProtocol({
       type: 'check-save-candidate',
       domain: actualDomain,
       username: typeof msg.username === 'string' ? msg.username.slice(0, 512) : '',
@@ -648,7 +702,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const saveDomain = (pendingItem && isSameSiteSafe(actualDomain, pendingItem.domain))
       ? pendingItem.domain
       : actualDomain;
-    askFuin({
+    askFuinWithProtocol({
       type: 'save-credential',
       domain: saveDomain,
       username: cleanUser,
@@ -685,7 +739,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     };
     pendingReveal = currentReveal;
 
-    askFuin({ type: 'reveal', entryId: msg.entryId, domain: actualDomain }).then((res) => {
+    askFuinWithProtocol({ type: 'reveal', entryId: msg.entryId, domain: actualDomain }).then((res) => {
       if (pendingReveal === currentReveal) {
         pendingReveal = null;
       }

@@ -268,7 +268,7 @@ async function unlock() {
   if (exists && window.FuinWhatsNewController) {
     (async () => {
       try {
-        const curVer = (window.kekkai?.getAppVersion ? await window.kekkai.getAppVersion() : '1.0.0-beta.10') || '1.0.0-beta.10';
+        const curVer = (window.kekkai?.getAppVersion ? await window.kekkai.getAppVersion() : '1.0.0-beta.11') || '1.0.0-beta.11';
         window.FuinWhatsNewController.checkOnUnlock(curVer);
       } catch {}
     })();
@@ -515,6 +515,54 @@ api.onExtLookupRequest((req) => {
   api.extRespond(req.requestId, matches);
 });
 
+api.onExtListVaultItemsRequest?.(async (req) => {
+  if (!master) {
+    api.extRespond(req.requestId, { cards: [], notes: [] });
+    return;
+  }
+  const cards = [];
+  const notes = [];
+  for (const e of entries) {
+    if (e.isDeleted) continue;
+    if (e.type === 'card') {
+      let last4 = '••••';
+      let brand = 'CARD';
+      if (!e.reprompt) {
+        if (e.cardLastFour) last4 = String(e.cardLastFour).slice(-4);
+        if (e.cardBrand && e.cardBrand !== 'generic') brand = String(e.cardBrand).toUpperCase();
+        if (e.cardNumber && (last4 === '••••' || brand === 'CARD')) {
+          try {
+            const rawNum = await memDecrypt(e.cardNumber);
+            const digits = String(rawNum || '').replace(/\D+/g, '');
+            if (digits.length >= 4) last4 = digits.slice(-4);
+            if (/^9792/.test(digits)) brand = 'TROY';
+            else if (/^4/.test(digits)) brand = 'VISA';
+            else if (/^(5[1-5]|2[2-7])/.test(digits)) brand = 'MC';
+            else if (/^3[47]/.test(digits)) brand = 'AMEX';
+          } catch {}
+        }
+      }
+      cards.push({
+        id: e.id,
+        title: e.site || '',
+        cardholderName: e.reprompt ? '' : (e.cardholderName || ''),
+        cardExpiry: e.reprompt ? '' : (e.cardExpiry || ''),
+        last4,
+        brand,
+        reprompt: Boolean(e.reprompt)
+      });
+    } else if (e.type === 'note') {
+      notes.push({
+        id: e.id,
+        title: e.site || '',
+        category: e.category || '',
+        reprompt: Boolean(e.reprompt)
+      });
+    }
+  }
+  api.extRespond(req.requestId, { cards, notes });
+});
+
 api.onExtRevealRequest(async (req) => {
   if (pendingExtReveal !== null) {
     api.extRespond(req.requestId, { error: 'busy' });
@@ -560,7 +608,8 @@ api.onExtCopySecureRequest?.(async (req) => {
     api.extRespond(req.requestId, { error: 'not-found' });
     return;
   }
-  if (!domainMatches(entry, req.domain)) {
+  const isVaultItemField = req.field === 'cardNumber' || req.field === 'cardCvv' || req.field === 'secureNote';
+  if (!isVaultItemField && !domainMatches(entry, req.domain)) {
     api.extRespond(req.requestId, { error: 'domain-mismatch' });
     return;
   }
@@ -575,6 +624,36 @@ api.onExtCopySecureRequest?.(async (req) => {
     return;
   }
   try {
+    if (req.field === 'cardNumber') {
+      if (entry.type !== 'card' || !entry.cardNumber) {
+        api.extRespond(req.requestId, { error: 'not-found' });
+        return;
+      }
+      const rawNum = await memDecrypt(entry.cardNumber);
+      await copySecure(String(rawNum || '').replace(/\s+/g, ''), t('toastCardCopied'), 30000);
+      api.extRespond(req.requestId, { ok: true });
+      return;
+    }
+    if (req.field === 'cardCvv') {
+      if (entry.type !== 'card' || !entry.cardCvv) {
+        api.extRespond(req.requestId, { error: 'not-found' });
+        return;
+      }
+      const rawCvv = await memDecrypt(entry.cardCvv);
+      await copySecure(String(rawCvv || '').trim(), t('toastCopiedDefault'), 30000);
+      api.extRespond(req.requestId, { ok: true });
+      return;
+    }
+    if (req.field === 'secureNote') {
+      if (entry.type !== 'note') {
+        api.extRespond(req.requestId, { error: 'not-found' });
+        return;
+      }
+      const rawNote = await memDecrypt(entry.secureNote || entry.note || entry.password);
+      await copySecure(String(rawNote || ''), t('toastCopiedDefault'), 30000);
+      api.extRespond(req.requestId, { ok: true });
+      return;
+    }
     const pw = await memDecrypt(entry.password);
     await copySecure(pw, t('toastPwCopied'), 30000);
     api.extRespond(req.requestId, { ok: true });
@@ -2773,19 +2852,20 @@ async function checkPwned(pw) {
 }
 
 async function runHIBPScan() {
-  if(!entries.length){toast(t('hibpNoEntries'));return;}
+  const scanTargets = entries.filter(e => e && !e.isDeleted && !e.deletedAt && (!e.type || e.type === 'login') && e.password);
+  if(!scanTargets.length){toast(t('hibpNoEntries'));return;}
   const btn=document.getElementById('scanBtn');
   btn.disabled=true; btn.textContent=t('healthScanning');
   const el=document.getElementById('hibpResults');
-  el.innerHTML=`<div style="margin-bottom:14px"><div class="scan-bar-wrap"><div class="scan-bar" id="scanBar" style="width:0%"></div></div><div class="scan-status" id="scanSt">0 / ${entries.length}</div></div>`;
+  el.innerHTML=`<div style="margin-bottom:14px"><div class="scan-bar-wrap"><div class="scan-bar" id="scanBar" style="width:0%"></div></div><div class="scan-status" id="scanSt">0 / ${scanTargets.length}</div></div>`;
   const breached=[],errors=[];
-  for(let i=0;i<entries.length;i++){
+  for(let i=0;i<scanTargets.length;i++){
     if (!master || !sessionKey) return;
-    const e=entries[i];
+    const e=scanTargets[i];
     const sb=document.getElementById('scanBar');
     const ss=document.getElementById('scanSt');
-    if(sb)sb.style.width=Math.round(i/entries.length*100)+'%';
-    if(ss)ss.textContent=`${i+1} / ${entries.length} — ${esc(e.site)}`;
+    if(sb)sb.style.width=Math.round(i/scanTargets.length*100)+'%';
+    if(ss)ss.textContent=`${i+1} / ${scanTargets.length} — ${esc(e.site)}`;
     const decPw=await memDecrypt(e.password);
     const c=await checkPwned(decPw);
     if(c>0)breached.push({...e,count:c});
@@ -3110,12 +3190,24 @@ async function importEncryptedBackup() {
   });
   if (!raw) return;
   let ciphertext = '';
+  let kdf = null;
   try {
-    ciphertext = window.FuinBackupController.extractCiphertextFromFuinFile(raw);
+    if (window.FuinBackupController?.extractBackupMetadataFromFuinFile) {
+      ({ ciphertext, kdf } = window.FuinBackupController.extractBackupMetadataFromFuinFile(raw));
+    } else {
+      ciphertext = window.FuinBackupController.extractCiphertextFromFuinFile(raw);
+    }
   } catch {
     toast(t('toastInvalidFile') + ' (.fuin)');
     return;
   }
+
+  const decryptWithKdf = (pw) => {
+    if (typeof api.decryptBackup === 'function') {
+      return api.decryptBackup(ciphertext, pw, kdf);
+    }
+    return api.decrypt(ciphertext, pw);
+  };
 
   const applyDecryptedVault = async (parsed) => {
     const list = (parsed && parsed.type === 'fuin/vault')
@@ -3126,14 +3218,14 @@ async function importEncryptedBackup() {
   };
 
   try {
-    const parsed = await api.decrypt(ciphertext, master);
+    const parsed = await decryptWithKdf(master);
     await applyDecryptedVault(parsed);
   } catch {
     // Mevcut ana şifre ile çözülemediyse yedeğin oluşturulduğu şifreyi sor
     repromptCustomVerifier = async (val, msgEl, inpEl) => {
       if (!val) return false;
       try {
-        const parsed = await api.decrypt(ciphertext, val);
+        const parsed = await decryptWithKdf(val);
         await applyDecryptedVault(parsed);
         return true;
       } catch {
@@ -3179,19 +3271,49 @@ async function exportCSV() {
   toast(t('toastCsvExported'));
 }
 // ── İçe Aktarım İşleyicileri (FuinImporters Servisi ile) ───────────
-async function processImportedEntries(imported, label) {
+function isSameImportedEntry(candidate, existing) {
+  if (!existing || existing.isDeleted) return false;
+  const cType = candidate.type || 'login';
+  const eType = existing.type || 'login';
+  if (cType !== eType) return false;
+  const sameTitle = (existing.site === candidate.site || existing.title === candidate.site);
+  if (!sameTitle) return false;
+  if (cType === 'card') {
+    const eNum = String(existing.cardNumber || '').replace(/[\s-]/g, '');
+    const cNum = String(candidate.cardNumber || '').replace(/[\s-]/g, '');
+    return eNum === cNum && (existing.cardholderName || '') === (candidate.cardholderName || '');
+  }
+  if (cType === 'note') {
+    const eNote = existing.secureNote != null ? String(existing.secureNote) : String(existing.note || existing.notes || '');
+    const cNote = candidate.secureNote != null ? String(candidate.secureNote) : String(candidate.note || candidate.notes || '');
+    return eNote === cNote;
+  }
+  return (existing.username || '') === (candidate.username || '') &&
+    (existing.password || '') === (candidate.password || '');
+}
+
+async function processImportedEntries(imported, label, meta = {}) {
+  if (meta.format === 'unknown' && (!Array.isArray(imported) || imported.length === 0)) {
+    toast(meta.totalRows > 0 ? t('toastImportInvalidColumns') : t('toastEmptyFile'));
+    return;
+  }
   if (!Array.isArray(imported) || imported.length === 0) {
-    toast(t('toastEmptyFile'));
+    toast((meta.totalRows > 0 || meta.skippedCount > 0) ? t('toastImportDuplicatesOnly') : t('toastEmptyFile'));
     return;
   }
   const currentDecrypted = await Promise.all(
-    entries.map(async e => ({ site: e.site, username: e.username, password: await memDecrypt(e.password) }))
+    entries.map(e => serializeEntryPlain(e))
   );
 
   let newEntries = imported.filter(x =>
-    x.site && (x.password || x.type === 'note' || x.type === 'card') &&
-    !currentDecrypted.find(e => e.site === x.site && e.username === x.username && e.password === x.password)
+    x && x.site && (x.password || x.type === 'note' || x.type === 'card') &&
+    !currentDecrypted.some(e => isSameImportedEntry(x, e))
   );
+
+  if (newEntries.length === 0) {
+    toast(t('toastImportDuplicatesOnly'));
+    return;
+  }
 
   newEntries = await Promise.all(
     newEntries.map(e => hydrateEntryMemory(e))
@@ -3209,20 +3331,20 @@ async function importJSON() {
   try {
     const importers = window.FuinImporters || (typeof FuinImporters !== 'undefined' ? FuinImporters : null);
     const res = importers.importJSON(raw);
-    await processImportedEntries(res.entries, res.format === 'bitwarden' ? 'Bitwarden' : 'Fuin');
+    await processImportedEntries(res.entries, res.format === 'bitwarden' ? 'Bitwarden' : 'Fuin', res);
   } catch (err) {
     toast(t('toastInvalidFile') + err.message);
   }
 }
 
 async function importCSV() {
-  const raw = await api.importFile({ filters: [{ name: 'CSV', extensions: ['csv'] }] });
+  const raw = await api.importFile({ filters: [{ name: 'CSV', extensions: ['csv', 'txt'] }] });
   if (!raw) return;
   try {
     const importers = window.FuinImporters || (typeof FuinImporters !== 'undefined' ? FuinImporters : null);
     const res = importers.importCSV(raw);
     const formatNames = { bitwarden: 'Bitwarden', lastpass: 'LastPass', '1password': '1Password', chrome: 'Chrome/Edge', fuin: 'Fuin' };
-    await processImportedEntries(res.entries, formatNames[res.format] || 'CSV');
+    await processImportedEntries(res.entries, formatNames[res.format] || 'CSV', res);
   } catch (err) {
     toast(t('toastCsvUnreadable') + err.message);
   }
@@ -3450,7 +3572,7 @@ function isNewerVersion(latest, current) {
 }
 
 async function getLocalAppVersion() {
-  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.10';
+  return window.FuinUpdateManager ? window.FuinUpdateManager.getLocalAppVersion() : '1.0.0-beta.11';
 }
 
 async function silentCheckForUpdates() {

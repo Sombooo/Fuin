@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('kekkai', {
 
   encrypt:             (data, password) => ipcRenderer.invoke('encrypt', { data, password }),
   decrypt:             (b64, password)  => ipcRenderer.invoke('decrypt', { b64, password }),
+  decryptBackup:       (b64, password, kdf) => ipcRenderer.invoke('decrypt-backup', { b64, password, kdf }),
   safeCompare:         (a, b)           => ipcRenderer.invoke('safe-compare', { a, b }),
   zxcvbn:              (pw)             => ipcRenderer.invoke('zxcvbn', pw),
   cryptoInfo:          ()               => ipcRenderer.invoke('crypto-info'),
@@ -80,6 +81,7 @@ contextBridge.exposeInMainWorld('kekkai', {
   registerChromeExtId: (extensionId)    => ipcRenderer.invoke('register-chrome-ext-id', { extensionId }),
   getExtensionStatus:  ()               => ipcRenderer.invoke('get-extension-status'),
   onExtLookupRequest:  (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('ext-lookup-request', h); return () => ipcRenderer.removeListener('ext-lookup-request', h); },
+  onExtListVaultItemsRequest: (cb)      => { const h = (_, d) => cb(d); ipcRenderer.on('ext-list-vault-items-request', h); return () => ipcRenderer.removeListener('ext-list-vault-items-request', h); },
   onExtRevealRequest:  (cb)             => { const h = (_, d) => cb(d); ipcRenderer.on('ext-reveal-request', h); return () => ipcRenderer.removeListener('ext-reveal-request', h); },
   onExtCopySecureRequest: (cb)          => { const h = (_, d) => cb(d); ipcRenderer.on('ext-copy-secure-request', h); return () => ipcRenderer.removeListener('ext-copy-secure-request', h); },
   onExtCheckSaveCandidateRequest: (cb) => { const h = (_, d) => cb(d); ipcRenderer.on('ext-check-save-candidate-request', h); return () => ipcRenderer.removeListener('ext-check-save-candidate-request', h); },

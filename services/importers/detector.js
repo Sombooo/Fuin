@@ -32,21 +32,89 @@
   }
 
   /**
+   * Strip leading BOM, blank lines, and optional Excel `sep=<char>` directive line.
+   * Returns normalized text plus an explicit delimiter if declared via `sep=`.
+   * @param {string} text Raw CSV content.
+   * @returns {{ text: string, delimiter: string|null }}
+   */
+  function preprocessCSV(text) {
+    if (typeof text !== 'string') return { text: '', delimiter: null };
+    var clean = stripBOM(text).replace(/^[\r\n]+/, '');
+    if (!clean.trim()) return { text: '', delimiter: null };
+
+    var explicitDelimiter = null;
+    var firstBreak = clean.search(/[\r\n]/);
+    var firstLine = firstBreak === -1 ? clean : clean.slice(0, firstBreak);
+    var sepMatch = firstLine.match(/^\s*sep\s*=\s*([^\w\r\n "'])\s*$/i);
+    if (sepMatch && firstBreak !== -1) {
+      explicitDelimiter = sepMatch[1];
+      clean = clean.slice(firstBreak).replace(/^[\r\n]+/, '');
+    }
+
+    return { text: clean, delimiter: explicitDelimiter };
+  }
+
+  /**
+   * Detect CSV column delimiter (',' default, ';' or '\t') from the first logical row outside quotes.
+   * Ties preserve ',' so standard RFC 4180 CSVs are never altered.
+   * @param {string} cleanText Preprocessed CSV text.
+   * @returns {string}
+   */
+  function detectCSVDelimiter(cleanText) {
+    if (typeof cleanText !== 'string' || !cleanText) return ',';
+    var inQuotes = false;
+    var counts = { ',': 0, ';': 0, '\t': 0 };
+    var len = cleanText.length;
+
+    for (var i = 0; i < len; i++) {
+      var c = cleanText[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (i + 1 < len && cleanText[i + 1] === '"') {
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        }
+      } else {
+        if (c === '"') {
+          inQuotes = true;
+        } else if (c === '\r' || c === '\n') {
+          break;
+        } else if (c === ',' || c === ';' || c === '\t') {
+          counts[c]++;
+        }
+      }
+    }
+
+    if (counts[','] > 0) {
+      if (counts[';'] > counts[','] * 2) return ';';
+      if (counts['\t'] > counts[','] * 2) return '\t';
+      return ',';
+    }
+    if (counts[';'] > 0) return ';';
+    if (counts['\t'] > 0) return '\t';
+    return ',';
+  }
+
+  /**
    * Parse the first line/row of CSV to extract normalized headers.
    * Single-pass RFC 4180 compliant tokenizer:
    * - Preserves escaped quotes ("" -> ") within field content
-   * - Commas inside quoted fields are never treated as column delimiters
+   * - Delimiters inside quoted fields are never treated as column delimiters
    * - Preserves newlines inside quoted fields without premature row termination
    * - Stops cleanly at the first unquoted CRLF / LF / CR
-   * - Strips BOM, trims whitespace, converts to lowercase, and strips outer quotes
+   * - Strips BOM / Excel `sep=`, trims whitespace, converts to lowercase, and strips outer quotes
    * @param {string} text Full or partial CSV text content.
    * @returns {string[]} Array of normalized header column names.
    */
   function extractCSVHeaders(text) {
     if (typeof text !== 'string') return [];
-    var clean = stripBOM(text).trim();
+    var prep = preprocessCSV(text);
+    var clean = prep.text.trim();
     if (!clean) return [];
 
+    var delimiter = prep.delimiter || detectCSVDelimiter(clean);
     var headers = [];
     var cur = '';
     var inQuotes = false;
@@ -66,13 +134,13 @@
             inQuotes = false;
           }
         } else {
-          // Inside quotes, all characters (commas, newlines, etc.) are literal
+          // Inside quotes, all characters (delimiters, newlines, etc.) are literal
           cur += c;
         }
       } else {
         if (c === '"') {
           inQuotes = true;
-        } else if (c === ',') {
+        } else if (c === delimiter) {
           headers.push(cur.trim().toLowerCase().replace(/^["']|["']$/g, ''));
           cur = '';
         } else if (c === '\r' || c === '\n') {
@@ -119,7 +187,16 @@
         // Bare Fuin entries array JSON
         if (Array.isArray(parsed) && parsed.length > 0) {
           var first = parsed[0];
-          if (first && (first.site !== undefined || (first.title !== undefined && first.password !== undefined))) {
+          if (first && (
+            first.site !== undefined ||
+            (first.title !== undefined && (
+              first.password !== undefined ||
+              first.cardNumber !== undefined ||
+              first.secureNote !== undefined ||
+              first.type === 'card' ||
+              first.type === 'note'
+            ))
+          )) {
             return { format: 'fuin', type: 'json', confidence: 'high', isEncrypted: false };
           }
         }
@@ -157,18 +234,26 @@
       return { format: '1password', type: 'csv', confidence: 'high' };
     }
 
-    // Google Chrome / Edge / Brave CSV: name,url,username,password,note
-    if (has('name') && has('url') && has('username') && has('password')) {
+    // Google Chrome / Edge / Brave CSV: name,url,username,password,note (plus localized TR variants)
+    if (
+      hasAny(['name', 'ad', 'isim', 'başlık', 'site adı']) &&
+      hasAny(['url', 'web sitesi', 'adres', 'internet adresi', 'site adresi']) &&
+      hasAny(['username', 'kullanıcı adı', 'kullanici adi', 'e-posta', 'eposta']) &&
+      hasAny(['password', 'şifre', 'sifre', 'parola'])
+    ) {
       return { format: 'chrome', type: 'csv', confidence: 'high' };
     }
 
     // Fuin native CSV: site,category,username,password,url,note,totp
-    if (has('site') && (has('password') || has('username'))) {
+    if (has('site') && (hasAny(['password', 'şifre', 'sifre', 'parola']) || hasAny(['username', 'kullanıcı adı', 'kullanici adi']))) {
       return { format: 'fuin', type: 'csv', confidence: 'high' };
     }
 
-    // Fallback: Generic CSV if title/name and password columns exist
-    if (hasAny(['title', 'name', 'site', 'service', 'url']) && hasAny(['password', 'pass', 'secret'])) {
+    // Fallback: Generic CSV if title/name/url and password columns exist
+    if (
+      hasAny(['title', 'name', 'site', 'service', 'url', 'ad', 'isim', 'başlık', 'site adı', 'web sitesi', 'adres']) &&
+      hasAny(['password', 'pass', 'secret', 'şifre', 'sifre', 'parola'])
+    ) {
       return { format: 'fuin', type: 'csv', confidence: 'medium' };
     }
 
@@ -189,6 +274,8 @@
     detectFormat: detectFormat,
     detectFormatDetails: detectFormatDetails,
     stripBOM: stripBOM,
+    preprocessCSV: preprocessCSV,
+    detectCSVDelimiter: detectCSVDelimiter,
     extractCSVHeaders: extractCSVHeaders
   };
 }));

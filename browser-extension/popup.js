@@ -2,6 +2,167 @@
 
 let currentMatches = [];
 let currentDomain = '';
+let activeVaultTab = 'logins';
+let cachedLogins = [];
+let cachedCards = [];
+let cachedNotes = [];
+let currentPopupTab = null;
+let currentPendingSave = null;
+let isHttpsSupportedTab = false;
+
+const POPUP_LOCALE = (() => {
+  try {
+    const lang = (
+      (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getUILanguage === 'function' && chrome.i18n.getUILanguage()) ||
+      (typeof navigator !== 'undefined' && navigator.language) ||
+      'en'
+    ).toLowerCase();
+    return lang.startsWith('tr') ? 'tr' : 'en';
+  } catch {
+    return 'en';
+  }
+})();
+
+const POPUP_I18N = {
+  tr: {
+    checking: 'Kontrol ediliyor...',
+    btnUnlock: 'Kilidi Aç',
+    btnFillPage: 'Bu sayfayı doldur',
+    footerTagline: 'Sıfır Bulut & Çevrimdışı',
+    warnInsecureHttp: 'HTTP bağlantı (Güvensiz)',
+    warnHttpsOnly: 'Yalnızca HTTPS sitelerde çalışır',
+    statusOffline: 'Fuin kapalı veya bağlı değil',
+    statusProtocolMismatch: 'Sürüm uyuşmazlığı — Fuin güncellenmeli',
+    statusLocked: 'Fuin kilitli',
+    statusUnreachable: 'Masaüstü uygulamasına ulaşılamadı',
+    statusNoMatches: 'Bu site için kayıt yok',
+    titleUpdatePw: 'Şifreyi Güncelle',
+    titleNewAccount: 'Yeni Hesap Algılandı',
+    unnamed: '— (İsimsiz)',
+    eyeToggleDetected: 'Algılanan şifreyi gör / gizle',
+    btnSave: 'Kaydet',
+    btnSaveTitle: "Fuin'e kaydet",
+    toastSaved: 'Hesap Fuin kasasına kaydedildi',
+    toastUnlockFirst: 'Önce Fuin kilidini açın',
+    toastMismatch: 'Sürüm uyuşmazlığı — Fuin güncellenmeli',
+    toastSaveFailed: 'Kaydedilemedi',
+    btnDismissTitle: 'Yoksay',
+    eyeTogglePw: 'Şifreyi göster / gizle',
+    toastRevealFailed: 'Şifre alınamadı',
+    toastConnError: 'Bağlantı hatası',
+    btnFillTitle: 'Bu hesabı sayfaya doldur',
+    btnCopyUserTitle: 'Kullanıcı adını kopyala',
+    toastUserCopiedSec: 'Kullanıcı adı kopyalandı (30 sn)',
+    toastUserCopied: 'Kullanıcı adı kopyalandı',
+    btnCopyPwTitle: 'Şifreyi kopyala (30 sn sonra silinir)',
+    toastPwCopiedSec: 'Şifre kopyalandı (30 sn sonra temizlenir)',
+    toastPwCopied: 'Şifre kopyalandı',
+    toastApprovalDenied: 'Onay reddedildi veya şifre alınamadı',
+    toastErrPw: 'Hata: Şifre alınamadı',
+    toastErrConn: 'Hata: Bağlantı başarısız',
+    tabLogins: 'Girişler',
+    tabCards: 'Kartlar',
+    tabNotes: 'Notlar',
+    noCardsSaved: 'Kayıtlı kart yok',
+    noNotesSaved: 'Kayıtlı güvenli not yok',
+    copyCardNumberTitle: 'Kart numarasını kopyala (30s)',
+    copyCvvTitle: 'CVV kopyala (30s)',
+    copyNoteTitle: 'Notu kopyala (30s)',
+    cardNoBtn: 'No',
+    cardCvvBtn: 'CVV',
+    toastCardCopied: 'Kart No kopyalandı (30s)',
+    toastCvvCopied: 'CVV kopyalandı (30s)',
+    toastNoteCopied: 'Not kopyalandı (30s)',
+    toastProtectedDesktop: 'Korumalı kayıt — Fuin masaüstünden kopyalayın',
+    protectedShort: 'Korumalı'
+  },
+  en: {
+    checking: 'Checking...',
+    btnUnlock: 'Unlock',
+    btnFillPage: 'Fill this page',
+    footerTagline: 'Zero Cloud & Offline',
+    warnInsecureHttp: 'HTTP connection (Insecure)',
+    warnHttpsOnly: 'Works on HTTPS sites only',
+    statusOffline: 'Fuin is closed or disconnected',
+    statusProtocolMismatch: 'Version mismatch — update Fuin or extension',
+    statusLocked: 'Fuin is locked',
+    statusUnreachable: 'Could not reach desktop app',
+    statusNoMatches: 'No saved logins for this site',
+    titleUpdatePw: 'Update Password',
+    titleNewAccount: 'New Account Detected',
+    unnamed: '— (Unnamed)',
+    eyeToggleDetected: 'Show / hide detected password',
+    btnSave: 'Save',
+    btnSaveTitle: 'Save to Fuin',
+    toastSaved: 'Saved to Fuin vault',
+    toastUnlockFirst: 'Unlock Fuin first',
+    toastMismatch: 'Version mismatch — update required',
+    toastSaveFailed: 'Failed to save',
+    btnDismissTitle: 'Dismiss',
+    eyeTogglePw: 'Show / hide password',
+    toastRevealFailed: 'Could not reveal password',
+    toastConnError: 'Connection error',
+    btnFillTitle: 'Fill this account on page',
+    btnCopyUserTitle: 'Copy username',
+    toastUserCopiedSec: 'Username copied (clears in 30s)',
+    toastUserCopied: 'Username copied',
+    btnCopyPwTitle: 'Copy password (clears in 30s)',
+    toastPwCopiedSec: 'Password copied (clears in 30s)',
+    toastPwCopied: 'Password copied',
+    toastApprovalDenied: 'Approval denied or password unavailable',
+    toastErrPw: 'Error: Could not retrieve password',
+    toastErrConn: 'Error: Connection failed',
+    tabLogins: 'Logins',
+    tabCards: 'Cards',
+    tabNotes: 'Notes',
+    noCardsSaved: 'No saved cards',
+    noNotesSaved: 'No saved secure notes',
+    copyCardNumberTitle: 'Copy card number (30s)',
+    copyCvvTitle: 'Copy CVV (30s)',
+    copyNoteTitle: 'Copy secure note (30s)',
+    cardNoBtn: 'Num',
+    cardCvvBtn: 'CVV',
+    toastCardCopied: 'Card number copied (30s)',
+    toastCvvCopied: 'CVV copied (30s)',
+    toastNoteCopied: 'Note copied (30s)',
+    toastProtectedDesktop: 'Protected item — copy from Fuin Desktop',
+    protectedShort: 'Protected'
+  }
+};
+
+function pt(key) {
+  return (POPUP_I18N[POPUP_LOCALE] && POPUP_I18N[POPUP_LOCALE][key]) || POPUP_I18N.en[key] || key;
+}
+
+function formatMatchesCount(count) {
+  if (POPUP_LOCALE === 'tr') return `${count} kayıt bulundu`;
+  return count === 1 ? '1 match found' : `${count} matches found`;
+}
+
+function applyStaticLocalization() {
+  document.documentElement.lang = POPUP_LOCALE;
+  const statusEl = document.getElementById('statusText');
+  if (statusEl) statusEl.textContent = pt('checking');
+  const openAppBtn = document.getElementById('btnOpenApp');
+  if (openAppBtn) openAppBtn.textContent = pt('btnUnlock');
+  const fillBtnLabel = document.getElementById('fillBtnLabel');
+  if (fillBtnLabel) fillBtnLabel.textContent = pt('btnFillPage');
+  const shortcutHint = document.getElementById('shortcutHint');
+  if (shortcutHint) {
+    const plat = (
+      (typeof navigator !== 'undefined' && (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent)) ||
+      ''
+    ).toLowerCase();
+    shortcutHint.textContent = plat.includes('mac') ? '(Cmd+Shift+L)' : '(Ctrl+Shift+L)';
+  }
+  const footerTagline = document.getElementById('footerTagline');
+  if (footerTagline) footerTagline.textContent = pt('footerTagline');
+  const extVersion = document.getElementById('extVersion');
+  if (extVersion) {
+    const ver = (typeof chrome !== 'undefined' && chrome.runtime?.getManifest?.()?.version) || '1.0.3';
+    extVersion.textContent = 'v' + ver;
+  }
+}
 
 function createPopupSvg(name, size = 14) {
   const ns = 'http://www.w3.org/2000/svg';
@@ -50,6 +211,12 @@ function createPopupSvg(name, size = 14) {
     svg.appendChild(el('line', { x1: '6', y1: '6', x2: '18', y2: '18' }));
   } else if (name === 'check') {
     svg.appendChild(el('polyline', { points: '20 6 9 17 4 12' }));
+  } else if (name === 'copy') {
+    svg.appendChild(el('rect', { x: '9', y: '9', width: '13', height: '13', rx: '2', ry: '2' }));
+    svg.appendChild(el('path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }));
+  } else if (name === 'lock') {
+    svg.appendChild(el('rect', { x: '3', y: '11', width: '18', height: '11', rx: '2', ry: '2' }));
+    svg.appendChild(el('path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' }));
   }
   return svg;
 }
@@ -97,6 +264,249 @@ function sendTabMsg(tabId, message) {
   });
 }
 
+function hideVaultTabs() {
+  const vaultTabs = document.getElementById('vaultTabs');
+  if (vaultTabs) vaultTabs.style.display = 'none';
+}
+
+function updateVaultTabLabels() {
+  const tabBtnLogins = document.getElementById('tabBtnLogins');
+  const tabBtnCards = document.getElementById('tabBtnCards');
+  const tabBtnNotes = document.getElementById('tabBtnNotes');
+  if (tabBtnLogins) {
+    tabBtnLogins.textContent = `${pt('tabLogins')} (${cachedLogins.length})`;
+    tabBtnLogins.classList.toggle('active', activeVaultTab === 'logins');
+  }
+  if (tabBtnCards) {
+    tabBtnCards.textContent = `${pt('tabCards')} (${cachedCards.length})`;
+    tabBtnCards.classList.toggle('active', activeVaultTab === 'cards');
+  }
+  if (tabBtnNotes) {
+    tabBtnNotes.textContent = `${pt('tabNotes')} (${cachedNotes.length})`;
+    tabBtnNotes.classList.toggle('active', activeVaultTab === 'notes');
+  }
+}
+
+function showVaultTabs() {
+  const vaultTabs = document.getElementById('vaultTabs');
+  updateVaultTabLabels();
+  if (vaultTabs) vaultTabs.style.display = 'flex';
+}
+
+function copyVaultItemField(entryId, field, btn, restoreFactory, okToastKey) {
+  return async (e) => {
+    if (!e.isTrusted) return;
+    btn.style.opacity = '0.5';
+    try {
+      const secRes = await chrome.runtime.sendMessage({
+        type: 'fuin-copy-secure',
+        entryId,
+        domain: currentDomain || '',
+        field
+      });
+      if (secRes && secRes.ok) {
+        btn.style.opacity = '1';
+        btn.replaceChildren(createPopupSvg('check', 12));
+        showToast(pt(okToastKey));
+        setTimeout(() => btn.replaceChildren(...restoreFactory()), 1200);
+        return;
+      }
+      if (secRes && secRes.error === 'protocol-mismatch') {
+        showToast(pt('toastMismatch'));
+      } else if (secRes && secRes.error === 'approval-required') {
+        showToast(pt('toastProtectedDesktop'));
+      } else if (secRes && secRes.error === 'locked') {
+        showToast(pt('toastUnlockFirst'));
+      } else {
+        showToast(pt('toastErrConn'));
+      }
+    } catch {
+      showToast(pt('toastErrConn'));
+    }
+    btn.style.opacity = '1';
+  };
+}
+
+function renderCardItems(cards, container) {
+  container.replaceChildren();
+  if (!cards.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-tab-msg';
+    empty.textContent = pt('noCardsSaved');
+    container.appendChild(empty);
+    return;
+  }
+  cards.forEach((c) => {
+    const cardEl = document.createElement('div');
+    cardEl.className = 'match-card';
+
+    const info = document.createElement('div');
+    info.className = 'match-info';
+
+    const title = document.createElement('div');
+    title.className = 'match-user';
+    title.textContent = c.title || pt('unnamed');
+    title.title = c.title || '';
+
+    const sub = document.createElement('div');
+    sub.className = 'match-site';
+    const badge = document.createElement('span');
+    badge.className = 'card-badge-pill';
+    badge.textContent = c.brand || 'CARD';
+    sub.appendChild(badge);
+    const metaText = document.createElement('span');
+    const masked = `•••• ${c.last4 || '••••'}`;
+    metaText.textContent = c.cardExpiry ? `${masked} · ${c.cardExpiry}` : masked;
+    sub.appendChild(metaText);
+
+    info.appendChild(title);
+    info.appendChild(sub);
+    cardEl.appendChild(info);
+
+    const actions = document.createElement('div');
+    actions.className = 'match-actions';
+
+    if (c.reprompt) {
+      const lockBadge = document.createElement('button');
+      lockBadge.type = 'button';
+      lockBadge.className = 'action-btn text-pill';
+      lockBadge.title = pt('toastProtectedDesktop');
+      lockBadge.appendChild(createPopupSvg('lock', 11));
+      const lbl = document.createElement('span');
+      lbl.textContent = pt('protectedShort');
+      lockBadge.appendChild(lbl);
+      lockBadge.addEventListener('click', (e) => {
+        if (!e.isTrusted) return;
+        showToast(pt('toastProtectedDesktop'));
+      });
+      actions.appendChild(lockBadge);
+    } else {
+      const makeNoNodes = () => [document.createTextNode(pt('cardNoBtn'))];
+      const btnCopyNo = document.createElement('button');
+      btnCopyNo.type = 'button';
+      btnCopyNo.className = 'action-btn text-pill';
+      btnCopyNo.title = pt('copyCardNumberTitle');
+      btnCopyNo.append(...makeNoNodes());
+      btnCopyNo.addEventListener('click', copyVaultItemField(c.id, 'cardNumber', btnCopyNo, makeNoNodes, 'toastCardCopied'));
+
+      const makeCvvNodes = () => [document.createTextNode(pt('cardCvvBtn'))];
+      const btnCopyCvv = document.createElement('button');
+      btnCopyCvv.type = 'button';
+      btnCopyCvv.className = 'action-btn text-pill';
+      btnCopyCvv.title = pt('copyCvvTitle');
+      btnCopyCvv.append(...makeCvvNodes());
+      btnCopyCvv.addEventListener('click', copyVaultItemField(c.id, 'cardCvv', btnCopyCvv, makeCvvNodes, 'toastCvvCopied'));
+
+      actions.appendChild(btnCopyNo);
+      actions.appendChild(btnCopyCvv);
+    }
+
+    cardEl.appendChild(actions);
+    container.appendChild(cardEl);
+  });
+}
+
+function renderNoteItems(notes, container) {
+  container.replaceChildren();
+  if (!notes.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-tab-msg';
+    empty.textContent = pt('noNotesSaved');
+    container.appendChild(empty);
+    return;
+  }
+  notes.forEach((n) => {
+    const cardEl = document.createElement('div');
+    cardEl.className = 'match-card';
+
+    const info = document.createElement('div');
+    info.className = 'match-info';
+
+    const title = document.createElement('div');
+    title.className = 'match-user';
+    title.textContent = n.title || pt('unnamed');
+    title.title = n.title || '';
+
+    const sub = document.createElement('div');
+    sub.className = 'match-site';
+    sub.textContent = n.category || pt('tabNotes');
+
+    info.appendChild(title);
+    info.appendChild(sub);
+    cardEl.appendChild(info);
+
+    const actions = document.createElement('div');
+    actions.className = 'match-actions';
+
+    if (n.reprompt) {
+      const lockBadge = document.createElement('button');
+      lockBadge.type = 'button';
+      lockBadge.className = 'action-btn text-pill';
+      lockBadge.title = pt('toastProtectedDesktop');
+      lockBadge.appendChild(createPopupSvg('lock', 11));
+      const lbl = document.createElement('span');
+      lbl.textContent = pt('protectedShort');
+      lockBadge.appendChild(lbl);
+      lockBadge.addEventListener('click', (e) => {
+        if (!e.isTrusted) return;
+        showToast(pt('toastProtectedDesktop'));
+      });
+      actions.appendChild(lockBadge);
+    } else {
+      const makeCopyNodes = () => [createPopupSvg('copy', 13)];
+      const btnCopyNote = document.createElement('button');
+      btnCopyNote.type = 'button';
+      btnCopyNote.className = 'action-btn';
+      btnCopyNote.title = pt('copyNoteTitle');
+      btnCopyNote.append(...makeCopyNodes());
+      btnCopyNote.addEventListener('click', copyVaultItemField(n.id, 'secureNote', btnCopyNote, makeCopyNodes, 'toastNoteCopied'));
+      actions.appendChild(btnCopyNote);
+    }
+
+    cardEl.appendChild(actions);
+    container.appendChild(cardEl);
+  });
+}
+
+function renderActiveTabList() {
+  const fillBtn = document.getElementById('fillBtn');
+  const matchesList = document.getElementById('matchesList');
+  if (!matchesList) return;
+  updateVaultTabLabels();
+
+  if (activeVaultTab === 'cards') {
+    if (fillBtn) fillBtn.style.display = 'none';
+    matchesList.style.display = 'flex';
+    renderCardItems(cachedCards, matchesList);
+    return;
+  }
+
+  if (activeVaultTab === 'notes') {
+    if (fillBtn) fillBtn.style.display = 'none';
+    matchesList.style.display = 'flex';
+    renderNoteItems(cachedNotes, matchesList);
+    return;
+  }
+
+  // Logins tab
+  if (fillBtn) {
+    fillBtn.style.display = 'flex';
+    fillBtn.disabled = !isHttpsSupportedTab || cachedLogins.length === 0;
+  }
+  const hasPending = Boolean(currentPendingSave && currentPendingSave.hasPending && currentPendingSave.item);
+  if (cachedLogins.length > 0) {
+    renderMatches(cachedLogins, matchesList, currentPopupTab);
+    matchesList.style.display = 'flex';
+    if (hasPending) renderPendingSaveBanner(currentPendingSave.item, matchesList);
+  } else if (hasPending) {
+    matchesList.replaceChildren();
+    matchesList.style.display = 'flex';
+    renderPendingSaveBanner(currentPendingSave.item, matchesList);
+  } else {
+    matchesList.style.display = 'none';
+  }
+}
+
 async function checkStatus() {
   const dot = document.getElementById('dot');
   const text = document.getElementById('statusText');
@@ -106,23 +516,43 @@ async function checkStatus() {
   const matchesList = document.getElementById('matchesList');
 
   const tab = await currentTab();
+  currentPopupTab = tab;
+  currentPendingSave = null;
   let parsedUrl = null;
   try {
     if (tab && tab.url) parsedUrl = new URL(tab.url);
   } catch {}
 
   if (!parsedUrl || parsedUrl.protocol !== 'https:') {
+    isHttpsSupportedTab = false;
+    currentDomain = '';
+    cachedLogins = [];
+    currentMatches = [];
     dot.className = 'dot warn';
     if (domainTag) domainTag.textContent = parsedUrl ? parsedUrl.protocol.replace(':', '') : '—';
     text.textContent = parsedUrl?.protocol === 'http:'
-      ? 'HTTP bağlantı (Güvensiz)'
-      : 'Yalnızca HTTPS sitelerde çalışır';
+      ? pt('warnInsecureHttp')
+      : pt('warnHttpsOnly');
     fillBtn.disabled = true;
     if (openAppBtn) openAppBtn.style.display = 'none';
     if (matchesList) matchesList.style.display = 'none';
+    let itemsRes = null;
+    try {
+      itemsRes = await chrome.runtime.sendMessage({ type: 'fuin-list-vault-items' });
+    } catch {}
+    if (itemsRes && !itemsRes.error && (Array.isArray(itemsRes.cards) || Array.isArray(itemsRes.notes))) {
+      cachedCards = Array.isArray(itemsRes.cards) ? itemsRes.cards : [];
+      cachedNotes = Array.isArray(itemsRes.notes) ? itemsRes.notes : [];
+      activeVaultTab = cachedCards.length > 0 ? 'cards' : 'notes';
+      showVaultTabs();
+      renderActiveTabList();
+    } else {
+      hideVaultTabs();
+    }
     return;
   }
 
+  isHttpsSupportedTab = true;
   const domain = parsedUrl.hostname;
   currentDomain = domain;
   if (domainTag) domainTag.textContent = domain;
@@ -135,20 +565,23 @@ async function checkStatus() {
   }
 
   if (!res || res.error === 'native-host-unreachable') {
+    hideVaultTabs();
     dot.className = 'dot err';
-    text.textContent = 'Fuin kapalı veya bağlı değil';
+    text.textContent = pt('statusOffline');
     fillBtn.disabled = true;
     if (openAppBtn) openAppBtn.style.display = 'none';
     if (matchesList) matchesList.style.display = 'none';
   } else if (res.error === 'protocol-mismatch') {
+    hideVaultTabs();
     dot.className = 'dot err';
-    text.textContent = 'Sürüm uyuşmazlığı — Fuin güncellenmeli';
+    text.textContent = pt('statusProtocolMismatch');
     fillBtn.disabled = true;
     if (openAppBtn) openAppBtn.style.display = 'none';
     if (matchesList) matchesList.style.display = 'none';
   } else if (res.error === 'locked') {
+    hideVaultTabs();
     dot.className = 'dot warn';
-    text.textContent = 'Fuin kilitli';
+    text.textContent = pt('statusLocked');
     fillBtn.disabled = true;
     if (openAppBtn) {
       openAppBtn.style.display = 'block';
@@ -172,39 +605,37 @@ async function checkStatus() {
       }
     }
   } else if (res.error) {
+    hideVaultTabs();
     dot.className = 'dot err';
-    text.textContent = 'Masaüstü uygulamasına ulaşılamadı';
+    text.textContent = pt('statusUnreachable');
     fillBtn.disabled = true;
     if (openAppBtn) openAppBtn.style.display = 'none';
     if (matchesList) matchesList.style.display = 'none';
   } else {
     currentMatches = Array.isArray(res.matches) ? res.matches : [];
+    cachedLogins = currentMatches;
     const count = currentMatches.length;
     dot.className = count > 0 ? 'dot ok' : 'dot warn';
-    text.textContent = count > 0 ? `${count} kayıt bulundu` : 'Bu site için kayıt yok';
+    text.textContent = count > 0 ? formatMatchesCount(count) : pt('statusNoMatches');
     fillBtn.disabled = count === 0;
     if (openAppBtn) openAppBtn.style.display = 'none';
+
+    let itemsRes = null;
+    try {
+      itemsRes = await chrome.runtime.sendMessage({ type: 'fuin-list-vault-items' });
+    } catch {}
+    cachedCards = Array.isArray(itemsRes?.cards) ? itemsRes.cards : [];
+    cachedNotes = Array.isArray(itemsRes?.notes) ? itemsRes.notes : [];
 
     let pendingSaveRes = null;
     try {
       pendingSaveRes = await chrome.runtime.sendMessage({ type: 'fuin-get-pending-save-popup', domain });
     } catch {}
+    currentPendingSave = pendingSaveRes;
 
-    if (count > 0 && matchesList) {
-      renderMatches(currentMatches, matchesList, tab);
-      matchesList.style.display = 'flex';
-      if (pendingSaveRes && pendingSaveRes.hasPending && pendingSaveRes.item) {
-        renderPendingSaveBanner(pendingSaveRes.item, matchesList);
-      }
-    } else if (matchesList) {
-      if (pendingSaveRes && pendingSaveRes.hasPending && pendingSaveRes.item) {
-        matchesList.replaceChildren();
-        matchesList.style.display = 'flex';
-        renderPendingSaveBanner(pendingSaveRes.item, matchesList);
-      } else {
-        matchesList.style.display = 'none';
-      }
-    }
+    activeVaultTab = 'logins';
+    showVaultTabs();
+    renderActiveTabList();
   }
 }
 
@@ -227,12 +658,12 @@ function renderPendingSaveBanner(item, container) {
   title.style.gap = '5px';
   title.appendChild(createPopupSvg(item.action === 'update' ? 'refresh' : 'hex', 11));
   const titleLabel = document.createElement('span');
-  titleLabel.textContent = item.action === 'update' ? 'Şifreyi Güncelle' : 'Yeni Hesap Algılandı';
+  titleLabel.textContent = item.action === 'update' ? pt('titleUpdatePw') : pt('titleNewAccount');
   title.appendChild(titleLabel);
 
   const user = document.createElement('div');
   user.className = 'match-user';
-  user.textContent = item.username || '— (İsimsiz)';
+  user.textContent = item.username || pt('unnamed');
 
   const pwRow = document.createElement('div');
   pwRow.style.display = 'flex';
@@ -250,7 +681,7 @@ function renderPendingSaveBanner(item, container) {
   const pwEye = document.createElement('button');
   pwEye.type = 'button';
   pwEye.appendChild(createPopupSvg('eye', 12));
-  pwEye.title = 'Algılanan şifreyi gör / gizle';
+  pwEye.title = pt('eyeToggleDetected');
   pwEye.style.background = 'transparent';
   pwEye.style.border = 'none';
   pwEye.style.color = 'var(--mu)';
@@ -283,8 +714,8 @@ function renderPendingSaveBanner(item, container) {
 
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn-save-banner';
-  saveBtn.textContent = 'Kaydet';
-  saveBtn.title = "Fuin'e kaydet";
+  saveBtn.textContent = pt('btnSave');
+  saveBtn.title = pt('btnSaveTitle');
   saveBtn.addEventListener('click', async (e) => {
     if (!e.isTrusted) return;
     saveBtn.disabled = true;
@@ -298,25 +729,29 @@ function renderPendingSaveBanner(item, container) {
       tabId: item.tabId
     });
     if (resp && resp.ok) {
-      showToast('Hesap Fuin kasasına kaydedildi');
+      showToast(pt('toastSaved'));
       banner.remove();
       setTimeout(checkStatus, 500);
+    } else if (resp && resp.error === 'protocol-mismatch') {
+      showToast(pt('toastMismatch'));
+      saveBtn.disabled = false;
+      saveBtn.textContent = pt('btnSave');
     } else if (resp && (resp.error === 'locked' || resp.error === 'fuin-not-running')) {
-      showToast('Önce Fuin kilidini açın');
+      showToast(pt('toastUnlockFirst'));
       try { chrome.runtime.sendMessage({ type: 'fuin-open-app' }); } catch {}
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Kaydet';
+      saveBtn.textContent = pt('btnSave');
     } else {
-      showToast('Kaydedilemedi');
+      showToast(pt('toastSaveFailed'));
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Kaydet';
+      saveBtn.textContent = pt('btnSave');
     }
   });
 
   const dismissBtn = document.createElement('button');
   dismissBtn.className = 'btn-dismiss-banner';
   dismissBtn.appendChild(createPopupSvg('close', 12));
-  dismissBtn.title = 'Yoksay';
+  dismissBtn.title = pt('btnDismissTitle');
   dismissBtn.addEventListener('click', async (e) => {
     if (!e.isTrusted) return;
     await chrome.runtime.sendMessage({
@@ -347,7 +782,7 @@ function renderMatches(matches, container, tab) {
 
     const user = document.createElement('div');
     user.className = 'match-user';
-    user.textContent = m.username || '— (İsimsiz)';
+    user.textContent = m.username || pt('unnamed');
     user.title = m.username || '';
 
     const site = document.createElement('div');
@@ -373,7 +808,7 @@ function renderMatches(matches, container, tab) {
     btnEye.type = 'button';
     btnEye.className = 'action-btn-eye';
     btnEye.appendChild(createPopupSvg('eye', 12));
-    btnEye.title = 'Şifreyi göster / gizle';
+    btnEye.title = pt('eyeTogglePw');
     btnEye.style.background = 'transparent';
     btnEye.style.border = 'none';
     btnEye.style.color = 'var(--mu)';
@@ -415,12 +850,12 @@ function renderMatches(matches, container, tab) {
             btnEye.style.color = 'var(--mu)';
           }, 8000);
         } else {
-          showToast('Şifre alınamadı');
+          showToast(rev && rev.error === 'protocol-mismatch' ? pt('toastMismatch') : pt('toastRevealFailed'));
           btnEye.replaceChildren(createPopupSvg('eye', 12));
         }
       } catch {
         btnEye.style.opacity = '1';
-        showToast('Bağlantı hatası');
+        showToast(pt('toastConnError'));
         btnEye.replaceChildren(createPopupSvg('eye', 12));
       }
     });
@@ -439,7 +874,7 @@ function renderMatches(matches, container, tab) {
     // Doldur butonu
     const btnFill = document.createElement('button');
     btnFill.className = 'action-btn fill-btn';
-    btnFill.title = 'Bu hesabı sayfaya doldur';
+    btnFill.title = pt('btnFillTitle');
     btnFill.appendChild(createPopupSvg('fill', 14));
     btnFill.onclick = async (e) => {
       if (!e.isTrusted) return;
@@ -452,7 +887,7 @@ function renderMatches(matches, container, tab) {
     // Kullanıcı adı kopyala (30 sn otomatik pano temizlemeli)
     const btnCopyUser = document.createElement('button');
     btnCopyUser.className = 'action-btn';
-    btnCopyUser.title = 'Kullanıcı adını kopyala';
+    btnCopyUser.title = pt('btnCopyUserTitle');
     btnCopyUser.appendChild(createPopupSvg('user', 13));
     btnCopyUser.onclick = async (e) => {
       if (!e.isTrusted || !m.username) return;
@@ -464,18 +899,18 @@ function renderMatches(matches, container, tab) {
       });
       if (res && res.ok) {
         btnCopyUser.replaceChildren(createPopupSvg('check', 13));
-        showToast('Kullanıcı adı kopyalandı (30 sn)');
+        showToast(pt('toastUserCopiedSec'));
         setTimeout(() => btnCopyUser.replaceChildren(createPopupSvg('user', 13)), 1200);
       } else {
         await navigator.clipboard.writeText(m.username);
-        showToast('Kullanıcı adı kopyalandı');
+        showToast(pt('toastUserCopied'));
       }
     };
 
     // Şifre kopyala (Fuin masaüstü 30 sn güvenli pano temizlemeli)
     const btnCopyPw = document.createElement('button');
     btnCopyPw.className = 'action-btn';
-    btnCopyPw.title = 'Şifreyi kopyala (30 sn sonra silinir)';
+    btnCopyPw.title = pt('btnCopyPwTitle');
     btnCopyPw.appendChild(createPopupSvg('key', 13));
     btnCopyPw.onclick = async (e) => {
       if (!e.isTrusted) return;
@@ -490,25 +925,27 @@ function renderMatches(matches, container, tab) {
         if (secRes && secRes.ok) {
           btnCopyPw.style.opacity = '1';
           btnCopyPw.replaceChildren(createPopupSvg('check', 13));
-          showToast('Şifre kopyalandı (30 sn sonra temizlenir)');
+          showToast(pt('toastPwCopiedSec'));
           setTimeout(() => btnCopyPw.replaceChildren(createPopupSvg('key', 13)), 1200);
           return;
         }
-        if (secRes && secRes.error === 'approval-required') {
+        if (secRes && secRes.error === 'protocol-mismatch') {
+          showToast(pt('toastMismatch'));
+        } else if (secRes && secRes.error === 'approval-required') {
           const rev = await chrome.runtime.sendMessage({ type: 'fuin-reveal', entryId: m.id, domain: currentDomain });
           if (rev && rev.password) {
             await navigator.clipboard.writeText(rev.password);
             btnCopyPw.replaceChildren(createPopupSvg('check', 13));
-            showToast('Şifre kopyalandı');
+            showToast(pt('toastPwCopied'));
             setTimeout(() => btnCopyPw.replaceChildren(createPopupSvg('key', 13)), 1200);
           } else {
-            showToast('Onay reddedildi veya şifre alınamadı');
+            showToast(pt('toastApprovalDenied'));
           }
         } else {
-          showToast('Hata: Şifre alınamadı');
+          showToast(pt('toastErrPw'));
         }
       } catch {
-        showToast('Hata: Bağlantı başarısız');
+        showToast(pt('toastErrConn'));
       }
       btnCopyPw.style.opacity = '1';
     };
@@ -522,6 +959,24 @@ function renderMatches(matches, container, tab) {
   });
 }
 
+document.getElementById('tabBtnLogins')?.addEventListener('click', (e) => {
+  if (!e.isTrusted) return;
+  activeVaultTab = 'logins';
+  renderActiveTabList();
+});
+
+document.getElementById('tabBtnCards')?.addEventListener('click', (e) => {
+  if (!e.isTrusted) return;
+  activeVaultTab = 'cards';
+  renderActiveTabList();
+});
+
+document.getElementById('tabBtnNotes')?.addEventListener('click', (e) => {
+  if (!e.isTrusted) return;
+  activeVaultTab = 'notes';
+  renderActiveTabList();
+});
+
 document.getElementById('fillBtn').addEventListener('click', async (e) => {
   if (!e.isTrusted) return;
   const tab = await currentTab();
@@ -532,4 +987,5 @@ document.getElementById('fillBtn').addEventListener('click', async (e) => {
   window.close();
 });
 
+applyStaticLocalization();
 checkStatus();

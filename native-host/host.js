@@ -83,22 +83,22 @@ function forwardToFuin(request, cb) {
     // Güvenlik: Token dosyasının varlığını, tipini (symlink reddi), izinlerini ve sahipliğini doğrula
     const stat = fs.lstatSync(TOKEN_FILE);
     if (!stat.isFile() || stat.isSymbolicLink()) {
-      return safeCb({ error: 'token-file-invalid' });
+      return safeCb({ error: 'token-file-invalid', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true });
     }
     if (process.platform !== 'win32') {
       if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) {
-        return safeCb({ error: 'token-file-wrong-owner' });
+        return safeCb({ error: 'token-file-wrong-owner', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true });
       }
       const mode = stat.mode & 0o777;
       if (mode !== 0o600) {
-        return safeCb({ error: 'token-file-insecure-permissions' });
+        return safeCb({ error: 'token-file-insecure-permissions', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true });
       }
     }
     token = fs.readFileSync(TOKEN_FILE, 'utf8').trim();
     if (!token || !/^[0-9a-f]{64}$/i.test(token)) {
-      return safeCb({ error: 'token-file-invalid' });
+      return safeCb({ error: 'token-file-invalid', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true });
     }
-  } catch { return safeCb({ error: 'fuin-not-installed-or-never-run' }); }
+  } catch { return safeCb({ error: 'fuin-not-installed-or-never-run', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true }); }
 
   const socket = net.createConnection(getSocketPath(token));
   let buf = '';
@@ -126,6 +126,7 @@ function forwardToFuin(request, cb) {
 
 const ALLOWED_TYPES = new Set([
   'lookup',
+  'list-vault-items',
   'reveal',
   'open-app',
   'check-save-candidate',
@@ -144,17 +145,37 @@ readMessages((msg) => {
   if (!msg || typeof msg.type !== 'string') return writeMessage({ error: 'bad-request' });
   if (!ALLOWED_TYPES.has(msg.type)) return writeMessage({ error: 'unknown-type' });
 
+  // Protokol uyumluluk kontrolü: istemci protocolVersion gönderdiğinde host sürümüyle eşleşmelidir
+  if (msg.type !== 'handshake' && msg.type !== 'ping' && msg.type !== 'open-app' && msg.protocolVersion !== undefined) {
+    const reqProto = Number(msg.protocolVersion);
+    if (!Number.isFinite(reqProto) || reqProto !== PROTOCOL_VERSION) {
+      return writeMessage({
+        error: 'protocol-mismatch',
+        hostProtocolVersion: PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
+        clientProtocolVersion: Number.isFinite(reqProto) ? reqProto : null,
+        compatible: false
+      });
+    }
+  }
+
   // Güvenlik: İletilen mesajlarda yalnızca bilinen alanları ve güvenli uzunluk sınırlarını geçir
   const sanitized = { type: msg.type };
+  if (msg.protocolVersion !== undefined && Number.isFinite(Number(msg.protocolVersion))) {
+    sanitized.protocolVersion = Number(msg.protocolVersion);
+  }
   if (msg.type === 'lookup') {
     sanitized.domain = clampField(msg.domain, 253);
   } else if (msg.type === 'reveal') {
     sanitized.entryId = clampField(msg.entryId, 128);
     sanitized.domain = clampField(msg.domain, 253);
   } else if (msg.type === 'copy-secure') {
+    const allowedFields = new Set(['username', 'password', 'cardNumber', 'cardCvv', 'secureNote']);
     sanitized.entryId = clampField(msg.entryId, 128);
     sanitized.domain = clampField(msg.domain, 253);
-    sanitized.field = msg.field === 'username' ? 'username' : 'password';
+    sanitized.field = allowedFields.has(msg.field) ? msg.field : 'password';
+  } else if (msg.type === 'list-vault-items') {
+    // Ek parametre yok; masaüstünden yalnızca maskelenmiş kart/not özetleri döner
   } else if (msg.type === 'check-save-candidate') {
     sanitized.domain = clampField(msg.domain, 253);
     sanitized.username = clampField(msg.username, 512);
@@ -168,7 +189,7 @@ readMessages((msg) => {
     sanitized.domain = clampField(msg.domain, 253);
   } else if (msg.type === 'handshake') {
     sanitized.clientVersion = clampField(msg.clientVersion, 32);
-    sanitized.protocolVersion = Number(msg.protocolVersion) || 1;
+    sanitized.protocolVersion = Number.isFinite(Number(msg.protocolVersion)) ? Number(msg.protocolVersion) : 1;
     sanitized.hostProtocolVersion = PROTOCOL_VERSION;
   } else if (msg.type === 'ping') {
     sanitized.timestamp = Date.now();

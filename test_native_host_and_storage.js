@@ -266,13 +266,112 @@ server.listen(sockPath, async () => {
   assert.strictEqual(res7.ok, true);
   assert.strictEqual(res7.pong, true);
 
-  server.close(() => {
+  server.close(async () => {
     if (process.platform !== 'win32' && fs.existsSync(sockPath)) {
       try { fs.unlinkSync(sockPath); } catch {}
     }
     console.log('✓ 5. Socket IPC authentication, missing token, tamper rejection, lockout handling, and handshake passed');
 
-    // ── 6. Tray Manager and Localized Notifications i18n tests ────────────
+    // ── 6. Real extensionBridge & Native Host protocol-mismatch tests ────
+    const extBridge = require('./main/extensionBridge');
+    assert.strictEqual(extBridge.PROTOCOL_VERSION, 1);
+
+    const bridgeTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuin-ext-bridge-'));
+    const mockApp = {
+      getPath: () => bridgeTmpDir,
+      getVersion: () => '1.0.3-test'
+    };
+    const bridgeToken = extBridge.getOrCreateExtToken(mockApp);
+    const bridgeSock = extBridge.getExtSocketPath(mockApp);
+    extBridge.startExtensionBridge({
+      app: mockApp,
+      getMainWindow: () => null,
+      getIsUnlocked: () => false,
+      onActivity: () => {}
+    });
+
+    async function queryRealBridge(payload) {
+      for (let attempt = 0; attempt < 25; attempt++) {
+        if (process.platform === 'win32' || fs.existsSync(bridgeSock)) break;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      return new Promise((resolve, reject) => {
+        const client = net.createConnection(bridgeSock, () => {
+          client.write(JSON.stringify(payload) + '\n');
+        });
+        let buf = '';
+        client.on('data', (chunk) => {
+          buf += chunk.toString('utf8');
+          const nl = buf.indexOf('\n');
+          if (nl >= 0) {
+            client.end();
+            resolve(JSON.parse(buf.slice(0, nl)));
+          }
+        });
+        client.on('error', reject);
+      });
+    }
+
+    try {
+      const eb1 = await queryRealBridge({ id: 'eb1', type: 'lookup', domain: 'github.com', protocolVersion: 99, token: bridgeToken });
+      assert.strictEqual(eb1.error, 'protocol-mismatch');
+      assert.strictEqual(eb1.compatible, false);
+      assert.strictEqual(eb1.protocolVersion, 1);
+      assert.strictEqual(eb1.clientProtocolVersion, 99);
+
+      const eb2 = await queryRealBridge({ id: 'eb2', type: 'handshake', protocolVersion: 1, hostProtocolVersion: 99, token: bridgeToken });
+      assert.strictEqual(eb2.ok, true);
+      assert.strictEqual(eb2.compatible, false);
+      assert.strictEqual(eb2.hostProtocolVersion, 99);
+
+      const eb3 = await queryRealBridge({ id: 'eb3', type: 'handshake', protocolVersion: 1, hostProtocolVersion: 1, token: bridgeToken });
+      assert.strictEqual(eb3.ok, true);
+      assert.strictEqual(eb3.compatible, true);
+      assert.strictEqual(eb3.appVersion, '1.0.3-test');
+    } finally {
+      extBridge.stopExtensionBridge();
+      fs.rmSync(bridgeTmpDir, { recursive: true, force: true });
+    }
+
+    const { spawnSync } = require('child_process');
+    const hostReqJson = JSON.stringify({ type: 'lookup', domain: 'github.com', protocolVersion: 99 });
+    const hostReqBuf = Buffer.from(hostReqJson, 'utf8');
+    const frame = Buffer.alloc(4 + hostReqBuf.length);
+    frame.writeUInt32LE(hostReqBuf.length, 0);
+    hostReqBuf.copy(frame, 4);
+    const hostProc = spawnSync(process.execPath, [path.join(__dirname, 'native-host', 'host.js')], {
+      input: frame,
+      timeout: 5000
+    });
+    assert.strictEqual(hostProc.status, 0, `native-host exited with ${hostProc.status}: ${hostProc.stderr?.toString()}`);
+    assert.ok(hostProc.stdout && hostProc.stdout.length > 4, 'native-host should write framed JSON response');
+    const outLen = hostProc.stdout.readUInt32LE(0);
+    const outPayload = JSON.parse(hostProc.stdout.slice(4, 4 + outLen).toString('utf8'));
+    assert.strictEqual(outPayload.error, 'protocol-mismatch');
+    assert.strictEqual(outPayload.hostProtocolVersion, 1);
+    assert.strictEqual(outPayload.compatible, false);
+
+    // Verify native-host allowlist includes list-vault-items and copy-secure card/note fields
+    const hostCode = fs.readFileSync(path.join(__dirname, 'native-host', 'host.js'), 'utf8');
+    assert.ok(hostCode.includes("'list-vault-items'"), 'ALLOWED_TYPES must include list-vault-items');
+    for (const f of ['cardNumber', 'cardCvv', 'secureNote']) {
+      assert.ok(hostCode.includes(`'${f}'`), `copy-secure must allow ${f}`);
+    }
+    const vaultItemsFrameReq = Buffer.from(JSON.stringify({ type: 'list-vault-items', protocolVersion: 99 }), 'utf8');
+    const vaultItemsFrame = Buffer.alloc(4 + vaultItemsFrameReq.length);
+    vaultItemsFrame.writeUInt32LE(vaultItemsFrameReq.length, 0);
+    vaultItemsFrameReq.copy(vaultItemsFrame, 4);
+    const vaultItemsProc = spawnSync(process.execPath, [path.join(__dirname, 'native-host', 'host.js')], {
+      input: vaultItemsFrame,
+      timeout: 5000
+    });
+    assert.strictEqual(vaultItemsProc.status, 0);
+    const viLen = vaultItemsProc.stdout.readUInt32LE(0);
+    const viPayload = JSON.parse(vaultItemsProc.stdout.slice(4, 4 + viLen).toString('utf8'));
+    assert.strictEqual(viPayload.error, 'protocol-mismatch');
+    console.log('✓ 6. Real extensionBridge & Native Host protocol-mismatch + list-vault-items guards passed');
+
+    // ── 7. Tray Manager and Localized Notifications i18n tests ────────────
     const trayManager = require('./main/trayManager');
     assert.strictEqual(typeof trayManager.TRAY_I18N, 'object');
     assert.strictEqual(trayManager.TRAY_I18N.tr.lock, 'Kilitle');
@@ -285,7 +384,7 @@ server.listen(sockPath, async () => {
     assert.strictEqual(trayManager.getLanguage(), 'en');
     trayManager.updateLanguage('tr');
     assert.strictEqual(trayManager.getLanguage(), 'tr');
-    console.log('✓ 6. Tray manager dynamic i18n and notification keys passed');
+    console.log('✓ 7. Tray manager dynamic i18n and notification keys passed');
 
     console.log('═'.repeat(60));
     console.log('ALL NATIVE HOST & STORAGE TEST CASES PASSED (100%)');

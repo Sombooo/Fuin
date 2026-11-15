@@ -49,19 +49,41 @@
     });
   }
 
+  function deriveTitleFromUrl(url) {
+    if (!url) return '';
+    var androidMatch = String(url).match(/^android:\/\/[^@]+@([^/\s?#]+)/i);
+    if (androidMatch && androidMatch[1]) {
+      return androidMatch[1];
+    }
+    try {
+      return new URL(url).hostname || url;
+    } catch (_) {
+      return url;
+    }
+  }
+
   /**
    * RFC 4180 compliant CSV tokenizer.
    * Parses the full text into a 2D array of strings.
-   * Correctly preserves newlines inside quoted fields and unescapes double quotes ("" -> ").
+   * Correctly handles BOM, Excel `sep=<char>` directives, `,` / `;` / `\t` delimiters,
+   * newlines inside quoted fields, and unescapes double quotes ("" -> ").
    * @param {string} text Full CSV text content.
    * @returns {string[][]} Array of rows, each containing an array of column values.
    */
   function parseCSV(text) {
     if (typeof text !== 'string') return [];
 
-    // Strip BOM
-    var str = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
-    if (!str.trim()) return [];
+    var prep = (detector && typeof detector.preprocessCSV === 'function')
+      ? detector.preprocessCSV(text)
+      : { text: text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text, delimiter: null };
+
+    var str = prep.text;
+    if (!str || !str.trim()) return [];
+
+    var delimiter = prep.delimiter ||
+      (detector && typeof detector.detectCSVDelimiter === 'function'
+        ? detector.detectCSVDelimiter(str)
+        : ',');
 
     var rows = [];
     var row = [];
@@ -83,13 +105,13 @@
             inQuotes = false;
           }
         } else {
-          // Inside quotes, all characters (including \r, \n, commas) are literal
+          // Inside quotes, all characters (including \r, \n, delimiters) are literal
           field += c;
         }
       } else {
         if (c === '"') {
           inQuotes = true;
-        } else if (c === ',') {
+        } else if (c === delimiter) {
           row.push(field);
           field = '';
         } else if (c === '\r') {
@@ -133,14 +155,14 @@
    * Field synonym dictionaries for resilient column mapping.
    */
   var FIELD_SYNONYMS = {
-    title: ['name', 'title', 'site', 'service', 'item_name', 'login_name'],
-    url: ['url', 'login_uri', 'website', 'web_address', 'login_url', 'uri', 'address'],
-    username: ['username', 'login_username', 'user', 'email', 'login', 'user_name', 'account'],
-    password: ['password', 'login_password', 'pass', 'secret', 'user_password'],
-    notes: ['notes', 'note', 'extra', 'comments', 'comment', 'description'],
+    title: ['name', 'title', 'site', 'service', 'item_name', 'login_name', 'ad', 'isim', 'başlık', 'site adı'],
+    url: ['url', 'login_uri', 'website', 'web_address', 'login_url', 'uri', 'address', 'web sitesi', 'adres', 'internet adresi', 'site adresi'],
+    username: ['username', 'login_username', 'user', 'email', 'login', 'user_name', 'account', 'kullanıcı adı', 'kullanici adi', 'e-posta', 'eposta'],
+    password: ['password', 'login_password', 'pass', 'secret', 'user_password', 'şifre', 'sifre', 'parola'],
+    notes: ['notes', 'note', 'extra', 'comments', 'comment', 'description', 'not', 'notlar', 'açıklama'],
     totp: ['totp', 'login_totp', 'otpauth', 'one-time password', 'otp', '2fa', 'authenticator'],
-    category: ['category', 'grouping', 'folder', 'group', 'type', 'vault'],
-    favorite: ['favorite', 'fav', 'starred']
+    category: ['category', 'grouping', 'folder', 'group', 'type', 'vault', 'kategori'],
+    favorite: ['favorite', 'fav', 'starred', 'favori']
   };
 
   /**
@@ -262,13 +284,9 @@
     var title = (get('title') || get('site') || '').trim();
     var url = (get('url') || '').trim();
 
-    // Fallback: Use URL hostname or URL string as title if title is empty
+    // Fallback: Use android:// package name or URL hostname/string as title if title is empty
     if (!title && url) {
-      try {
-        title = new URL(url).hostname || url;
-      } catch (_) {
-        title = url;
-      }
+      title = deriveTitleFromUrl(url);
     }
 
     // Password: preserve exact internal whitespace (do NOT trim)
@@ -334,9 +352,10 @@
     var existingEntries = Array.isArray(options.existingEntries) ? options.existingEntries : [];
     var isDuplicate = function (candidate) {
       return existingEntries.some(function (e) {
-        return e && (e.site === candidate.site || e.title === candidate.title) &&
-          e.username === candidate.username &&
-          e.password === candidate.password;
+        return e && !e.isDeleted && (!e.type || e.type === 'login') &&
+          (e.site === candidate.site || e.title === candidate.title) &&
+          (e.username || '') === (candidate.username || '') &&
+          (e.password || '') === (candidate.password || '');
       });
     };
 

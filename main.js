@@ -906,6 +906,70 @@ ipcMain.on('open-url', (e, url) => {
 // ── IPC: Temel crypto ─────────────────────────────────────────────
 ipcMain.handle('encrypt',      async (_, { data, password }) => encryptData(data, password));
 ipcMain.handle('decrypt',      async (_, { b64, password })  => decryptData(b64, password));
+
+// Standalone backup decryption (supports Desktop 128MB & Mobile 64MB Argon2id profiles without altering vault unlock KDF)
+async function decryptBackupPacket(b64Str, passwordStr, kdfTag) {
+  if (!argon2) {
+    throw new Error('CRITICAL: Argon2 native module is unavailable; refusing insecure KDF downgrade.');
+  }
+  if (typeof b64Str !== 'string' || b64Str.length < 80 || b64Str.length > 268435456) {
+    throw new Error('Invalid backup data');
+  }
+  if (typeof passwordStr !== 'string' || passwordStr.length > 1024) {
+    throw new Error('Invalid password length');
+  }
+
+  const kdfPresets = {
+    'argon2id-64m-3t-1p':  { memoryCost: 65536,  timeCost: 3, parallelism: 1 },
+    'argon2id-128m-4t-1p': { memoryCost: 131072, timeCost: 4, parallelism: 1 },
+  };
+  const kdfOpts = kdfPresets[kdfTag] || kdfPresets['argon2id-128m-4t-1p'];
+
+  const buf = Buffer.from(b64Str, 'base64');
+  if (buf.length < 60) throw new Error('Invalid backup packet');
+  const salt = buf.subarray(0, 32);
+  const iv = buf.subarray(32, 44);
+  const tag = buf.subarray(44, 60);
+  const data = buf.subarray(60);
+
+  const pwBuf = Buffer.from(passwordStr, 'utf8');
+  secureBuffer(pwBuf);
+  let key = null;
+  let dec1 = null;
+  let dec2 = null;
+
+  try {
+    const raw = await argon2.hash(pwBuf, {
+      type: argon2.argon2id,
+      salt,
+      memoryCost: kdfOpts.memoryCost,
+      timeCost: kdfOpts.timeCost,
+      parallelism: kdfOpts.parallelism,
+      hashLength: 32,
+      raw: true,
+    });
+    key = Buffer.from(raw);
+    secureBuffer(key);
+    raw.fill(0);
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    dec1 = decipher.update(data);
+    dec2 = decipher.final();
+    secureBuffer(dec1);
+    secureBuffer(dec2);
+    const jsonStr = Buffer.concat([dec1, dec2]).toString('utf8');
+    return JSON.parse(jsonStr);
+  } finally {
+    unsecureBuffer(pwBuf);
+    pwBuf.fill(0);
+    if (key) { unsecureBuffer(key); key.fill(0); }
+    if (dec1) { unsecureBuffer(dec1); dec1.fill(0); }
+    if (dec2) { unsecureBuffer(dec2); dec2.fill(0); }
+  }
+}
+
+ipcMain.handle('decrypt-backup', async (_, { b64, password, kdf }) => decryptBackupPacket(b64, password, kdf));
 ipcMain.handle('safe-compare', (_,    { a, b })              => safeCompare(a, b));
 
 ipcMain.handle('zxcvbn', (_, password) => {
@@ -1628,6 +1692,49 @@ ipcMain.handle('export-file', async (_, { content, defaultName, filters }) => {
   }
   return false;
 });
+function decodeImportedTextBuffer(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length === 0) return '';
+  if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
+    return buf.subarray(3).toString('utf8');
+  }
+  if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
+    return buf.subarray(2).toString('utf16le');
+  }
+  if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
+    const swapped = Buffer.from(buf.subarray(2));
+    for (let i = 0; i + 1 < swapped.length; i += 2) {
+      const tmp = swapped[i];
+      swapped[i] = swapped[i + 1];
+      swapped[i + 1] = tmp;
+    }
+    return swapped.toString('utf16le');
+  }
+
+  // Heuristic for BOM-less UTF-16LE (often produced by Windows tools)
+  const sampleLen = Math.min(buf.length - (buf.length % 2), 64);
+  if (sampleLen >= 4) {
+    let oddZero = 0;
+    let evenZero = 0;
+    for (let i = 0; i < sampleLen; i += 2) {
+      if (buf[i] === 0) evenZero++;
+      if (buf[i + 1] === 0) oddZero++;
+    }
+    if (oddZero > sampleLen / 4 && evenZero === 0) {
+      return buf.toString('utf16le');
+    }
+  }
+
+  const utf8Str = buf.toString('utf8');
+  if (utf8Str.includes('\uFFFD')) {
+    try {
+      return new TextDecoder('windows-1254', { fatal: false }).decode(buf);
+    } catch {
+      return buf.toString('latin1');
+    }
+  }
+  return utf8Str;
+}
+
 ipcMain.handle('import-file', async (_, { filters }) => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, { filters, properties: ['openFile'] });
   if (filePaths?.[0]) {
@@ -1635,7 +1742,7 @@ ipcMain.handle('import-file', async (_, { filters }) => {
       const stat = fs.lstatSync(filePaths[0]);
       if (!stat.isFile() || stat.isSymbolicLink()) return null;
       if (stat.size > 50 * 1024 * 1024) throw new Error('File exceeds maximum size limit');
-      return fs.readFileSync(filePaths[0], 'utf8');
+      return decodeImportedTextBuffer(fs.readFileSync(filePaths[0]));
     } catch {
       return null;
     }

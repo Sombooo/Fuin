@@ -325,6 +325,94 @@ test('4.4 Interface Contract: importEntries returns Array<VaultEntry>', () => {
   assert.strictEqual(entries[0].site, 'google.com');
 });
 
+test('4.5 Fuin Native JSON: Preserves credit card and secure note entries cleanly', () => {
+  const vault = {
+    type: 'fuin/vault',
+    entries: [
+      {
+        id: 'card-1234567890',
+        type: 'card',
+        site: 'Troy Banka Kartı',
+        cardholderName: 'Kadir',
+        cardNumber: '9792 1234 5678 9012',
+        cardExpiry: '08/29',
+        cardCvv: '321',
+        cardPin: '4321',
+        category: 'Finans'
+      },
+      {
+        id: 'note-1234567890',
+        type: 'note',
+        site: 'Sunucu SSH Key',
+        secureNote: 'ssh-ed25519 AAAA... secret',
+        category: 'İş'
+      }
+    ]
+  };
+  const res = FuinImporters.importFromText(JSON.stringify(vault));
+  assert.strictEqual(res.format, 'fuin');
+  assert.strictEqual(res.count, 2);
+  const card = res.entries.find(e => e.type === 'card');
+  const note = res.entries.find(e => e.type === 'note');
+  assert.ok(card && card.cardNumber === '9792 1234 5678 9012' && card.cardCvv === '321' && card.cardPin === '4321');
+  assert.strictEqual(card.cardLastFour, '9012');
+  assert.ok(note && note.secureNote === 'ssh-ed25519 AAAA... secret');
+
+  // Same title card with different number must NOT be dropped as false duplicate
+  const dupCheck = FuinImporters.importJSON({
+    type: 'fuin/vault',
+    entries: [
+      { type: 'card', site: 'Troy Banka Kartı', cardholderName: 'Kadir', cardNumber: '9792 0000 0000 1111', cardCvv: '999' },
+      vault.entries[0]
+    ]
+  }, { existingEntries: res.entries });
+  assert.strictEqual(dupCheck.count, 1);
+  assert.strictEqual(dupCheck.skippedCount, 1);
+});
+
+test('4.6 Bitwarden JSON: Imports typed Card (3) and SecureNote (2) items', () => {
+  const bw = {
+    encrypted: false,
+    items: [
+      {
+        type: 3,
+        name: 'Visa Platinum',
+        notes: 'Banka notu',
+        card: { cardholderName: 'Ali Veli', number: '4111111111111111', expMonth: '5', expYear: '2029', code: '777', brand: 'Visa' }
+      },
+      {
+        type: 2,
+        name: 'Wi-Fi Şifreleri',
+        notes: 'Misafir ağı: FuinGuest2026',
+        secureNote: { type: 0 }
+      }
+    ]
+  };
+  const res = FuinImporters.importFromText(JSON.stringify(bw));
+  assert.strictEqual(res.format, 'bitwarden');
+  assert.strictEqual(res.count, 2);
+  assert.strictEqual(res.entries[0].type, 'card');
+  assert.strictEqual(res.entries[0].cardExpiry, '05/29');
+  assert.strictEqual(res.entries[0].cardLastFour, '1111');
+  assert.strictEqual(res.entries[1].type, 'note');
+  assert.strictEqual(res.entries[1].secureNote, 'Misafir ağı: FuinGuest2026');
+});
+
+test('4.7 Chrome/Google CSV: Supports Excel sep=;, semicolon delimiter, Turkish headers, and android:// URI', () => {
+  const csv = 'sep=;\r\n' +
+              'ad;web sitesi;kullanıcı adı;şifre;not\r\n' +
+              ';android://Abc/Def+Ghi==@com.whatsapp/;+905551112233;WaSecret!99;Mobil hesap\r\n' +
+              'Google;https://accounts.google.com;kadir@gmail.com;GoogPass123;';
+  assert.strictEqual(FuinImporters.detectFormat(csv), 'chrome');
+  const res = FuinImporters.importCSV(csv);
+  assert.strictEqual(res.format, 'chrome');
+  assert.strictEqual(res.count, 2);
+  assert.strictEqual(res.entries[0].title, 'com.whatsapp');
+  assert.strictEqual(res.entries[0].password, 'WaSecret!99');
+  assert.strictEqual(res.entries[0].notes, 'Mobil hesap');
+  assert.strictEqual(res.entries[1].title, 'Google');
+});
+
 console.log('═'.repeat(75));
 console.log(`SONUÇ: ${passes} BAŞARILI, ${failures} BAŞARISIZ`);
 console.log('═'.repeat(75));

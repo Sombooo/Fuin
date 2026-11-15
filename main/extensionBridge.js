@@ -342,11 +342,12 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
       return reply({ id: msg.id, ok: true });
     }
     if (msg.type === 'ping') {
-      return reply({ id: msg.id, ok: true, pong: true, timestamp: Date.now() });
+      return reply({ id: msg.id, ok: true, pong: true, protocolVersion: PROTOCOL_VERSION, timestamp: Date.now() });
     }
     if (msg.type === 'handshake') {
-      const clientProto = Number(msg.protocolVersion) || 1;
-      const compatible = (clientProto === PROTOCOL_VERSION);
+      const clientProto = Number.isFinite(Number(msg.protocolVersion)) ? Number(msg.protocolVersion) : 1;
+      const hostProto = Number.isFinite(Number(msg.hostProtocolVersion)) ? Number(msg.hostProtocolVersion) : null;
+      const compatible = (clientProto === PROTOCOL_VERSION) && (hostProto === null || hostProto === PROTOCOL_VERSION);
       let appVer = '1.0.0';
       try {
         if (app && typeof app.getVersion === 'function') appVer = app.getVersion();
@@ -355,10 +356,25 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
         id: msg.id,
         ok: true,
         protocolVersion: PROTOCOL_VERSION,
+        minProtocolVersion: PROTOCOL_VERSION,
+        clientProtocolVersion: clientProto,
+        hostProtocolVersion: hostProto,
         appVersion: appVer,
         unlocked: !!getIsUnlocked(),
         compatible
       });
+    }
+    if (msg.protocolVersion !== undefined) {
+      const reqProto = Number(msg.protocolVersion);
+      if (!Number.isFinite(reqProto) || reqProto !== PROTOCOL_VERSION) {
+        return reply({
+          id: msg.id,
+          error: 'protocol-mismatch',
+          protocolVersion: PROTOCOL_VERSION,
+          clientProtocolVersion: Number.isFinite(reqProto) ? reqProto : null,
+          compatible: false
+        });
+      }
     }
     if (!getIsUnlocked()) {
       return reply({ id: msg.id, error: 'locked' });
@@ -373,6 +389,9 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
         const domain = String(msg.domain || '').slice(0, 253);
         const matches = await relayToRenderer(getMainWindow, 'ext-lookup-request', { domain });
         reply({ id: msg.id, matches });
+      } else if (msg.type === 'list-vault-items') {
+        const result = await relayToRenderer(getMainWindow, 'ext-list-vault-items-request', {});
+        reply({ id: msg.id, ...(result && typeof result === 'object' ? result : { cards: [], notes: [] }) });
       } else if (msg.type === 'reveal') {
         const result = await relayToRenderer(getMainWindow, 'ext-reveal-request', {
           entryId: String(msg.entryId || '').slice(0, 128),
@@ -380,10 +399,11 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
         });
         reply({ id: msg.id, ...result });
       } else if (msg.type === 'copy-secure') {
+        const allowedFields = new Set(['username', 'password', 'cardNumber', 'cardCvv', 'secureNote']);
         const result = await relayToRenderer(getMainWindow, 'ext-copy-secure-request', {
           entryId: String(msg.entryId || '').slice(0, 128),
           domain: String(msg.domain || '').slice(0, 253),
-          field: msg.field === 'username' ? 'username' : 'password'
+          field: allowedFields.has(msg.field) ? msg.field : 'password'
         });
         reply({ id: msg.id, ...result });
       } else if (msg.type === 'check-save-candidate') {

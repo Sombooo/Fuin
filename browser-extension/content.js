@@ -15,6 +15,90 @@
   const FIELD_MAP = new WeakMap();
   let _pendingDirectFillEntryId = null;
 
+  const EXT_LOCALE = (() => {
+    try {
+      const lang = (
+        (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getUILanguage === 'function' && chrome.i18n.getUILanguage()) ||
+        (typeof navigator !== 'undefined' && navigator.language) ||
+        'en'
+      ).toLowerCase();
+      return lang.startsWith('tr') ? 'tr' : 'en';
+    } catch {
+      return 'en';
+    }
+  })();
+
+  const EXT_I18N = {
+    tr: {
+      errLocked: 'Fuin kilitli — önce masaüstü uygulamasını açın',
+      errBusy: 'Fuin şu an başka bir onay bekliyor',
+      errTimeout: 'Onay süresi doldu — tekrar deneyin',
+      errDomainMismatch: 'Alan adı eşleşmedi',
+      errNotFound: 'Kayıt bulunamadı',
+      errProtocolMismatch: 'Eklenti ve Fuin sürümü uyumsuz — güncelleyin',
+      errUnreachable: 'Fuin masaüstü uygulamasına ulaşılamıyor',
+      errConnPrefix: 'Fuin bağlantısı başarısız',
+      insecureHttp: 'Güvenli olmayan bağlantı (HTTP) — Fuin bu sayfada şifre doldurmaz',
+      noMatches: 'Bu site için kayıtlı şifre yok',
+      updateTitle: 'Şifre Güncellensin mi?',
+      saveTitle: 'Hesap Kaydedilsin mi?',
+      thisSite: 'Bu Site',
+      labelUsername: 'Kullanıcı Adı',
+      placeholderUsername: 'Kullanıcı adı veya e-posta',
+      labelPassword: 'Şifre',
+      eyeToggle: 'Şifreyi göster / gizle',
+      closeTitle: 'Kapat',
+      lockedNote: 'Fuin şu an kilitli. Kaydet\'e bastığınızda uygulama açılır; kilidi açıp tekrar Kaydet\'e basabilirsiniz.',
+      neverSite: 'Bu Sitede Asla',
+      neverSiteTitle: 'Bu alan adı için bir daha şifre kaydetme önerisi gösterme',
+      notNow: 'Şimdi Değil',
+      btnUpdate: 'Güncelle',
+      btnSave: 'Kaydet',
+      saving: 'Kaydediliyor…',
+      saved: 'Kaydedildi! ✓',
+      lockedOpenedNote: 'Fuin kilitli — masaüstü uygulaması açıldı. Kilidi açıp tekrar Kaydet\'e basın.',
+      mismatchSaveNote: 'Sürüm uyuşmazlığı — lütfen Fuin Masaüstü ve tarayıcı eklentisini güncelleyin.',
+      btnError: 'Hata',
+      btnConnError: 'Bağlantı hatası'
+    },
+    en: {
+      errLocked: 'Fuin is locked — unlock the desktop app first',
+      errBusy: 'Fuin is waiting on another approval prompt',
+      errTimeout: 'Approval timed out — please try again',
+      errDomainMismatch: 'Domain mismatch',
+      errNotFound: 'Saved entry not found',
+      errProtocolMismatch: 'Extension & Fuin version mismatch — please update',
+      errUnreachable: 'Could not reach Fuin desktop app',
+      errConnPrefix: 'Fuin connection failed',
+      insecureHttp: 'Insecure connection (HTTP) — Fuin never fills passwords over HTTP',
+      noMatches: 'No saved logins for this site',
+      updateTitle: 'Update Password?',
+      saveTitle: 'Save Account?',
+      thisSite: 'This Site',
+      labelUsername: 'Username',
+      placeholderUsername: 'Username or email',
+      labelPassword: 'Password',
+      eyeToggle: 'Show / hide password',
+      closeTitle: 'Close',
+      lockedNote: 'Fuin is locked. Click Save to open Fuin, unlock your vault, and save again.',
+      neverSite: 'Never on this site',
+      neverSiteTitle: 'Never prompt to save passwords on this domain',
+      notNow: 'Not Now',
+      btnUpdate: 'Update',
+      btnSave: 'Save',
+      saving: 'Saving…',
+      saved: 'Saved! ✓',
+      lockedOpenedNote: 'Fuin is locked — desktop app opened. Unlock it and press Save again.',
+      mismatchSaveNote: 'Protocol version mismatch — please update Fuin Desktop and the browser extension.',
+      btnError: 'Error',
+      btnConnError: 'Connection error'
+    }
+  };
+
+  function ct(key) {
+    return (EXT_I18N[EXT_LOCALE] && EXT_I18N[EXT_LOCALE][key]) || EXT_I18N.en[key] || key;
+  }
+
   function isVisibleInput(el) {
     if (!el || el.disabled || el.readOnly || el.type === 'hidden') return false;
     const rect = el.getBoundingClientRect();
@@ -144,12 +228,14 @@
   }
 
   function formatRevealError(err) {
-    if (err === 'locked') return 'Fuin kilitli — önce masaüstü uygulamasını açın';
-    if (err === 'busy') return 'Fuin şu an başka bir onay bekliyor';
-    if (err === 'timeout') return 'Onay süresi doldu — tekrar deneyin';
-    if (err === 'domain-mismatch') return 'Alan adı eşleşmedi';
-    if (err === 'not-found') return 'Kayıt bulunamadı';
-    return 'Fuin bağlantısı başarısız (' + err + ')';
+    if (err === 'locked') return ct('errLocked');
+    if (err === 'busy') return ct('errBusy');
+    if (err === 'timeout') return ct('errTimeout');
+    if (err === 'domain-mismatch') return ct('errDomainMismatch');
+    if (err === 'not-found') return ct('errNotFound');
+    if (err === 'protocol-mismatch') return ct('errProtocolMismatch');
+    if (err === 'native-host-unreachable' || err === 'fuin-not-running') return ct('errUnreachable');
+    return ct('errConnPrefix') + ' (' + err + ')';
   }
 
   function injectIcon(pwField) {
@@ -212,7 +298,7 @@
   async function handleFillClick(targetField, icon, shadowRoot) {
     if (!shadowRoot) return;
     if (location.protocol === 'http:') {
-      showMenu(icon, shadowRoot, ['Güvenli olmayan bağlantı (HTTP) — Fuin bu sayfada şifre doldurmaz']);
+      showMenu(icon, shadowRoot, [ct('insecureHttp')]);
       return;
     }
     const domain = location.hostname;
@@ -231,9 +317,9 @@
       res = { error: 'native-host-unreachable' };
     }
 
-    if (!res || res.error === 'locked') return showMenu(icon, shadowRoot, ['Fuin kilitli — önce masaüstü kilidini açın']);
-    if (res.error)                      return showMenu(icon, shadowRoot, ['Fuin masaüstü uygulamasına ulaşılamıyor']);
-    if (!res.matches || !res.matches.length) return showMenu(icon, shadowRoot, ['Bu site için kayıtlı şifre yok']);
+    if (!res)                                return showMenu(icon, shadowRoot, [ct('errUnreachable')]);
+    if (res.error)                          return showMenu(icon, shadowRoot, [formatRevealError(res.error)]);
+    if (!res.matches || !res.matches.length) return showMenu(icon, shadowRoot, [ct('noMatches')]);
 
     // Tek eşleşme varsa seçim menüsünü atla, direkt izin iste
     if (res.matches.length === 1) {
@@ -707,6 +793,7 @@
 
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
+    closeBtn.title = ct('closeTitle');
     closeBtn.appendChild(createExtSvg('close', 14));
     Object.assign(closeBtn.style, {
       background: 'transparent',
@@ -726,7 +813,7 @@
 
     const isUpdate = result && result.action === 'update';
     const titleText = document.createElement('div');
-    titleText.textContent = isUpdate ? 'Şifre Güncellensin mi?' : 'Hesap Kaydedilsin mi?';
+    titleText.textContent = isUpdate ? ct('updateTitle') : ct('saveTitle');
     Object.assign(titleText.style, {
       fontSize: '14px',
       fontWeight: '600',
@@ -736,7 +823,7 @@
     card.appendChild(titleText);
 
     const rawHost = (candidate.domain || location.hostname || '').replace(/^www\./i, '');
-    const cleanSite = rawHost ? (rawHost.charAt(0).toUpperCase() + rawHost.slice(1)) : 'Bu Site';
+    const cleanSite = rawHost ? (rawHost.charAt(0).toUpperCase() + rawHost.slice(1)) : ct('thisSite');
 
     const siteBadge = document.createElement('div');
     Object.assign(siteBadge.style, {
@@ -769,7 +856,7 @@
     // Kullanıcı Adı
     const userWrap = document.createElement('div');
     const userLabel = document.createElement('div');
-    userLabel.textContent = 'Kullanıcı Adı';
+    userLabel.textContent = ct('labelUsername');
     Object.assign(userLabel.style, {
       fontSize: '10px',
       fontWeight: '600',
@@ -781,7 +868,7 @@
     const userInput = document.createElement('input');
     userInput.type = 'text';
     userInput.value = candidate.username || '';
-    userInput.placeholder = 'Kullanıcı adı veya e-posta';
+    userInput.placeholder = ct('placeholderUsername');
     Object.assign(userInput.style, {
       width: '100%',
       boxSizing: 'border-box',
@@ -803,7 +890,7 @@
     // Şifre
     const pwWrap = document.createElement('div');
     const pwLabel = document.createElement('div');
-    pwLabel.textContent = 'Şifre';
+    pwLabel.textContent = ct('labelPassword');
     Object.assign(pwLabel.style, {
       fontSize: '10px',
       fontWeight: '600',
@@ -839,7 +926,7 @@
     const eyeBtn = document.createElement('button');
     eyeBtn.type = 'button';
     eyeBtn.appendChild(createExtSvg('eye', 14));
-    eyeBtn.title = 'Şifreyi göster / gizle';
+    eyeBtn.title = ct('eyeToggle');
     Object.assign(eyeBtn.style, {
       position: 'absolute',
       right: '7px',
@@ -903,7 +990,7 @@
       lineHeight: '1.4'
     });
     if (result && result.locked) {
-      statusNote.textContent = 'Fuin şu an kilitli. Kaydet\'e bastığınızda uygulama açılır; kilidi açıp tekrar Kaydet\'e basabilirsiniz.';
+      statusNote.textContent = ct('lockedNote');
     }
     card.appendChild(statusNote);
 
@@ -917,8 +1004,8 @@
 
     const neverBtn = document.createElement('button');
     neverBtn.type = 'button';
-    neverBtn.textContent = 'Bu Sitede Asla';
-    neverBtn.title = 'Bu alan adı için bir daha şifre kaydetme önerisi gösterme';
+    neverBtn.textContent = ct('neverSite');
+    neverBtn.title = ct('neverSiteTitle');
     Object.assign(neverBtn.style, {
       background: 'transparent',
       border: 'none',
@@ -950,7 +1037,7 @@
 
     const notNowBtn = document.createElement('button');
     notNowBtn.type = 'button';
-    notNowBtn.textContent = 'Şimdi Değil';
+    notNowBtn.textContent = ct('notNow');
     Object.assign(notNowBtn.style, {
       background: '#2a2720',
       border: '1px solid #3d3830',
@@ -968,7 +1055,7 @@
 
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
-    saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet';
+    saveBtn.textContent = isUpdate ? ct('btnUpdate') : ct('btnSave');
     Object.assign(saveBtn.style, {
       background: '#5a9a6e',
       border: '1px solid #5a9a6e',
@@ -987,7 +1074,7 @@
       if (!finalPassword) return;
 
       saveBtn.disabled = true;
-      saveBtn.textContent = 'Kaydediliyor…';
+      saveBtn.textContent = ct('saving');
       try {
         const resp = await chrome.runtime.sendMessage({
           type: 'fuin-save-credential',
@@ -999,7 +1086,7 @@
         if (resp && resp.ok) {
           markLocalDismissed(finalUsername, finalPassword);
           statusNote.style.display = 'none';
-          saveBtn.textContent = 'Kaydedildi! ✓';
+          saveBtn.textContent = ct('saved');
           saveBtn.style.background = '#6bb382';
           userInput.value = '';
           pwInput.value = '';
@@ -1007,19 +1094,24 @@
             if (host.parentNode) host.remove();
             activeSaveHost = null;
           }, 900);
-        } else if (resp && (resp.error === 'locked' || resp.error === 'fuin-not-running' || resp.error === 'native-host-unreachable')) {
-          try { chrome.runtime.sendMessage({ type: 'fuin-open-app' }); } catch {}
-          statusNote.textContent = 'Fuin kilitli — masaüstü uygulaması açıldı. Kilidi açıp tekrar Kaydet\'e basın.';
+        } else if (resp && resp.error === 'protocol-mismatch') {
+          statusNote.textContent = ct('mismatchSaveNote');
           statusNote.style.display = 'block';
           saveBtn.disabled = false;
-          saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet';
+          saveBtn.textContent = isUpdate ? ct('btnUpdate') : ct('btnSave');
+        } else if (resp && (resp.error === 'locked' || resp.error === 'fuin-not-running' || resp.error === 'native-host-unreachable')) {
+          try { chrome.runtime.sendMessage({ type: 'fuin-open-app' }); } catch {}
+          statusNote.textContent = ct('lockedOpenedNote');
+          statusNote.style.display = 'block';
+          saveBtn.disabled = false;
+          saveBtn.textContent = isUpdate ? ct('btnUpdate') : ct('btnSave');
         } else {
-          saveBtn.textContent = 'Hata';
-          setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet'; }, 2000);
+          saveBtn.textContent = ct('btnError');
+          setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = isUpdate ? ct('btnUpdate') : ct('btnSave'); }, 2000);
         }
       } catch {
-        saveBtn.textContent = 'Bağlantı hatası';
-        setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = isUpdate ? 'Güncelle' : 'Kaydet'; }, 2000);
+        saveBtn.textContent = ct('btnConnError');
+        setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = isUpdate ? ct('btnUpdate') : ct('btnSave'); }, 2000);
       }
     });
 

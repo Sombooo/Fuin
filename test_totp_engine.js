@@ -305,6 +305,31 @@ async function asyncTest(desc, fn) {
     assert.strictEqual(Buffer.from(dec).toString('utf8'), 'f');
   });
 
+  test('parseOtpAuthUri parses standard otpauth://totp QR payloads cleanly', () => {
+    const uri = 'otpauth://totp/GitHub:kadir%40example.com?secret=jbsw%20y3dp%20ehpk%203pxp&issuer=GitHub&digits=6&period=30';
+    const parsed = totp.parseOtpAuthUri(uri);
+    assert.strictEqual(parsed.valid, true);
+    assert.strictEqual(parsed.secret, 'JBSWY3DPEHPK3PXP');
+    assert.strictEqual(parsed.issuer, 'GitHub');
+    assert.strictEqual(parsed.account, 'kadir@example.com');
+    assert.strictEqual(parsed.digits, 6);
+    assert.strictEqual(parsed.period, 30);
+  });
+
+  test('parseOtpAuthUri handles raw Base32 and rejects unsupported hotp:// / URLs', () => {
+    const raw = totp.parseOtpAuthUri('jbsw-y3dp-ehpk-3pxp');
+    assert.strictEqual(raw.valid, true);
+    assert.strictEqual(raw.secret, 'JBSWY3DPEHPK3PXP');
+
+    const hotp = totp.parseOtpAuthUri('otpauth://hotp/Test?secret=JBSWY3DPEHPK3PXP&counter=1');
+    assert.strictEqual(hotp.valid, false);
+    assert.strictEqual(hotp.error, 'unsupported-otp-type');
+
+    assert.strictEqual(totp.parseOtpAuthUri('https://example.com').valid, false);
+    assert.strictEqual(totp.parseOtpAuthUri('{"ip":"192.168.1.5","port":4545}').valid, false);
+    assert.strictEqual(totp.parseOtpAuthUri('otpauth://totp/Bad').valid, false);
+  });
+
   // ── SUMMARY REPORT ───────────────────────────────────────────────────────
   console.log('\n' + '═'.repeat(75));
   console.log(`TOTAL ASSERTION SUITES: ${passes + failures} | PASSED: ${passes} | FAILED: ${failures}`);

@@ -91,15 +91,17 @@
     }
   }
 
-  function extractCiphertextFromFuinFile(raw) {
+  function extractBackupMetadataFromFuinFile(raw) {
     const trimmed = String(raw || '').trim();
     let ciphertext = '';
+    let kdf = null;
     if (trimmed.startsWith('{') || trimmed.startsWith('"')) {
       const parsedJson = JSON.parse(trimmed);
       if (typeof parsedJson === 'string') {
         ciphertext = parsedJson;
       } else if (parsedJson && typeof parsedJson.ciphertext === 'string') {
         ciphertext = parsedJson.ciphertext;
+        if (typeof parsedJson.kdf === 'string') kdf = parsedJson.kdf;
       } else if (parsedJson && typeof parsedJson.data === 'string' && !parsedJson.iv) {
         ciphertext = parsedJson.data;
       }
@@ -109,7 +111,11 @@
     if (typeof ciphertext !== 'string' || ciphertext.length < 80) {
       throw new Error('invalid-format');
     }
-    return ciphertext;
+    return { ciphertext, kdf };
+  }
+
+  function extractCiphertextFromFuinFile(raw) {
+    return extractBackupMetadataFromFuinFile(raw).ciphertext;
   }
 
   function buildEncryptedBackupEnvelope(ciphertext) {
@@ -142,6 +148,7 @@
     extractSnapshotsFromResponse,
     renderBackupHistoryItems,
     extractCiphertextFromFuinFile,
+    extractBackupMetadataFromFuinFile,
     buildEncryptedBackupEnvelope,
     buildPlaintextCsv,
   };

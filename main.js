@@ -1814,36 +1814,53 @@ ipcMain.handle('download-update', async (event, { url, filename }) => {
   }
 
   let receivedBytes = 0;
-  const fileStream = fs.createWriteStream(destinationPath, { mode: 0o700 });
+  const partPath = `${destinationPath}.${process.pid}.${Date.now()}.part`;
+  const fileStream = fs.createWriteStream(partPath, { mode: 0o644 });
 
-  const reader = res.body.getReader();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    receivedBytes += value.length;
-    if (receivedBytes > MAX_UPDATE_SIZE) {
-      fileStream.close();
-      try { fs.unlinkSync(destinationPath); } catch {}
-      throw new Error('Downloaded file exceeded size limit');
+  try {
+    const reader = res.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      receivedBytes += value.length;
+      if (receivedBytes > MAX_UPDATE_SIZE) {
+        throw new Error('Downloaded file exceeded size limit');
+      }
+      fileStream.write(Buffer.from(value));
+
+      const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
+      try {
+        event.sender.send('update-download-progress', {
+          percent,
+          received: receivedBytes,
+          total: totalBytes
+        });
+      } catch {}
     }
-    fileStream.write(Buffer.from(value));
 
-    const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
-    try {
-      event.sender.send('update-download-progress', {
-        percent,
-        received: receivedBytes,
-        total: totalBytes
+    await new Promise((resolve, reject) => {
+      fileStream.end((err) => {
+        if (err) reject(err);
+        else resolve();
       });
-    } catch {}
-  }
-
-  await new Promise((resolve, reject) => {
-    fileStream.end((err) => {
-      if (err) reject(err);
-      else resolve();
     });
-  });
+
+    if (receivedBytes <= 0 || (totalBytes > 0 && receivedBytes !== totalBytes)) {
+      throw new Error('Incomplete update download');
+    }
+
+    if (process.platform === 'darwin' && fs.existsSync(destinationPath)) {
+      try {
+        require('child_process').execFileSync('hdiutil', ['detach', destinationPath], { stdio: 'ignore', timeout: 5000 });
+      } catch {}
+    }
+
+    fs.renameSync(partPath, destinationPath);
+  } catch (err) {
+    try { fileStream.destroy(); } catch {}
+    try { if (fs.existsSync(partPath)) fs.unlinkSync(partPath); } catch {}
+    throw err;
+  }
 
   return { success: true, filePath: destinationPath };
 });
@@ -1861,7 +1878,10 @@ ipcMain.handle('install-update', async (_, { filePath }) => {
   const stat = fs.lstatSync(resolvedPath);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Not a valid file');
 
-  await shell.openPath(resolvedPath);
+  const openError = await shell.openPath(resolvedPath);
+  if (openError) {
+    throw new Error(openError);
+  }
   return true;
 });
 

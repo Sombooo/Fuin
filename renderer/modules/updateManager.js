@@ -217,7 +217,22 @@
           `;
 
           let unregProgress = null;
+          let downloadedFilePath = null;
           dlBtn.addEventListener('click', async () => {
+            if (downloadedFilePath) {
+              dlBtn.disabled = true;
+              const statusText = progressWrap.querySelector('.dl-status-text');
+              try {
+                await window.kekkai?.installUpdate?.({ filePath: downloadedFilePath });
+              } catch (err) {
+                if (statusText) {
+                  statusText.textContent = `${t('sysUpdateFailed')}: ${err?.message || 'Error'}`;
+                }
+              } finally {
+                dlBtn.disabled = false;
+              }
+              return;
+            }
             dlBtn.disabled = true;
             progressWrap.style.display = 'block';
             const statusText = progressWrap.querySelector('.dl-status-text');
@@ -240,14 +255,12 @@
                 filename: asset.name
               });
               if (res && res.filePath) {
+                downloadedFilePath = res.filePath;
                 statusText.textContent = t('sysUpdateDownloaded');
                 pBar.style.width = '100%';
                 dlBtn.className = 'btn-io pri';
                 dlBtn.textContent = t('sysUpdateInstallBtn');
                 dlBtn.disabled = false;
-                dlBtn.onclick = async () => {
-                  await window.kekkai?.installUpdate?.({ filePath: res.filePath });
-                };
               }
             } catch (err) {
               statusText.textContent = `${t('sysUpdateFailed')}: ${err.message || 'Error'}`;

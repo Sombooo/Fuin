@@ -319,6 +319,12 @@ test('8. In-app update settings, asset resolver, download validation & clean UI'
   assert.ok(mainJs.includes("ipcMain.handle('install-update'"), 'main.js must provide secure install-update IPC');
   assert.ok(mainJs.includes("finalUrl.hostname.endsWith('.githubusercontent.com')"), 'main.js must permit GitHub release assets CDN');
   assert.ok(mainJs.includes("finalUrl.hostname.endsWith('.blob.core.windows.net')"), 'main.js must permit GitHub Azure blob backend');
+
+  // 8.6 In-app updater click-listener single-fire & atomic .part download guard
+  const updateMgrJs = fs.readFileSync(path.join(__dirname, 'renderer', 'modules', 'updateManager.js'), 'utf8');
+  assert.ok(updateMgrJs.includes('if (downloadedFilePath)'), 'updateManager must guard install click inside existing listener via downloadedFilePath');
+  assert.ok(!updateMgrJs.includes('dlBtn.onclick ='), 'updateManager must not layer dlBtn.onclick on top of addEventListener click');
+  assert.ok(mainJs.includes('.part') && mainJs.includes('fs.renameSync(partPath, destinationPath)'), 'main.js download-update must write to .part temp file and atomically rename');
 });
 
 // ── 9. Recovery Key Self-Test & Backup History DOM/IPC Parity ───────────────

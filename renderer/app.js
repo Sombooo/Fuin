@@ -155,18 +155,54 @@ async function sha1hex(str) {
 }
 
 // ── RECOVERY KEY ──────────────────────────────────────────────────
+const RECOVERY_KIT_STORAGE_KEY = 'fuin-recovery-kit-enc';
+
+function normalizeRecoveryKeyFormat(rawKey) {
+  const clean = String(rawKey || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!clean) return '';
+  if (clean.length >= 16 && /^[A-Z0-9]+$/.test(clean)) {
+    return clean.match(/.{1,8}/g).join('-');
+  }
+  return String(rawKey || '').trim().toUpperCase();
+}
+
+async function cacheRecoveryKitEnvelope(key, masterPw) {
+  const canonical = normalizeRecoveryKeyFormat(key);
+  if (!canonical || !masterPw || !api?.encrypt) return;
+  try {
+    const kitEnc = await api.encrypt({ key: canonical, updatedAt: Date.now() }, masterPw);
+    if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+      localStorage.setItem(RECOVERY_KIT_STORAGE_KEY, kitEnc);
+    }
+  } catch {}
+}
+
+function clearRecoveryKitEnvelope() {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
+      localStorage.removeItem(RECOVERY_KIT_STORAGE_KEY);
+    }
+  } catch {}
+}
+
 function generateRecoveryKey() {
   return window.FuinRecoveryUI.generateRecoveryKey();
 }
 
 async function saveRecoveryKey(key, masterPw) {
-  const keyClean = key.replace(/-/g, '');
+  const canonicalKey = normalizeRecoveryKeyFormat(key);
+  const keyClean = canonicalKey.replace(/-/g, '');
   // recovery.enc: { key, verified } — kurtarma anahtarını doğrulamak için
-  const enc = await api.encrypt({ key, verified: true }, keyClean);
+  const enc = await api.encrypt({ key: canonicalKey, verified: true }, keyClean);
   // master.enc: { master } — şifre değiştirirken vault'u yeniden şifrelemek için
   const masterEnc = await api.encrypt({ master: masterPw }, keyClean);
   // Her iki dosya tek bir ayrıcalıklı atomik işlemle diske yazılır
   await api.saveRecoveryPair(enc, masterEnc);
+  await cacheRecoveryKitEnvelope(canonicalKey, masterPw);
+  if (typeof document !== 'undefined') {
+    const disp = document.getElementById('recoveryKeyDisplay');
+    if (disp) disp.textContent = canonicalKey;
+  }
 }
 
 // ADV-03: Recovery Migration Status Check & UI Update
@@ -1851,6 +1887,7 @@ async function handleForgot() {
   if(!recoveryEnc) {
     const rWord = t('resetConfirmWord');
     if(inp===rWord) {
+      clearRecoveryKitEnvelope();
       await api.fullReset(); // fuin.enc + fuin.recovery + fuin.master.enc siler
       closeForgot();
       toast(t('toastAllDataErased'));
@@ -1889,7 +1926,7 @@ async function handleForgot() {
         await api.saveData(newEnc);
       }
     }
-    await saveRecoveryKey(inp, newPw);
+    await saveRecoveryKey(normalizeRecoveryKeyFormat(inp), newPw);
     recoveryVerified=false;
     closeForgot();
     toast(t('toastPasswordUpdated'));
@@ -2589,19 +2626,63 @@ function generateEmergencyKitHtml(recoveryKey, dateStr) {
 </html>`;
 }
 
+async function loadCachedRecoveryKeyForKit(masterPw) {
+  if (!masterPw || !api?.decrypt) return '';
+  try {
+    const kitEnc = (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function')
+      ? localStorage.getItem(RECOVERY_KIT_STORAGE_KEY)
+      : null;
+    if (!kitEnc) return '';
+    const kitData = await api.decrypt(kitEnc, masterPw);
+    return normalizeRecoveryKeyFormat(kitData?.key || '');
+  } catch {
+    return '';
+  }
+}
+
+async function resolveActiveRecoveryKey(masterPw) {
+  let rKey = normalizeRecoveryKeyFormat(document.getElementById('recoveryKeyDisplay')?.textContent?.trim() || '');
+  if (!rKey) {
+    rKey = await loadCachedRecoveryKeyForKit(masterPw);
+  }
+  if (rKey && typeof api?.loadRecovery === 'function' && typeof api?.decrypt === 'function') {
+    try {
+      const recEnc = await api.loadRecovery();
+      if (recEnc) {
+        await api.decrypt(recEnc, rKey.replace(/-/g, ''));
+      }
+    } catch {
+      rKey = '';
+      clearRecoveryKitEnvelope();
+      const disp = document.getElementById('recoveryKeyDisplay');
+      if (disp) disp.textContent = '';
+    }
+  }
+  return rKey;
+}
+
 async function exportEmergencyKit() {
   if (!master) {
     toast(t('toastLoginFirst'));
     return;
   }
-  let rKey = document.getElementById('recoveryKeyDisplay')?.textContent?.trim() || '';
+  let rKey = await resolveActiveRecoveryKey(master);
   if (!rKey) {
     const proceed = confirm(t('confirmGenKitRegen'));
     if (!proceed) return;
     rKey = generateRecoveryKey();
     await saveRecoveryKey(rKey, master);
-    document.getElementById('recoveryKeyDisplay').textContent = rKey;
+    document.getElementById('recoveryOverlay')?.classList.add('open');
     await checkRecoveryStatus();
+  } else {
+    const disp = document.getElementById('recoveryKeyDisplay');
+    if (disp) disp.textContent = rKey;
+    const hasCached = (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function')
+      ? Boolean(localStorage.getItem(RECOVERY_KIT_STORAGE_KEY))
+      : false;
+    if (!hasCached) {
+      await cacheRecoveryKitEnvelope(rKey, master);
+    }
   }
   const dateStr = new Date().toLocaleString();
   const html = generateEmergencyKitHtml(rKey, dateStr);
@@ -2697,6 +2778,14 @@ async function handleVerifyRecoveryKey() {
       }
     }
     if (recData && (recData.verified || recData.key)) {
+      const canonicalKey = normalizeRecoveryKeyFormat(recData.key || keyClean);
+      if (canonicalKey) {
+        const disp = document.getElementById('recoveryKeyDisplay');
+        if (disp) disp.textContent = canonicalKey;
+        if (master) {
+          await cacheRecoveryKitEnvelope(canonicalKey, master);
+        }
+      }
       showResult(t('verifyRecoverySuccess'), 'green');
       toast(t('verifyRecoverySuccess'));
     } else {
@@ -2866,6 +2955,7 @@ async function confirmHardReset() {
     el.style.display='block'; el.textContent=t('hardResetConfirmHint').replace('{word}', rWord);
     return;
   }
+  clearRecoveryKitEnvelope();
   await api.fullReset(); // fuin.enc + fuin.recovery + fuin.master.enc hepsini siler
   closeHardReset();
   toast(t('toastAppReset'));
@@ -4087,12 +4177,15 @@ async function updateExtStatusUI() {
     if (!badge || !api.getExtensionStatus) return;
     const status = await api.getExtensionStatus();
     if (status?.running) {
-      const count = status.chromeOrigins?.length || 0;
-      badge.textContent = t('extStatusActiveCount', { count });
+      badge.textContent = t('extStatusActive');
       badge.style.color = 'var(--ac)';
+      badge.style.borderColor = 'rgba(90, 154, 110, 0.35)';
+      badge.style.background = 'rgba(90, 154, 110, 0.14)';
     } else {
       badge.textContent = t('extStatusInactive');
       badge.style.color = 'var(--mu)';
+      badge.style.borderColor = 'var(--b)';
+      badge.style.background = 'var(--paper)';
     }
   } catch {}
 }

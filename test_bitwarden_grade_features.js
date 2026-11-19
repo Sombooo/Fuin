@@ -382,9 +382,130 @@ test('10. Deep Security Audit Fixes (SEC-01..SEC-05: Backup Auth, Symlink Defens
   assert.ok(hostJs.includes('fs.lstatSync(TOKEN_FILE)') && hostJs.includes('stat.isSymbolicLink()'), 'native-host must reject symlinked token file via lstatSync');
 });
 
-console.log('═'.repeat(75));
-console.log(`TOTAL PASSES: ${passes}`);
-console.log(`TOTAL FAILURES: ${failures}`);
-console.log('═'.repeat(75));
+// ── 11. Emergency Kit Recovery Key Persistence & UI Polish (beta.11) ────────
+(async () => {
+  await testAsync('11. Emergency Kit uses regenerated recovery key across lock/unlock, plus scrollbar & extension UI', async () => {
+    const appJs = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
+    const styleCss = fs.readFileSync(path.join(__dirname, 'renderer', 'style.css'), 'utf8');
+    const indexHtml = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
 
-if (failures > 0) process.exit(1);
+    // UI checks: styled scrollbar on #backupHistoryList & default Chrome extension ID in Settings card
+    assert.ok(styleCss.includes('#backupHistoryList::-webkit-scrollbar'), 'style.css must style #backupHistoryList scrollbar');
+    assert.ok(styleCss.includes('#backupHistoryList::-webkit-scrollbar-thumb'), 'style.css must style #backupHistoryList scrollbar thumb');
+    assert.ok(indexHtml.includes('fnnfdonpocachpdjkdjpgpmodjnahpbh'), 'index.html must display official Chrome Web Store extension ID');
+    assert.ok(indexHtml.includes('class="ext-dev-details"'), 'index.html must place manual Chrome ID entry in collapsible developer details');
+
+    // Extract recovery & Emergency Kit helpers from renderer/app.js
+    const startIdx = appJs.indexOf("const RECOVERY_KIT_STORAGE_KEY = 'fuin-recovery-kit-enc';");
+    const endIdx = appJs.indexOf('// ADV-03: Recovery Migration Status Check & UI Update');
+    const regenIdx = appJs.indexOf('async function handleRegenerateRecovery() {');
+    const regenEnd = appJs.indexOf('// ── LOCK / UNLOCK', regenIdx);
+    const kitFnMatch = appJs.match(/function generateEmergencyKitHtml\([^)]*\)\s*\{[\s\S]*?\n\}/);
+    const exportStart = appJs.indexOf('async function loadCachedRecoveryKeyForKit(');
+    const exportEnd = appJs.indexOf('// ── RECOVERY KEY VERIFICATION', exportStart);
+
+    assert.ok(startIdx !== -1 && endIdx > startIdx, 'Recovery helper block must exist');
+    assert.ok(regenIdx !== -1 && regenEnd > regenIdx, 'handleRegenerateRecovery must exist');
+    assert.ok(kitFnMatch, 'generateEmergencyKitHtml must exist');
+    assert.ok(exportStart !== -1 && exportEnd > exportStart, 'exportEmergencyKit block must exist');
+
+    const storage = {};
+    const domNodes = {
+      recoveryKeyDisplay: { textContent: '' },
+      recoveryOverlay: { classList: { add: () => {} } },
+    };
+    let diskRecoveryEnc = null;
+    let diskMasterEnc = null;
+    let exportedHtml = null;
+    let confirmCount = 0;
+    let genSeq = 0;
+    const generatedKeys = [
+      '11112222-33334444-55556666-77778888-99990000-AAAABBBB-CCCCDDDD-EEEEFFFF',
+      'AAAABBBB-CCCCDDDD-EEEEFFFF-00001111-22223333-44445555-66667777-88889999',
+    ];
+
+    const harness = new Function(
+      'storage', 'domNodes', 'generatedKeys',
+      `
+      let master = 'StrongMasterPass!';
+      const t = (k) => k;
+      const toast = () => {};
+      const confirm = () => { confirmCountState.count++; return true; };
+      const checkRecoveryStatus = async () => {};
+      const window = {
+        FuinRecoveryUI: {
+          generateRecoveryKey: () => generatedKeys[genState.idx++ % generatedKeys.length]
+        }
+      };
+      const localStorage = {
+        getItem: (k) => (k in storage ? storage[k] : null),
+        setItem: (k, v) => { storage[k] = String(v); },
+        removeItem: (k) => { delete storage[k]; },
+      };
+      const document = {
+        documentElement: { lang: 'tr', getAttribute: () => 'dark' },
+        getElementById: (id) => domNodes[id] || null,
+      };
+      const api = {
+        encrypt: async (obj, pw) => JSON.stringify({ obj, pw }),
+        decrypt: async (b64, pw) => {
+          const parsed = JSON.parse(b64);
+          if (parsed.pw !== pw) throw new Error('bad-key');
+          return parsed.obj;
+        },
+        saveRecoveryPair: async (enc, mEnc) => {
+          diskState.recovery = enc;
+          diskState.master = mEnc;
+        },
+        loadRecovery: async () => diskState.recovery,
+        exportFile: async (opts) => {
+          diskState.exported = opts.content;
+          return true;
+        },
+      };
+      const genState = { idx: 0 };
+      const confirmCountState = { count: 0 };
+      const diskState = { recovery: null, master: null, exported: null };
+      ${appJs.slice(startIdx, endIdx)}
+      ${appJs.slice(regenIdx, regenEnd)}
+      ${kitFnMatch[0]}
+      ${appJs.slice(exportStart, exportEnd)}
+      return {
+        handleRegenerateRecovery,
+        exportEmergencyKit,
+        resolveActiveRecoveryKey,
+        confirmCountState,
+        diskState,
+        setDiskRecovery: (v) => { diskState.recovery = v; },
+        getMaster: () => master,
+      };
+      `
+    )(storage, domNodes, generatedKeys);
+
+    // 1. User regenerates recovery key
+    await harness.handleRegenerateRecovery();
+    assert.strictEqual(domNodes.recoveryKeyDisplay.textContent, generatedKeys[0]);
+    const afterRegenConfirm = harness.confirmCountState.count;
+
+    // 2. Simulate lock() clearing DOM display and subsequent unlock()
+    domNodes.recoveryKeyDisplay.textContent = '';
+
+    // 3. Export Emergency Kit — must NOT prompt to regenerate and must embed generatedKeys[0]
+    await harness.exportEmergencyKit();
+    assert.strictEqual(harness.confirmCountState.count, afterRegenConfirm, 'exportEmergencyKit must reuse regenerated key without prompting');
+    assert.ok(harness.diskState.exported.includes(generatedKeys[0]), 'Emergency Kit HTML must include the newly regenerated recovery key');
+    assert.strictEqual(domNodes.recoveryKeyDisplay.textContent, generatedKeys[0], 'recoveryKeyDisplay must be restored');
+
+    // 4. If disk recovery changes externally (stale cache), resolveActiveRecoveryKey must reject stale key
+    harness.setDiskRecovery(JSON.stringify({ obj: { key: generatedKeys[1], verified: true }, pw: generatedKeys[1].replace(/-/g, '') }));
+    const staleCheck = await harness.resolveActiveRecoveryKey(harness.getMaster());
+    assert.strictEqual(staleCheck, '', 'Stale cached key must be invalidated when disk fuin.recovery does not decrypt');
+  });
+
+  console.log('═'.repeat(75));
+  console.log(`TOTAL PASSES: ${passes}`);
+  console.log(`TOTAL FAILURES: ${failures}`);
+  console.log('═'.repeat(75));
+
+  if (failures > 0) process.exit(1);
+})();

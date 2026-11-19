@@ -347,9 +347,13 @@ body::before {
 #view-security::-webkit-scrollbar,
 .modal::-webkit-scrollbar,
 .modal-body::-webkit-scrollbar,
+.whatsnew-body::-webkit-scrollbar,
+.sync-body::-webkit-scrollbar,
+#backupHistoryList::-webkit-scrollbar,
+#pwHistoryList::-webkit-scrollbar,
 .whatsnew-tabs-scroll::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
 }
 .pw-list-wrap::-webkit-scrollbar-track,
 #view-settings::-webkit-scrollbar-track,
@@ -358,8 +362,13 @@ body::before {
 #view-security::-webkit-scrollbar-track,
 .modal::-webkit-scrollbar-track,
 .modal-body::-webkit-scrollbar-track,
+.whatsnew-body::-webkit-scrollbar-track,
+.sync-body::-webkit-scrollbar-track,
+#backupHistoryList::-webkit-scrollbar-track,
+#pwHistoryList::-webkit-scrollbar-track,
 .whatsnew-tabs-scroll::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--bg);
+  border-radius: 6px;
 }
 .pw-list-wrap::-webkit-scrollbar-thumb,
 #view-settings::-webkit-scrollbar-thumb,
@@ -368,8 +377,12 @@ body::before {
 #view-security::-webkit-scrollbar-thumb,
 .modal::-webkit-scrollbar-thumb,
 .modal-body::-webkit-scrollbar-thumb,
+.whatsnew-body::-webkit-scrollbar-thumb,
+.sync-body::-webkit-scrollbar-thumb,
+#backupHistoryList::-webkit-scrollbar-thumb,
+#pwHistoryList::-webkit-scrollbar-thumb,
 .whatsnew-tabs-scroll::-webkit-scrollbar-thumb {
-  background: rgba(166, 157, 146, 0.28);
+  background: var(--b);
   border-radius: 6px;
   border: 1px solid transparent;
   background-clip: padding-box;
@@ -382,8 +395,12 @@ body::before {
 #view-security::-webkit-scrollbar-thumb:hover,
 .modal::-webkit-scrollbar-thumb:hover,
 .modal-body::-webkit-scrollbar-thumb:hover,
+.whatsnew-body::-webkit-scrollbar-thumb:hover,
+.sync-body::-webkit-scrollbar-thumb:hover,
+#backupHistoryList::-webkit-scrollbar-thumb:hover,
+#pwHistoryList::-webkit-scrollbar-thumb:hover,
 .whatsnew-tabs-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--sb);
+  background: var(--b2);
   border-color: rgba(90, 154, 110, 0.35);
 }
 .pw-list-wrap::-webkit-scrollbar-thumb:active,
@@ -393,6 +410,10 @@ body::before {
 #view-security::-webkit-scrollbar-thumb:active,
 .modal::-webkit-scrollbar-thumb:active,
 .modal-body::-webkit-scrollbar-thumb:active,
+.whatsnew-body::-webkit-scrollbar-thumb:active,
+.sync-body::-webkit-scrollbar-thumb:active,
+#backupHistoryList::-webkit-scrollbar-thumb:active,
+#pwHistoryList::-webkit-scrollbar-thumb:active,
 .whatsnew-tabs-scroll::-webkit-scrollbar-thumb:active {
   background: var(--ac);
 }
@@ -1879,6 +1900,90 @@ select.fi option { background: var(--paper); }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+#backupHistoryList,
+#pwHistoryList {
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
+.ext-browsers-box {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px solid var(--b);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ext-browser-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ext-browser-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.ext-id-code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ac);
+  background: rgba(90, 154, 110, 0.12);
+  border: 1px solid rgba(90, 154, 110, 0.25);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.ext-shortcut-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--b);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--mu);
+}
+
+.ext-dev-details {
+  margin-top: 10px;
+  background: var(--paper);
+  border: 1px solid var(--b);
+  border-radius: 6px;
+}
+
+.ext-dev-summary {
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mu);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: color .12s;
+}
+
+.ext-dev-summary:hover {
+  color: var(--text);
+}
+
+.ext-dev-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--b);
+  padding-top: 10px;
 }
 
 

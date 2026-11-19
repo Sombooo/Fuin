@@ -29,7 +29,12 @@
   </div>
   <div class="tb-right">
     <button class="theme-toggle" id="langToggle" data-i18n-title="langToggleTitle" title="Dil / Language">EN</button>
-    <button class="theme-toggle" id="themeToggle" data-i18n-title="themeToggleTitle" title="Koyu/Açık mod">◐</button>
+    <button class="theme-toggle" id="themeToggle" data-i18n-title="themeToggleTitle" title="Koyu/Açık mod" aria-label="Dark/Light mode">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <path id="themeToggleHalf" d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
     <div class="crypto-badge" id="cryptoBadge">Argon2id · Dual-Key</div>
   </div>
 </div>

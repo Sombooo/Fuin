@@ -73,7 +73,7 @@ function createWindow() {
   });
   // Ekran koruması: Varsayılan olarak tam koruma etkindir (true).
   // Yalnızca pazarlama/dokümantasyon ekran görüntüsü için --dev-allow-screenshots bayrağı ile geçici devre dışı bırakılabilir.
-  const allowDevScreenshots = process.argv.includes('--dev-allow-screenshots') || process.env.FUIN_DEV_SCREENSHOTS === '1';
+  const allowDevScreenshots = !app.isPackaged && (process.argv.includes('--dev-allow-screenshots') || process.env.FUIN_DEV_SCREENSHOTS === '1');
   mainWindow.setContentProtection(!allowDevScreenshots);
   mainWindow.webContents?.on?.('will-navigate', (e) => e.preventDefault());
   mainWindow.webContents?.on?.('will-attach-webview', (e) => e.preventDefault());
@@ -909,10 +909,13 @@ ipcMain.handle('decrypt',      async (_, { b64, password })  => decryptData(b64,
 
 // Standalone backup decryption (supports Desktop 128MB & Mobile 64MB Argon2id profiles without altering vault unlock KDF)
 async function decryptBackupPacket(b64Str, passwordStr, kdfTag) {
+  if (!isUnlocked) {
+    throw new Error('Vault is locked');
+  }
   if (!argon2) {
     throw new Error('CRITICAL: Argon2 native module is unavailable; refusing insecure KDF downgrade.');
   }
-  if (typeof b64Str !== 'string' || b64Str.length < 80 || b64Str.length > 268435456) {
+  if (typeof b64Str !== 'string' || b64Str.length < 80 || b64Str.length > 70 * 1024 * 1024) {
     throw new Error('Invalid backup data');
   }
   if (typeof passwordStr !== 'string' || passwordStr.length > 1024) {
@@ -923,7 +926,9 @@ async function decryptBackupPacket(b64Str, passwordStr, kdfTag) {
     'argon2id-64m-3t-1p':  { memoryCost: 65536,  timeCost: 3, parallelism: 1 },
     'argon2id-128m-4t-1p': { memoryCost: 131072, timeCost: 4, parallelism: 1 },
   };
-  const kdfOpts = kdfPresets[kdfTag] || kdfPresets['argon2id-128m-4t-1p'];
+  const kdfOpts = (typeof kdfTag === 'string' && Object.prototype.hasOwnProperty.call(kdfPresets, kdfTag))
+    ? kdfPresets[kdfTag]
+    : kdfPresets['argon2id-128m-4t-1p'];
 
   const buf = Buffer.from(b64Str, 'base64');
   if (buf.length < 60) throw new Error('Invalid backup packet');
@@ -1853,8 +1858,8 @@ ipcMain.handle('install-update', async (_, { filePath }) => {
   if (!fs.existsSync(resolvedPath)) {
     throw new Error('Installer file not found');
   }
-  const stat = fs.statSync(resolvedPath);
-  if (!stat.isFile()) throw new Error('Not a valid file');
+  const stat = fs.lstatSync(resolvedPath);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Not a valid file');
 
   await shell.openPath(resolvedPath);
   return true;

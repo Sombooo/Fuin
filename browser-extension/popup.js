@@ -159,7 +159,7 @@ function applyStaticLocalization() {
   if (footerTagline) footerTagline.textContent = pt('footerTagline');
   const extVersion = document.getElementById('extVersion');
   if (extVersion) {
-    const ver = (typeof chrome !== 'undefined' && chrome.runtime?.getManifest?.()?.version) || '1.0.3';
+    const ver = (typeof chrome !== 'undefined' && chrome.runtime?.getManifest?.()?.version) || '1.0.4';
     extVersion.textContent = 'v' + ver;
   }
 }

@@ -332,6 +332,265 @@ async function runNativeHostAndSuppressionTests() {
   report('5.11 content.js implements pickBestFilledPasswordInput for Change Password / Signup forms',
     contentJs.includes('function pickBestFilledPasswordInput') && contentJs.includes("ac.includes('new-password')"));
 
+  // Test 5.12: Firefox MV3 compatibility (sender.tab.url undefined, tab.url undefined on onUpdated, and in-flight race)
+  let ffOnMsg = null;
+  let ffOnTabUpdated = null;
+  const ffTabMessages = [];
+  const ffSandbox = {
+    console, URL, Date, Map, Set, Promise, setTimeout, clearTimeout,
+    browser: {
+      runtime: {
+        id: 'fuin-app@sombo.dev',
+        sendNativeMessage: (_host, payload) => {
+          if (payload.type === 'check-save-candidate') {
+            return new Promise((resolve) => {
+              setTimeout(() => resolve({ shouldPrompt: true, action: 'save', username: payload.username }), 35);
+            });
+          }
+          return Promise.resolve({ ok: true });
+        }
+      },
+      tabs: {
+        sendMessage: (tabId, msg) => {
+          ffTabMessages.push({ tabId, msg });
+          return Promise.resolve({ ok: true });
+        }
+      },
+      action: {
+        setBadgeText: () => {},
+        setBadgeBackgroundColor: () => {}
+      }
+    },
+    chrome: {
+      runtime: {
+        id: 'fuin-app@sombo.dev',
+        lastError: null,
+        onMessage: { addListener: (fn) => { ffOnMsg = fn; } }
+      },
+      tabs: {
+        onUpdated: { addListener: (fn) => { ffOnTabUpdated = fn; } },
+        onRemoved: { addListener: () => {} }
+      },
+      action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
+      commands: { onCommand: { addListener: () => {} } }
+    }
+  };
+  vm.runInNewContext(bgJs, ffSandbox);
+
+  const sendFromFirefoxTab = (url, msg, tabId = 88) => new Promise((resolve) => {
+    ffOnMsg(msg, { id: 'fuin-app@sombo.dev', frameId: 0, url, tab: { id: tabId } }, resolve);
+  });
+
+  // Trigger submit and immediately query fuin-get-pending-save before the 35ms native host delay resolves
+  const ffSubmitPromise = sendFromFirefoxTab('https://accounts.example.com/signin', {
+    type: 'fuin-form-submitted',
+    username: 'kadir@example.com',
+    password: 'FirefoxTestPassword!1'
+  }, 88);
+  const ffRacePending = await sendFromFirefoxTab('https://accounts.example.com/dashboard', {
+    type: 'fuin-get-pending-save'
+  }, 88);
+  const ffSubmitRes = await ffSubmitPromise;
+  ffTabMessages.length = 0;
+  ffOnTabUpdated(88, { status: 'complete' }, { id: 88 });
+  const ffAfterUpdatedPending = await sendFromFirefoxTab('https://accounts.example.com/home', {
+    type: 'fuin-get-pending-save'
+  }, 88);
+  const ffCrossSiteLeak = await sendFromFirefoxTab('https://evil-attacker.com/', {
+    type: 'fuin-get-pending-save'
+  }, 88);
+  const ffAfterCrossSiteScrub = await sendFromFirefoxTab('https://accounts.example.com/home', {
+    type: 'fuin-get-pending-save'
+  }, 88);
+
+  report('5.12 Firefox MV3 sender.tab.url undefined works for submit, race-condition get-pending-save & onUpdated',
+    ffSubmitRes && ffSubmitRes.shouldPrompt === true &&
+    ffRacePending && ffRacePending.hasPending === true &&
+    ffTabMessages.length === 1 &&
+    ffAfterUpdatedPending && ffAfterUpdatedPending.hasPending === true);
+
+  report('5.13 Firefox MV3 cross-site navigation scrubs pending credential even when tab.url is undefined',
+    ffCrossSiteLeak && ffCrossSiteLeak.hasPending === false &&
+    ffAfterCrossSiteScrub && ffAfterCrossSiteScrub.hasPending === false);
+
+  // Test 5.14: Turkish field & submit button heuristics + OAuth exclusion precision
+  const idRegexLiteral = contentJs.match(/const idNameRegex = (\/.*\/[gimsuy]*);/);
+  const nonSubmitLiteral = contentJs.match(/const nonSubmitRegex = (\/.*\/[gimsuy]*);/);
+  const posSubmitLiteral = contentJs.match(/const positiveSubmitRegex = (\/.*\/[gimsuy]*);/);
+  const idRe = idRegexLiteral ? vm.runInNewContext(idRegexLiteral[1]) : null;
+  const nonSubRe = nonSubmitLiteral ? vm.runInNewContext(nonSubmitLiteral[1]) : null;
+  const posSubRe = posSubmitLiteral ? vm.runInNewContext(posSubmitLiteral[1]) : null;
+
+  report('5.14 Turkish identifier & button heuristics match E-posta, Kullanıcı Adı, İleri and preserve GitHub login',
+    Boolean(idRe && nonSubRe && posSubRe) &&
+    idRe.test('E-posta') &&
+    idRe.test('Kullanıcı Adı') &&
+    posSubRe.test('İleri') &&
+    posSubRe.test('Kaydet') &&
+    !nonSubRe.test('Sign in to GitHub') &&
+    posSubRe.test('Sign in to GitHub') &&
+    nonSubRe.test('Continue with Google') &&
+    nonSubRe.test('Google ile devam'));
+
+  // Test 5.15: Runtime VM execution of content.js (no TDZ crash, captures submit & mounts closed Shadow DOM save prompt)
+  const docListeners = {};
+  const winListeners = {};
+  const bodyChildren = [];
+  const shadowModes = [];
+  const runtimeMessagesSent = [];
+
+  function makeMockNode(tagName, attrs = {}) {
+    const node = {
+      tagName: tagName.toUpperCase(),
+      type: attrs.type || '',
+      name: attrs.name || '',
+      id: attrs.id || '',
+      value: attrs.value || '',
+      textContent: attrs.textContent || '',
+      style: {},
+      children: [],
+      parentNode: null,
+      parentElement: null,
+      isConnected: true,
+      _attrs: { ...attrs },
+      setAttribute(k, v) { this._attrs[k] = String(v); },
+      getAttribute(k) { return this._attrs[k] !== undefined ? String(this._attrs[k]) : null; },
+      getBoundingClientRect() { return { width: 200, height: 36, top: 10, left: 10, bottom: 46, right: 210 }; },
+      addEventListener() {},
+      removeEventListener() {},
+      appendChild(child) {
+        child.parentNode = this;
+        child.parentElement = this;
+        child.isConnected = this.isConnected;
+        this.children.push(child);
+        return child;
+      },
+      replaceChildren(...nodes) {
+        this.children = [];
+        nodes.forEach(n => this.appendChild(n));
+      },
+      remove() {
+        this.isConnected = false;
+        const idx = bodyChildren.indexOf(this);
+        if (idx >= 0) bodyChildren.splice(idx, 1);
+      },
+      contains(target) {
+        if (target === this) return true;
+        return this.children.some(c => c.contains && c.contains(target));
+      },
+      closest(sel) {
+        if (sel.includes('form') && formEl.contains(this)) return formEl;
+        if (sel.includes('button') && (this.tagName === 'BUTTON' || this.tagName === 'INPUT')) return this;
+        return null;
+      },
+      querySelector(sel) {
+        return this.querySelectorAll(sel)[0] || null;
+      },
+      querySelectorAll(sel) {
+        const list = [];
+        const walk = (n) => {
+          for (const ch of (n.children || [])) {
+            if (sel.includes('password') && ch.type === 'password') list.push(ch);
+            else if (sel === 'input' && ch.tagName === 'INPUT') list.push(ch);
+            else if (sel.includes('input[type="email"]') && ch.tagName === 'INPUT' && ch.type !== 'password') list.push(ch);
+            walk(ch);
+          }
+        };
+        walk(this);
+        return list;
+      },
+      attachShadow(opts) {
+        shadowModes.push(opts?.mode);
+        const root = makeMockNode('#shadow-root');
+        root.host = this;
+        return root;
+      }
+    };
+    return node;
+  }
+
+  const formEl = makeMockNode('form');
+  const userInputEl = makeMockNode('input', { type: 'text', name: 'login', id: 'login_field', autocomplete: 'username' });
+  const pwInputEl = makeMockNode('input', { type: 'password', name: 'password', id: 'password' });
+  const submitBtnEl = makeMockNode('button', { type: 'submit', textContent: 'Sign in' });
+  formEl.appendChild(userInputEl);
+  formEl.appendChild(pwInputEl);
+  formEl.appendChild(submitBtnEl);
+
+  const mockBody = makeMockNode('body');
+  mockBody.appendChild(formEl);
+  const origAppend = mockBody.appendChild.bind(mockBody);
+  mockBody.appendChild = (ch) => {
+    bodyChildren.push(ch);
+    return origAppend(ch);
+  };
+  const mockDocEl = makeMockNode('html');
+  mockDocEl.appendChild(mockBody);
+
+  let contentBootError = null;
+  const contentSandbox = {
+    window: {
+      addEventListener: (ev, fn) => {
+        if (!winListeners[ev]) winListeners[ev] = [];
+        winListeners[ev].push(fn);
+      },
+      removeEventListener: () => {}
+    },
+    document: {
+      documentElement: mockDocEl,
+      body: mockBody,
+      activeElement: null,
+      addEventListener: (ev, fn) => {
+        if (!docListeners[ev]) docListeners[ev] = [];
+        docListeners[ev].push(fn);
+      },
+      removeEventListener: () => {},
+      querySelectorAll: (sel) => mockDocEl.querySelectorAll(sel),
+      createElement: (tag) => makeMockNode(tag),
+      createElementNS: (_ns, tag) => makeMockNode(tag)
+    },
+    MutationObserver: class { observe() {} },
+    WeakSet, WeakMap, Set, Map, Date, Object, Array, String, Number, Boolean, Promise, RegExp, Math,
+    setTimeout, clearTimeout, navigator: { language: 'tr-TR' },
+    location: { protocol: 'https:', hostname: 'github.com' },
+    chrome: {
+      i18n: { getUILanguage: () => 'tr' },
+      runtime: {
+        lastError: null,
+        onMessage: { addListener: () => {} },
+        sendMessage: (payload, cb) => {
+          runtimeMessagesSent.push(payload);
+          if (payload.type === 'fuin-get-pending-save') {
+            if (cb) cb({ hasPending: false });
+          } else if (payload.type === 'fuin-form-submitted') {
+            if (cb) cb({ shouldPrompt: true, action: 'save', username: payload.username });
+          } else if (cb) {
+            cb({ ok: true });
+          }
+        }
+      }
+    }
+  };
+
+  try {
+    vm.runInNewContext(contentJs, contentSandbox);
+    userInputEl.value = 'kadir@example.com';
+    (docListeners.input || []).forEach(fn => fn({ isTrusted: true, target: userInputEl }));
+    pwInputEl.value = 'RealLoginPass!9';
+    (docListeners.input || []).forEach(fn => fn({ isTrusted: true, target: pwInputEl }));
+    (winListeners.click || []).forEach(fn => fn({ isTrusted: true, target: submitBtnEl }));
+    await new Promise(r => setTimeout(r, 20));
+  } catch (err) {
+    contentBootError = err;
+  }
+
+  const submittedMsg = runtimeMessagesSent.find(m => m.type === 'fuin-form-submitted');
+  const promptMounted = bodyChildren.some(el => el.tagName === 'FUIN-SAVE-PROMPT');
+  report('5.15 Runtime content.js boots cleanly without TDZ error, captures submit, and mounts closed Shadow DOM save prompt',
+    !contentBootError &&
+    submittedMsg && submittedMsg.username === 'kadir@example.com' && submittedMsg.password === 'RealLoginPass!9' &&
+    promptMounted && shadowModes.includes('closed'));
+
   console.log('\n═══════════════════════════════════════════════════════════════════════════');
   console.log(`TOTAL AUDIT CHECKS: ${passed + failed} | PASSED: ${passed} | FAILED: ${failed}`);
   console.log('═══════════════════════════════════════════════════════════════════════════');

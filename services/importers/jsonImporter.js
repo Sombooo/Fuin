@@ -479,11 +479,21 @@
 
     var finalEntries = [];
     var skippedCount = 0;
+    var usedIds = new Set();
+    existingEntries.forEach(function (ex) {
+      if (ex && ex.id) usedIds.add(String(ex.id));
+    });
 
     result.entries.forEach(function (e) {
       if (isDuplicate(e)) {
         skippedCount++;
       } else {
+        var nextId = (e.id && typeof e.id === 'string' && e.id.length >= 10) ? e.id : '';
+        while (!nextId || usedIds.has(nextId)) {
+          nextId = typeof options.generateId === 'function' ? options.generateId() : generateUUID();
+        }
+        e.id = nextId;
+        usedIds.add(nextId);
         finalEntries.push(e);
       }
     });

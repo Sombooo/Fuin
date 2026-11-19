@@ -368,7 +368,7 @@ function normalizeSite(s) {
 }
 
 function getCredentialKey(e) {
-  if (!e || e.isDeleted || e.deletedAt) return '';
+  if (!e || e.isDeleted || e.deletedAt || (e.type && e.type !== 'login')) return '';
   const site = normalizeSite(e.site);
   const user = (e.username || '').trim().toLowerCase();
   return (site && user) ? `${site}||${user}` : '';

@@ -52,6 +52,7 @@
       "renderer/**/*",
       "assets/**/*",
       "!assets/screenshots/**/*",
+      "!assets/fuinmockfoto/**/*",
       "!assets/promo_video/**/*",
       "!renderer/sync.js",
       "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
@@ -61,6 +62,7 @@
       "!test_*.js",
       "!*.md",
       "!fuin-extension.zip",
+      "!fuin-extension-*.zip",
       "!scratch-touchid.js",
       "!fuin.sync-generation"
     ],

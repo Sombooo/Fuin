@@ -353,8 +353,412 @@ test('10. 2FA modal bölümü (#section-2fa-wrap) dikey flex düzeni, 12px gap v
   assert.strictEqual(appJs.includes("if (sec2fa) sec2fa.style.display = 'block';"), false, 'app.js içinde sec2fa display block kullanılmamalıdır');
 });
 
-console.log('═'.repeat(75));
-console.log(`SUMMARY: ${passes} passed, ${failures} failed.`);
-console.log('═'.repeat(75));
+// ── TEST 11: THEME TOGGLE CENTERING & MODAL CATEGORY TYPE SWITCHING ───────────
+test('11. Tema düğmesi (#themeToggle) SVG ortalama ve modal tür değişiminde kategori sıfırlama doğrulanır', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
+  const styleCss = fs.readFileSync(path.join(__dirname, 'renderer', 'style.css'), 'utf8');
+  const appJs = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
 
-if (failures > 0) process.exit(1);
+  // Verify #themeToggle uses inline SVG (immune to Unicode glyph baseline shift) and clean flex CSS
+  assert.ok(indexHtml.includes('id="themeToggleHalf"'), 'index.html #themeToggle içinde #themeToggleHalf SVG path bulunmalıdır');
+  assert.ok(/#themeToggle\s*\{[\s\S]*?width:\s*28px;\s*height:\s*28px;[\s\S]*?display:\s*inline-flex;[\s\S]*?padding:\s*0;/.test(styleCss), '#themeToggle CSS tam ortalanmış inline-flex + padding:0 olmalıdır');
+
+  // Extract setModalType & applyTheme and verify behavioral transitions in an isolated mock DOM
+  const setModalMatch = appJs.match(/function setModalType\(type\)\s*\{[\s\S]*?\n\}/);
+  const applyThemeMatch = appJs.match(/function applyTheme\(theme\)\s*\{[\s\S]*?\n\}/);
+  assert.ok(setModalMatch && applyThemeMatch, 'setModalType ve applyTheme işlevleri ayrıştırılabilmelidir');
+
+  const elements = {};
+  const makeEl = (id, initVal = '') => {
+    const attrs = {};
+    const el = {
+      id,
+      value: initVal,
+      textContent: '',
+      placeholder: '',
+      style: {},
+      classList: { toggle: () => {} },
+      setAttribute: (k, v) => { attrs[k] = v; },
+      getAttribute: (k) => attrs[k]
+    };
+    elements[id] = el;
+    return el;
+  };
+  ['btnTypeLogin', 'btnTypeCard', 'btnTypeNote', 'lbl-site', 'f-site', 'section-login-fields', 'section-card-fields', 'section-note-fields', 'section-2fa-wrap'].forEach(id => makeEl(id));
+  const fCat = makeEl('f-category', 'Diğer');
+  const half = makeEl('themeToggleHalf');
+
+  const runner = new Function('els', `
+    let currentModalType = 'login';
+    let modalCategoryManuallySet = false;
+    let editId = null;
+    const t = (k) => k;
+    const localStorage = { setItem: () => {} };
+    const document = {
+      documentElement: { dataset: {} },
+      getElementById: (id) => els[id] || null
+    };
+    ${setModalMatch[0]}
+    ${applyThemeMatch[0]}
+    return {
+      setModalType,
+      applyTheme,
+      setManual: (v) => { modalCategoryManuallySet = v; }
+    };
+  `)(elements);
+
+  // New entry: login ('Diğer') -> card ('Finans') -> login ('Diğer') -> card ('Finans') -> note ('Diğer')
+  runner.setModalType('card');
+  assert.strictEqual(fCat.value, 'Finans', 'Kart sekmesine geçince kategori Finans olmalıdır');
+  runner.setModalType('login');
+  assert.strictEqual(fCat.value, 'Diğer', 'Karttan Giriş sekmesine geçince otomatik kategori Diğer olmalıdır');
+  runner.setModalType('card');
+  assert.strictEqual(fCat.value, 'Finans', 'Tekrar Kart sekmesine geçince kategori Finans olmalıdır');
+  runner.setModalType('note');
+  assert.strictEqual(fCat.value, 'Diğer', 'Karttan Güvenli Not sekmesine geçince otomatik kategori Diğer olmalıdır');
+
+  // Manual selection must be preserved across tab switches
+  fCat.value = 'İş / Kurumsal';
+  runner.setManual(true);
+  runner.setModalType('card');
+  assert.strictEqual(fCat.value, 'İş / Kurumsal', 'Kullanıcı manuel kategori seçtiyse Kart sekmesine geçişte korunmalıdır');
+  runner.setModalType('login');
+  assert.strictEqual(fCat.value, 'İş / Kurumsal', 'Kullanıcı manuel kategori seçtiyse Giriş sekmesine geçişte korunmalıdır');
+
+  // Theme SVG path flips between dark and light cleanly
+  runner.applyTheme('dark');
+  assert.strictEqual(half.getAttribute('d'), 'M12 3a9 9 0 0 1 0 18z', 'Koyu temada sağ yarım dolu SVG path kullanılmalıdır');
+  runner.applyTheme('light');
+  assert.strictEqual(half.getAttribute('d'), 'M12 3a9 9 0 0 0 0 18z', 'Açık temada sol yarım dolu SVG path kullanılmalıdır');
+});
+
+function extractAppFnBody(appCode, fnStart, fromIdx = 0) {
+  const startIdx = typeof fnStart === 'number' ? fnStart : appCode.indexOf(fnStart, fromIdx);
+  assert.ok(startIdx !== -1, `${fnStart} bulunamadı`);
+  const braceStart = appCode.indexOf('{', startIdx);
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inTemplate = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let escaped = false;
+  for (let i = braceStart; i < appCode.length; i++) {
+    const ch = appCode[i];
+    const next = appCode[i + 1];
+    if (inLineComment) { if (ch === '\n') inLineComment = false; continue; }
+    if (inBlockComment) { if (ch === '*' && next === '/') { inBlockComment = false; i++; } continue; }
+    if (escaped) { escaped = false; continue; }
+    if ((inSingle || inDouble || inTemplate) && ch === '\\') { escaped = true; continue; }
+    if (inSingle) { if (ch === "'") inSingle = false; continue; }
+    if (inDouble) { if (ch === '"') inDouble = false; continue; }
+    if (inTemplate) { if (ch === '`') inTemplate = false; continue; }
+    if (ch === '/' && next === '/') { inLineComment = true; i++; continue; }
+    if (ch === '/' && next === '*') { inBlockComment = true; i++; continue; }
+    if (ch === "'") { inSingle = true; continue; }
+    if (ch === '"') { inDouble = true; continue; }
+    if (ch === '`') { inTemplate = true; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return appCode.slice(startIdx, i + 1);
+    }
+  }
+  throw new Error(`Brace balance failed for ${fnStart}`);
+}
+
+// ── TEST 12: DESKTOP RAM ENCRYPTION & SYNC SERIALIZATION GUARD ([object Object] PREVENTION) ──
+test('12a. Desktop sync, QR, pairing ve yedek geri yükleme tüm hassas alanları tam serileştirir', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const appCode = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
+
+  const genBody = extractAppFnBody(appCode, 'const generateWithPassword = async');
+  const lanBody = extractAppFnBody(appCode, 'async function startLanSyncFlow(');
+  const pairBody = extractAppFnBody(appCode, 'async function openPairingModal(');
+  const restoreBody = extractAppFnBody(appCode, 'async function restoreSnapshotByFilename(');
+  const appliedStart = appCode.indexOf('api.onLanSyncApplied(');
+  assert.ok(appliedStart !== -1, 'api.onLanSyncApplied bulunamadı');
+  const appliedArrow = appCode.indexOf('=>', appliedStart);
+  assert.ok(appliedArrow !== -1, 'onLanSyncApplied ok işareti bulunamadı');
+  const appliedBody = extractAppFnBody(appCode, appliedArrow);
+
+  assert.ok(/\bserializeEntryPlain\b/.test(genBody), 'generateWithPassword serializeEntryPlain kullanmalıdır');
+  assert.ok(/\bserializeEntryPlain\b/.test(lanBody), 'startLanSyncFlow serializeEntryPlain kullanmalıdır');
+  assert.ok(/\bserializeEntryPlain\b/.test(pairBody), 'openPairingModal serializeEntryPlain kullanmalıdır');
+  assert.ok(/\bhydrateEntryMemory\b/.test(restoreBody), 'restoreSnapshotByFilename hydrateEntryMemory kullanmalıdır');
+  assert.ok(/\bhydrateEntryMemory\b/.test(appliedBody), 'onLanSyncApplied hydrateEntryMemory kullanmalıdır');
+  assert.ok(!/memDecrypt\s*\(\s*e\.password\s*\)/.test(genBody + lanBody + pairBody), 'Sync akışlarında eksik alan çözen eski memDecrypt(e.password) kalmamalıdır');
+  assert.ok(/e\.type\s*===\s*'login'/.test(appliedBody), 'onLanSyncApplied site||user dedup sadece login kayıtlarına uygulanmalıdır');
+});
+
+(async () => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { webcrypto } = require('crypto');
+    const appCode = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
+
+    const ramFieldsMatch = appCode.match(/const RAM_SECRET_FIELDS\s*=\s*\[[^\]]+\];/);
+    assert.ok(ramFieldsMatch, 'RAM_SECRET_FIELDS tanımı bulunamadı');
+    const ramBlock = [
+      ramFieldsMatch[0],
+      extractAppFnBody(appCode, 'async function memEncrypt('),
+      extractAppFnBody(appCode, 'async function memDecrypt('),
+      extractAppFnBody(appCode, 'function scrubLegacySecret('),
+      extractAppFnBody(appCode, 'async function transformHistorySecrets('),
+      extractAppFnBody(appCode, 'async function serializeEntryPlain('),
+      extractAppFnBody(appCode, 'async function hydrateEntryMemory(')
+    ].join('\n');
+
+    const key = await webcrypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    const helpers = new Function('crypto', 'sessionKey', 'TextEncoder', 'TextDecoder', `
+      ${ramBlock}
+      return { memEncrypt, memDecrypt, serializeEntryPlain, hydrateEntryMemory };
+    `)(webcrypto, key, TextEncoder, TextDecoder);
+
+    const noteEntry = {
+      id: 'note-1',
+      type: 'note',
+      site: 'Test Notu',
+      secureNote: 'Gizli güvenli not içeriği 🚀',
+      history: [{ secureNote: 'Eski güvenli not', date: 100 }],
+      updatedAt: 2000
+    };
+    const cardEntry = {
+      id: 'card-1',
+      type: 'card',
+      site: 'Amex Gold',
+      cardNumber: '3782 822463 10005',
+      cardCvv: '1234',
+      cardPin: '9988',
+      updatedAt: 2000
+    };
+
+    const hydratedNote = await helpers.hydrateEntryMemory(noteEntry);
+    assert.strictEqual(typeof hydratedNote.secureNote, 'object');
+    assert.ok(Array.isArray(hydratedNote.secureNote.iv) && Array.isArray(hydratedNote.secureNote.data));
+    assert.strictEqual(typeof hydratedNote.history[0].secureNote, 'object');
+
+    const plainNote = await helpers.serializeEntryPlain(hydratedNote);
+    assert.strictEqual(plainNote.secureNote, 'Gizli güvenli not içeriği 🚀');
+    assert.strictEqual(plainNote.history[0].secureNote, 'Eski güvenli not');
+
+    // Re-hydrating an already RAM-encrypted Desktop object must preserve content instead of "[object Object]"
+    const reHydratedNote = await helpers.hydrateEntryMemory(hydratedNote);
+    const rePlainNote = await helpers.serializeEntryPlain(reHydratedNote);
+    assert.strictEqual(rePlainNote.secureNote, 'Gizli güvenli not içeriği 🚀');
+    assert.notStrictEqual(rePlainNote.secureNote, '[object Object]');
+
+    // Card fields round-trip cleanly
+    const hydratedCard = await helpers.hydrateEntryMemory(cardEntry);
+    const plainCard = await helpers.serializeEntryPlain(hydratedCard);
+    assert.strictEqual(plainCard.cardNumber, '3782 822463 10005');
+    assert.strictEqual(plainCard.cardCvv, '1234');
+    assert.strictEqual(plainCard.cardPin, '9988');
+
+    // Alien objects passed to memEncrypt must return null, NEVER "[object Object]"
+    assert.strictEqual(await helpers.memEncrypt({ iv: 'hex', tag: 'tag', data: 'data' }), null);
+    assert.strictEqual(await helpers.memEncrypt({ foo: 'bar' }), null);
+
+    // Legacy "[object Object]" corruption on card/note fields heals automatically
+    const legacyCorruptCard = {
+      id: 'legacy-card-1',
+      type: 'card',
+      site: 'Legacy Bank',
+      cardNumber: '[object Object]',
+      cardCvv: '[object Object]',
+      cardPin: '[object Object]',
+      secureNote: '[object Object]',
+      updatedAt: 2000
+    };
+    const healedHydrated = await helpers.hydrateEntryMemory(legacyCorruptCard);
+    const healedPlain = await helpers.serializeEntryPlain(healedHydrated);
+    assert.strictEqual(healedPlain.cardNumber, '');
+    assert.strictEqual(healedPlain.cardCvv, '');
+    assert.strictEqual(healedPlain.cardPin, '');
+    assert.strictEqual(healedPlain.secureNote, '');
+
+    // Two distinct cards with identical bank name & cardholder name must NOT collide in sync-lan merge
+    const cardMergeRes = syncLan.mergeVaultEntries(
+      [{ id: 'card-a', type: 'card', site: 'Garanti', username: 'Kadir', cardholderName: 'Kadir', cardLastFour: '1111', updatedAt: 1000 }],
+      [{ id: 'card-b', type: 'card', site: 'Garanti', username: 'Kadir', cardholderName: 'Kadir', cardLastFour: '2222', updatedAt: 2000 }]
+    );
+    assert.strictEqual(cardMergeRes.mergedEntries.length, 2, 'Aynı banka/isimli iki farklı kart senkronizasyonda ezilmemelidir');
+
+    passes++;
+    console.log('✅ PASS: 12b. Desktop WebCrypto hydrateEntryMemory/serializeEntryPlain güvenli not ve kartları bozmaz');
+  } catch (err) {
+    failures++;
+    console.error('❌ FAIL: 12b. Desktop WebCrypto RAM koruma testi başarısız');
+    console.error('   Reason:', err.stack || err.message);
+  }
+
+  // ── TEST 13: DESKTOP CATEGORY ALIAS NORMALIZATION & TR/EN DISPLAY PARITY ──────
+  try {
+    const appJs = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
+    const i18nJs = fs.readFileSync(path.join(__dirname, 'renderer', 'i18n.js'), 'utf8');
+    const dictMatch = /const TRANSLATIONS\s*=\s*\{[\s\S]*?\n\};/.exec(i18nJs);
+    assert.ok(dictMatch, 'renderer/i18n.js must declare TRANSLATIONS');
+    const TRANSLATIONS = new Function(`${dictMatch[0]}; return TRANSLATIONS;`)();
+
+    const startIdx = appJs.indexOf('const CATEGORY_KEY_MAP = {');
+    const endMarker = '// özel/bilinmeyen kategori adı ise olduğu gibi bırak\n}';
+    const endMarkerIdx = appJs.indexOf(endMarker, startIdx);
+    const endIdx = endMarkerIdx !== -1 ? endMarkerIdx + endMarker.length : -1;
+    assert.ok(startIdx !== -1 && endIdx !== -1 && endIdx > startIdx, 'CATEGORY_KEY_MAP / catLabel bloğu renderer/app.js içinde bulunmalıdır');
+    const catSlice = appJs.slice(startIdx, endIdx);
+
+    let activeLang = 'en';
+    const tMock = (k) => (TRANSLATIONS[activeLang] && TRANSLATIONS[activeLang][k]) || k;
+    const catHelpers = new Function('t', `${catSlice}; return { CATEGORY_KEY_MAP, canonicalCategory, catLabel };`)(tMock);
+
+    // Desktop canonical + Mobile TR/EN values translate cleanly in EN
+    activeLang = 'en';
+    assert.strictEqual(catHelpers.catLabel('Finans'), 'Finance');
+    assert.strictEqual(catHelpers.catLabel('Finance'), 'Finance');
+    assert.strictEqual(catHelpers.catLabel('Diğer'), 'Other');
+    assert.strictEqual(catHelpers.catLabel('Other'), 'Other');
+    assert.strictEqual(catHelpers.catLabel('Sosyal'), 'Social Media');
+    assert.strictEqual(catHelpers.catLabel('Social'), 'Social Media');
+    assert.strictEqual(catHelpers.catLabel('İş'), 'Work / Corporate');
+    assert.strictEqual(catHelpers.catLabel('Work'), 'Work / Corporate');
+    assert.strictEqual(catHelpers.catLabel('E-Ticaret'), 'Shopping');
+    assert.strictEqual(catHelpers.catLabel('Eğitim'), 'Education');
+    assert.strictEqual(catHelpers.catLabel('Education'), 'Education');
+
+    // Switched to TR: Mobile EN strings translate cleanly to Turkish
+    activeLang = 'tr';
+    assert.strictEqual(catHelpers.catLabel('Finance'), 'Finans');
+    assert.strictEqual(catHelpers.catLabel('Social'), 'Sosyal Medya');
+    assert.strictEqual(catHelpers.catLabel('Email'), 'E-posta');
+    assert.strictEqual(catHelpers.catLabel('Work'), 'İş / Kurumsal');
+    assert.strictEqual(catHelpers.catLabel('Shopping'), 'Alışveriş');
+    assert.strictEqual(catHelpers.catLabel('Gaming'), 'Oyun');
+    assert.strictEqual(catHelpers.catLabel('Developer'), 'Geliştirici / Araçlar');
+    assert.strictEqual(catHelpers.catLabel('Education'), 'Eğitim');
+    assert.strictEqual(catHelpers.catLabel('Other'), 'Diğer');
+
+    // Canonicalization & custom category preservation
+    assert.strictEqual(catHelpers.canonicalCategory('Finance'), 'Finans');
+    assert.strictEqual(catHelpers.canonicalCategory('Social'), 'Sosyal Medya');
+    assert.strictEqual(catHelpers.canonicalCategory('E-Ticaret'), 'Alışveriş');
+    assert.strictEqual(catHelpers.canonicalCategory('İş'), 'İş / Kurumsal');
+    assert.strictEqual(catHelpers.canonicalCategory('CustomVaultCat'), 'CustomVaultCat');
+    assert.strictEqual(catHelpers.catLabel('CustomVaultCat'), 'CustomVaultCat');
+
+    // All standard keys exist in both TR and EN in Desktop i18n
+    for (const k of Object.values(catHelpers.CATEGORY_KEY_MAP)) {
+      assert.ok(TRANSLATIONS.tr[k] && TRANSLATIONS.en[k], `Desktop i18n missing ${k}`);
+    }
+
+    passes++;
+    console.log('✅ PASS: 13. Desktop kategori alias normalizasyonu ve TR/EN gösterim eşliği eksiksiz çalışır');
+  } catch (err) {
+    failures++;
+    console.error('❌ FAIL: 13. Desktop kategori i18n testi başarısız');
+    console.error('   Reason:', err.stack || err.message);
+  }
+
+  // ── TEST 14: POST-BETA.11 AUDIT SECURITY HARDENING & BOUNDARY CHECKS ──────────
+  try {
+    const mainJs = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+    const appJs = fs.readFileSync(path.join(__dirname, 'renderer', 'app.js'), 'utf8');
+
+    // 1. Production screen protection must require !app.isPackaged for dev screenshot flags
+    assert.ok(
+      /allowDevScreenshots\s*=\s*!app\.isPackaged\s*&&/.test(mainJs),
+      'main.js allowDevScreenshots bayrağı mutlaka !app.isPackaged koşuluna bağlı olmalıdır'
+    );
+
+    // 2. install-update must use fs.lstatSync and reject symlinks
+    const instStart = mainJs.indexOf("ipcMain.handle('install-update'");
+    const instSlice = mainJs.slice(instStart, mainJs.indexOf('return true;', instStart));
+    assert.ok(
+      instSlice.includes('fs.lstatSync(resolvedPath)') && instSlice.includes('stat.isSymbolicLink()'),
+      'install-update fs.lstatSync ile symlink reddi uygulamalıdır'
+    );
+
+    // 3. decryptBackupPacket must require isUnlocked and resist prototype lookup ("__proto__" / "constructor")
+    const decStart = mainJs.indexOf('async function decryptBackupPacket(');
+    const decEnd = mainJs.indexOf("ipcMain.handle('decrypt-backup'", decStart);
+    assert.ok(decStart !== -1 && decEnd > decStart, 'decryptBackupPacket bloğu bulunmalıdır');
+    const decSlice = mainJs.slice(decStart, decEnd);
+    assert.ok(decSlice.includes('if (!isUnlocked)'), 'decryptBackupPacket kasa kilitliyken reddetmelidir');
+
+    const seenKdfOpts = [];
+    let mockUnlocked = false;
+    const mockArgon2 = {
+      argon2id: 2,
+      hash: async (_pw, opts) => {
+        seenKdfOpts.push(opts);
+        // Trigger AES-GCM failure cleanly after capturing derived KDF parameters
+        return Buffer.alloc(32, 0x42);
+      }
+    };
+    const decFn = new Function(
+      'crypto', 'argon2', 'getUnlocked', 'secureBuffer', 'unsecureBuffer',
+      `${decSlice.replace(/\bisUnlocked\b/g, 'getUnlocked()')}; return decryptBackupPacket;`
+    )(crypto, mockArgon2, () => mockUnlocked, () => {}, () => {});
+
+    const sampleB64 = Buffer.alloc(80, 1).toString('base64');
+    await assert.rejects(() => decFn(sampleB64, 'pw123', 'argon2id-128m-4t-1p'), /Vault is locked/);
+
+    mockUnlocked = true;
+    await assert.rejects(() => decFn(sampleB64, 'pw123', '__proto__'));
+    await assert.rejects(() => decFn(sampleB64, 'pw123', 'constructor'));
+    await assert.rejects(() => decFn(sampleB64, 'pw123', 'argon2id-64m-3t-1p'));
+    assert.strictEqual(seenKdfOpts.length, 3);
+    assert.strictEqual(seenKdfOpts[0].memoryCost, 131072, '__proto__ kdfTag güvenli varsayılana düşmelidir');
+    assert.strictEqual(seenKdfOpts[0].timeCost, 4);
+    assert.strictEqual(seenKdfOpts[1].memoryCost, 131072, 'constructor kdfTag güvenli varsayılana düşmelidir');
+    assert.strictEqual(seenKdfOpts[2].memoryCost, 65536, 'argon2id-64m-3t-1p profili tanınmalıdır');
+
+    // 4. Extension domainMatches must strictly exclude credit cards and secure notes
+    const domStart = appJs.indexOf('function normalizeDomain(str) {');
+    const domEnd = appJs.indexOf('let pendingExtReveal = null;', domStart);
+    assert.ok(domStart !== -1 && domEnd > domStart, 'domainMatches bloğu bulunmalıdır');
+    const domainMatches = new Function(`${appJs.slice(domStart, domEnd)}; return domainMatches;`)();
+    assert.strictEqual(domainMatches({ type: 'card', site: 'garanti.com.tr', url: 'https://garanti.com.tr' }, 'garanti.com.tr'), false);
+    assert.strictEqual(domainMatches({ type: 'note', site: 'wise.com', url: 'https://wise.com' }, 'wise.com'), false);
+    assert.strictEqual(domainMatches({ type: 'login', site: 'github.com', url: 'https://github.com' }, 'github.com'), true);
+    assert.strictEqual(domainMatches({ site: 'github.com', url: 'https://github.com' }, 'github.com'), true);
+
+    // 5. Unlock guards on import/export & .fuin backup schema normalization
+    for (const fnName of ['exportJSON', 'exportCSV', 'importJSON', 'importCSV']) {
+      const fnIdx = appJs.indexOf(`async function ${fnName}()`);
+      assert.ok(fnIdx !== -1 && appJs.slice(fnIdx, fnIdx + 120).includes('if (!master)'), `${fnName} !master korumasına sahip olmalıdır`);
+    }
+    const encBackupIdx = appJs.indexOf('async function importEncryptedBackup()');
+    assert.ok(appJs.slice(encBackupIdx, encBackupIdx + 1800).includes('importers.importJSON(parsed)'), '.fuin içe aktarım FuinImporters.importJSON ile normalize edilmelidir');
+
+    // 6. Importer ID-collision prevention across existing & batch entries
+    const FuinImporters = require('./services/importers');
+    const collidingJson = JSON.stringify({
+      type: 'fuin/vault',
+      entries: [
+        { id: 'shared-uuid-123456', type: 'login', site: 'example.com', username: 'a', password: 'new-password' },
+        { id: 'shared-uuid-123456', type: 'login', site: 'other.com', username: 'b', password: 'pw2' }
+      ]
+    });
+    const impRes = FuinImporters.importJSON(collidingJson, {
+      existingEntries: [{ id: 'shared-uuid-123456', type: 'login', site: 'example.com', username: 'a', password: 'old-password' }]
+    });
+    assert.strictEqual(impRes.entries.length, 2);
+    assert.notStrictEqual(impRes.entries[0].id, 'shared-uuid-123456', 'Mevcut kayıt ID çakışması yeniden anahtarlanmalıdır');
+    assert.notStrictEqual(impRes.entries[1].id, impRes.entries[0].id, 'Aynı içe aktarım içindeki ID çakışmaları benzersiz kalmalıdır');
+
+    passes++;
+    console.log('✅ PASS: 14. Ekran koruması, decrypt-backup KDF/kilit koruması, domainMatches tür yalıtımı ve ID çakışma sertleştirmesi doğrulandı');
+  } catch (err) {
+    failures++;
+    console.error('❌ FAIL: 14. Güvenlik sertleştirme doğrulaması başarısız');
+    console.error('   Reason:', err.stack || err.message);
+  }
+
+  console.log('═'.repeat(75));
+  console.log(`SUMMARY: ${passes} passed, ${failures} failed.`);
+  console.log('═'.repeat(75));
+
+  if (failures > 0) process.exit(1);
+})();

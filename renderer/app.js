@@ -5,10 +5,22 @@ let master = '', entries = [], editId = null, curView = 'all', totpIv = null;
 
 let sessionKey = null;
 const _pwScoreCache = new WeakMap();
+const RAM_SECRET_FIELDS = ['password', 'totp', 'cardNumber', 'cardCvv', 'cardPin', 'secureNote'];
+
 async function memEncrypt(text) {
-  if (!text) return null;
+  if (text === null || text === undefined || text === '') return null;
+  if (typeof text === 'object') {
+    // Recover valid session-encrypted object instead of coercing to "[object Object]"
+    if (Array.isArray(text.iv) && Array.isArray(text.data)) {
+      const recovered = await memDecrypt(text);
+      if (!recovered) return null;
+      text = recovered;
+    } else {
+      return null;
+    }
+  }
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoded = new TextEncoder().encode(text);
+  const encoded = new TextEncoder().encode(String(text));
   const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, sessionKey, encoded);
   encoded.fill(0);
   return { iv: Array.from(iv), data: Array.from(new Uint8Array(cipher)) };
@@ -26,31 +38,49 @@ async function memDecrypt(encObj) {
   } catch { return ''; }
 }
 
+function scrubLegacySecret(field, val) {
+  return field !== 'password' && val === '[object Object]' ? '' : val;
+}
+
+async function transformHistorySecrets(history, fn, fallbackEmpty) {
+  if (!Array.isArray(history)) return [];
+  return Promise.all(history.map(async h => {
+    if (!h || typeof h !== 'object') return h;
+    const out = { ...h };
+    for (const field of RAM_SECRET_FIELDS) {
+      if (h[field] !== undefined && h[field] !== null) {
+        const cleanVal = typeof h[field] === 'string' ? scrubLegacySecret(field, h[field]) : h[field];
+        out[field] = scrubLegacySecret(field, await fn(cleanVal));
+      } else if (field === 'password' && fallbackEmpty !== undefined) {
+        out[field] = await fn(fallbackEmpty);
+      }
+    }
+    return out;
+  }));
+}
+
 async function serializeEntryPlain(e) {
-  return {
-    ...e,
-    type: e.type || 'login',
-    password: await memDecrypt(e.password),
-    totp: await memDecrypt(e.totp),
-    cardNumber: await memDecrypt(e.cardNumber),
-    cardCvv: await memDecrypt(e.cardCvv),
-    cardPin: await memDecrypt(e.cardPin),
-    secureNote: await memDecrypt(e.secureNote)
-  };
+  const out = { ...e, type: e.type || 'login' };
+  for (const field of RAM_SECRET_FIELDS) {
+    out[field] = scrubLegacySecret(field, await memDecrypt(e[field]));
+  }
+  if (Array.isArray(e.history)) {
+    out.history = await transformHistorySecrets(e.history, memDecrypt);
+  }
+  return out;
 }
 
 async function hydrateEntryMemory(e, id = null) {
-  return {
-    ...e,
-    id: id || e.id || crypto.randomUUID(),
-    type: e.type || 'login',
-    password: await memEncrypt(e.password || ''),
-    totp: await memEncrypt(e.totp || ''),
-    cardNumber: await memEncrypt(e.cardNumber || ''),
-    cardCvv: await memEncrypt(e.cardCvv || ''),
-    cardPin: await memEncrypt(e.cardPin || ''),
-    secureNote: await memEncrypt(e.secureNote || '')
-  };
+  const out = { ...e, id: id || e.id || crypto.randomUUID(), type: e.type || 'login' };
+  for (const field of RAM_SECRET_FIELDS) {
+    const raw = e[field] || '';
+    const clean = typeof raw === 'string' ? scrubLegacySecret(field, raw) : scrubLegacySecret(field, await memDecrypt(raw));
+    out[field] = await memEncrypt(clean);
+  }
+  if (Array.isArray(e.history)) {
+    out.history = await transformHistorySecrets(e.history, memEncrypt, '');
+  }
+  return out;
 }
 
 let revealT = {};
@@ -69,8 +99,10 @@ let revealT = {};
 // ── Tema (koyu/açık mod) ─────────────────────────────────────────────
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  const btn = document.getElementById('themeToggle');
-  if (btn) btn.textContent = theme === 'dark' ? '◑' : '◐';
+  const half = document.getElementById('themeToggleHalf');
+  if (half) {
+    half.setAttribute('d', theme === 'dark' ? 'M12 3a9 9 0 0 1 0 18z' : 'M12 3a9 9 0 0 0 0 18z');
+  }
   localStorage.setItem('fuin-theme', theme);
 }
 function toggleTheme() {
@@ -217,11 +249,17 @@ async function unlock() {
         let hadCorruptArtifact = false;
         const seenContent = new Set();
         entries = entries.filter(e => {
-           if ((e.site === 'Yeni Hesap' || e.site === 'Bilinmeyen Site') && !e.username && !e.password) {
+           const isLogin = !e.type || e.type === 'login';
+           if (isLogin && (e.site === 'Yeni Hesap' || e.site === 'Bilinmeyen Site') && !e.username && !e.password) {
              hadCorruptArtifact = true;
              return false;
            }
-           const key = `${e.site}||${e.username}||${e.password}`;
+           if (RAM_SECRET_FIELDS.some(f => f !== 'password' && e[f] === '[object Object]')) {
+             hadCorruptArtifact = true;
+           }
+           const key = isLogin
+             ? `${e.site}||${e.username}||${e.password}`
+             : (e.id || `${e.type}||${e.site}||${e.cardLastFour || ''}`);
            if (seenContent.has(key)) return false;
            seenContent.add(key);
            return true;
@@ -473,6 +511,7 @@ const MULTI_TENANT_SUFFIXES = new Set([
 ]);
 
 function domainMatches(entry, domain) {
+  if (!entry || (entry.type && entry.type !== 'login')) return false;
   const entryDomain = normalizeDomain(entry?.url || entry?.site);
   const targetDomain = normalizeDomain(domain);
   if (!entryDomain || !targetDomain) return false;
@@ -942,10 +981,46 @@ async function persist() {
 const CATEGORY_KEY_MAP = {
   'Sosyal Medya': 'cat_social', 'E-posta': 'cat_email', 'Finans': 'cat_finance',
   'Alışveriş': 'cat_shopping', 'İş / Kurumsal': 'cat_work', 'Oyun': 'cat_gaming',
-  'Geliştirici / Araçlar': 'cat_dev', 'Diğer': 'cat_other',
+  'Geliştirici / Araçlar': 'cat_dev', 'Eğitim': 'cat_education', 'Diğer': 'cat_other',
 };
+function normCatToken(raw) {
+  return String(raw || '').trim().toLowerCase().replace(/\u0307/g, '');
+}
+function foldCatToken(raw) {
+  return normCatToken(raw).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0131/g, 'i');
+}
+const CATEGORY_CANONICAL_ALIASES = (() => {
+  const exact = Object.create(null);
+  const folded = Object.create(null);
+  const addExact = (k, canonical) => { exact[normCatToken(k)] = canonical; };
+  const addFolded = (k, canonical) => { folded[foldCatToken(k)] = canonical; };
+
+  Object.keys(CATEGORY_KEY_MAP).forEach(c => { addExact(c, c); addFolded(c, c); });
+
+  // Mobile TR / EN ve esnek alias eşleşmeleri
+  ['sosyal', 'social media', 'social'].forEach(a => addFolded(a, 'Sosyal Medya'));
+  ['eposta', 'email', 'e-mail'].forEach(a => addFolded(a, 'E-posta'));
+  ['finance'].forEach(a => addFolded(a, 'Finans'));
+  ['e-ticaret', 'eticaret', 'shopping'].forEach(a => addFolded(a, 'Alışveriş'));
+  addExact('i\u015f', 'İş / Kurumsal');
+  ['is / kurumsal', 'work / corporate', 'work'].forEach(a => addFolded(a, 'İş / Kurumsal'));
+  ['gaming', 'games'].forEach(a => addFolded(a, 'Oyun'));
+  ['gelistirici', 'developer / tools', 'developer'].forEach(a => addFolded(a, 'Geliştirici / Araçlar'));
+  ['education'].forEach(a => addFolded(a, 'Eğitim'));
+  ['other'].forEach(a => addFolded(a, 'Diğer'));
+
+  return { exact, folded };
+})();
+function canonicalCategory(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return 'Diğer';
+  const c = CATEGORY_CANONICAL_ALIASES.exact[normCatToken(trimmed)] || CATEGORY_CANONICAL_ALIASES.folded[foldCatToken(trimmed)];
+  return c || trimmed;
+}
 function catLabel(raw) {
-  const key = CATEGORY_KEY_MAP[raw];
+  const trimmed = String(raw || '').trim();
+  const c = CATEGORY_CANONICAL_ALIASES.exact[normCatToken(trimmed)] || CATEGORY_CANONICAL_ALIASES.folded[foldCatToken(trimmed)] || raw;
+  const key = CATEGORY_KEY_MAP[c];
   return key ? t(key) : raw; // özel/bilinmeyen kategori adı ise olduğu gibi bırak
 }
 
@@ -967,10 +1042,10 @@ function renderCategoryNav() {
   if (!section || !wrap) return;
 
   const counts  = {};
-  entries.forEach(e => { const c = e.category || 'Diğer'; counts[c] = (counts[c]||0)+1; });
+  entries.forEach(e => { const c = canonicalCategory(e.category || (e.type === 'card' ? 'Finans' : 'Diğer')); counts[c] = (counts[c]||0)+1; });
   
   const allCats = new Set([...Object.keys(counts)]);
-  const cats = Array.from(allCats).sort((a,b)=>a.localeCompare('tr'));
+  const cats = Array.from(allCats).sort((a,b)=>catLabel(a).localeCompare(catLabel(b)));
 
   if (cats.length === 0) {
     section.style.display = 'none';
@@ -1086,7 +1161,7 @@ async function renderList() {
   } else {
     list = list.filter(e => !e.isDeleted);
     if (curView==='fav') list = list.filter(e=>e.fav);
-    else if (curView.startsWith('cat:')) { const cat=curView.slice(4); list = list.filter(e=>(e.category||'Diğer')===cat); }
+    else if (curView.startsWith('cat:')) { const cat=canonicalCategory(curView.slice(4)); list = list.filter(e=>canonicalCategory(e.category||(e.type==='card'?'Finans':'Diğer'))===cat); }
     else if (curView.startsWith('type:')) { const type=curView.slice(5); list = list.filter(e=>(e.type||'login')===type); }
   }
   if (q) {
@@ -1245,6 +1320,7 @@ async function renderSecurity() {
 
 // ── CRUD ──────────────────────────────────────────────────────────
 let currentModalType = 'login';
+let modalCategoryManuallySet = false;
 
 function detectCardBrand(digits) {
   if (!digits) return null;
@@ -1369,7 +1445,6 @@ function setModalType(type) {
     if (secCard) secCard.style.display = 'flex';
     if (secNote) secNote.style.display = 'none';
     if (sec2fa) sec2fa.style.display = 'none';
-    if (fCat && (!editId || fCat.value === 'Diğer')) fCat.value = 'Finans';
   } else if (currentModalType === 'note') {
     if (lblSite) {
       lblSite.setAttribute('data-i18n', 'fieldNoteTitle');
@@ -1398,6 +1473,15 @@ function setModalType(type) {
     if (secNote) secNote.style.display = 'none';
     if (sec2fa) sec2fa.style.display = 'flex';
   }
+
+  // Only auto-adjust default category (Finans <-> Diğer) unless the user chose one manually
+  if (fCat && !modalCategoryManuallySet) {
+    if (currentModalType === 'card') {
+      if (!editId || fCat.value === 'Diğer') fCat.value = 'Finans';
+    } else if (fCat.value === 'Finans') {
+      fCat.value = 'Diğer';
+    }
+  }
 }
 
 async function openAddModal(id=null, force=false) {
@@ -1412,7 +1496,7 @@ async function openAddModal(id=null, force=false) {
   document.getElementById('addModalTitle').textContent = id ? t('modalEditEntry') : t('modalNewEntry');
   
   const sel = document.getElementById('f-category');
-  const defaults = ['Sosyal Medya', 'E-posta', 'Finans', 'Alışveriş', 'İş / Kurumsal', 'Oyun', 'Geliştirici / Araçlar', 'Diğer'];
+  const defaults = ['Sosyal Medya', 'E-posta', 'Finans', 'Alışveriş', 'İş / Kurumsal', 'Oyun', 'Geliştirici / Araçlar', 'Eğitim', 'Diğer'];
   const allOpts = [...defaults];
   sel.innerHTML = allOpts.map(c => {
     let i18n = CATEGORY_KEY_MAP[c] || '';
@@ -1422,9 +1506,14 @@ async function openAddModal(id=null, force=false) {
   if(id) {
     const e = entries.find(x=>x.id===id);
     const type = e.type || 'login';
+    modalCategoryManuallySet = true;
     setModalType(type);
     document.getElementById('f-site').value = e.site || '';
-    sel.value = e.category || (type === 'card' ? 'Finans' : 'Diğer');
+    const resolvedCat = canonicalCategory(e.category || (type === 'card' ? 'Finans' : 'Diğer'));
+    if (resolvedCat && !allOpts.includes(resolvedCat)) {
+      sel.insertAdjacentHTML('beforeend', `<option value="${esc(resolvedCat)}">${esc(catLabel(resolvedCat))}</option>`);
+    }
+    sel.value = resolvedCat;
     document.getElementById('f-note').value = e.note || '';
     document.getElementById('f-fav').checked = !!e.fav;
     document.getElementById('f-reprompt').checked = !!e.reprompt;
@@ -1465,9 +1554,9 @@ async function openAddModal(id=null, force=false) {
     let defaultType = 'login';
     if (curView === 'type:card') defaultType = 'card';
     else if (curView === 'type:note') defaultType = 'note';
+    modalCategoryManuallySet = false;
+    sel.value = 'Diğer';
     setModalType(defaultType);
-
-    sel.value = defaultType === 'card' ? 'Finans' : 'Diğer';
     document.getElementById('f-2fa-toggle').checked = false;
     document.getElementById('f-fav').checked = false;
     document.getElementById('f-reprompt').checked = false;
@@ -2743,7 +2832,7 @@ async function restoreSnapshotByFilename(filename) {
           let id = e.id;
           while (seenIds.has(id) || !id) id = crypto.randomUUID();
           seenIds.add(id);
-          return { ...e, id, password: await memEncrypt(e.password), totp: await memEncrypt(e.totp) };
+          return hydrateEntryMemory(e, id);
         }));
         closeBackupHistoryModal();
         renderList();
@@ -2917,7 +3006,7 @@ async function openSyncWindow() {
       // Ensure latest vault state is securely committed to storage and authoritative binding is synchronized
       await persist();
       const exportSyncList = await Promise.all(
-        syncList.map(async e => ({ ...e, password: await memDecrypt(e.password), totp: await memDecrypt(e.totp) }))
+        syncList.map(serializeEntryPlain)
       );
 
       const ok = await api.openSyncWindowV2(syncPassword, exportSyncList);
@@ -3043,11 +3132,7 @@ async function startLanSyncFlow() {
       await persist();
     }
     const exportSyncList = Array.isArray(entries) && entries.length > 0 ? await Promise.all(
-      entries.map(async e => ({
-        ...e,
-        password: await memDecrypt(e.password),
-        totp: await memDecrypt(e.totp)
-      }))
+      entries.map(serializeEntryPlain)
     ) : [];
 
     const res = await api.startLanSync(exportSyncList);
@@ -3133,11 +3218,7 @@ async function openPairingModal() {
       await persist();
     }
     const exportSyncList = Array.isArray(entries) && entries.length > 0 ? await Promise.all(
-      entries.map(async e => ({
-        ...e,
-        password: await memDecrypt(e.password),
-        totp: await memDecrypt(e.totp)
-      }))
+      entries.map(serializeEntryPlain)
     ) : [];
 
     const res = await api.startLanSync(exportSyncList);
@@ -3210,10 +3291,19 @@ async function importEncryptedBackup() {
   };
 
   const applyDecryptedVault = async (parsed) => {
-    const list = (parsed && parsed.type === 'fuin/vault')
-      ? (parsed.entries || [])
-      : (Array.isArray(parsed) ? parsed : (parsed?.entries || []));
-    await processImportedEntries(list, 'Fuin (.fuin)');
+    const importers = window.FuinImporters || (typeof FuinImporters !== 'undefined' ? FuinImporters : null);
+    let list;
+    let meta = {};
+    if (importers && typeof importers.importJSON === 'function') {
+      const res = importers.importJSON(parsed);
+      list = res.entries || [];
+      meta = res;
+    } else {
+      list = (parsed && parsed.type === 'fuin/vault')
+        ? (parsed.entries || [])
+        : (Array.isArray(parsed) ? parsed : (parsed?.entries || []));
+    }
+    await processImportedEntries(list, 'Fuin (.fuin)', meta);
     toast(t('toastEncBackupRestored'));
   };
 
@@ -3254,6 +3344,7 @@ async function importEncryptedBackup() {
 }
 
 async function exportJSON() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
   if(!confirm(t('confirmPlaintextExport'))) return;
   const exportEntries = await Promise.all(entries.map(serializeEntryPlain));
   const payload = { type: 'fuin/vault', categories: [], entries: exportEntries };
@@ -3262,6 +3353,7 @@ async function exportJSON() {
   toast(t('toastJsonExported'));
 }
 async function exportCSV() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
   if(!confirm(t('confirmPlaintextExport'))) return;
   const exportEntries = await Promise.all(entries.map(serializeEntryPlain));
   const content = window.FuinBackupController?.buildPlaintextCsv
@@ -3315,8 +3407,14 @@ async function processImportedEntries(imported, label, meta = {}) {
     return;
   }
 
+  const usedIds = new Set(entries.map(x => x && x.id).filter(Boolean));
   newEntries = await Promise.all(
-    newEntries.map(e => hydrateEntryMemory(e))
+    newEntries.map(e => {
+      let safeId = e.id;
+      while (!safeId || usedIds.has(safeId)) safeId = crypto.randomUUID();
+      usedIds.add(safeId);
+      return hydrateEntryMemory(e, safeId);
+    })
   );
 
   entries = [...newEntries, ...entries];
@@ -3326,6 +3424,7 @@ async function processImportedEntries(imported, label, meta = {}) {
 }
 
 async function importJSON() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
   const raw = await api.importFile({ filters: [{ name: 'JSON', extensions: ['json'] }] });
   if (!raw) return;
   try {
@@ -3338,6 +3437,7 @@ async function importJSON() {
 }
 
 async function importCSV() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
   const raw = await api.importFile({ filters: [{ name: 'CSV', extensions: ['csv', 'txt'] }] });
   if (!raw) return;
   try {
@@ -3661,6 +3761,9 @@ function initAppListeners() {
   document.getElementById('btnTypeLogin')?.addEventListener('click', () => setModalType('login'));
   document.getElementById('btnTypeCard')?.addEventListener('click', () => setModalType('card'));
   document.getElementById('btnTypeNote')?.addEventListener('click', () => setModalType('note'));
+  document.getElementById('f-category')?.addEventListener('change', () => {
+    modalCategoryManuallySet = true;
+  });
   document.getElementById('btnEyeCard')?.addEventListener('click', () => {
     const inp = document.getElementById('f-card-number');
     if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
@@ -4055,9 +4158,10 @@ if (api.onLanSyncApplied) {
       const seenCreds = new Set();
       const dedupedMerged = [];
       for (const e of (Array.isArray(merged) ? merged : [])) {
+        const isLogin = !e.type || e.type === 'login';
         const site = (e.site || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
         const user = (e.username || '').trim().toLowerCase();
-        const key = (site && user && !e.isDeleted && !e.deletedAt) ? `${site}||${user}` : (e.id || '');
+        const key = (isLogin && site && user && !e.isDeleted && !e.deletedAt) ? `${site}||${user}` : (e.id || '');
         if (key && seenCreds.has(key)) continue;
         if (key) seenCreds.add(key);
         dedupedMerged.push(e);

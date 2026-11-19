@@ -24,9 +24,20 @@ const PROTOCOL_VERSION = 1; // Native-host & eklenti protokol sürümü
 
 function getUserDataPath() {
   const home = os.homedir();
-  if (process.platform === 'darwin') return path.join(home, 'Library', 'Application Support', PRODUCT_NAME);
-  if (process.platform === 'win32')  return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), PRODUCT_NAME);
-  return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), PRODUCT_NAME);
+  const baseDir = process.platform === 'darwin'
+    ? path.join(home, 'Library', 'Application Support')
+    : process.platform === 'win32'
+      ? (process.env.APPDATA || path.join(home, 'AppData', 'Roaming'))
+      : (process.env.XDG_CONFIG_HOME || path.join(home, '.config'));
+  const prodDir = path.join(baseDir, PRODUCT_NAME);
+  if (fs.existsSync(path.join(prodDir, 'fuin.ext-token'))) {
+    return prodDir;
+  }
+  const devDir = path.join(baseDir, PRODUCT_NAME.toLowerCase());
+  if (fs.existsSync(path.join(devDir, 'fuin.ext-token'))) {
+    return devDir;
+  }
+  return prodDir;
 }
 
 const USER_DATA    = getUserDataPath();

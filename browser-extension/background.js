@@ -19,7 +19,7 @@ async function checkHostHandshake(force = false) {
   }
   const res = await askFuin({
     type: 'handshake',
-    clientVersion: chrome.runtime?.getManifest?.()?.version || '1.0.3',
+    clientVersion: chrome.runtime?.getManifest?.()?.version || '1.0.4',
     protocolVersion: PROTOCOL_VERSION
   });
   if (res && res.ok) {
@@ -170,6 +170,7 @@ async function getActiveTab() {
 
 let pendingReveal = null;
 const pendingSaveByTab = new Map(); // tabId -> { domain, username, password, action, entryId, timestamp, locked }
+const inFlightSaveCheckByTab = new Map(); // tabId -> { domain, cancelled, promise }
 const stagedUsernameByTab = new Map(); // tabId -> { domain, username, timestamp } (2 adımlı sayfa geçişli girişler için)
 const dismissedFingerprints = new Map(); // key -> timestamp (session suppression for "Not Now" & just-saved)
 const excludedDomainsMemory = new Set(); // normalized domains excluded via "Never for this site"
@@ -304,6 +305,21 @@ function isCredentialDismissed(domain, username, password) {
   return false;
 }
 
+function getActionApi() {
+  return (typeof browser !== 'undefined' && browser.action) ? browser.action : (typeof chrome !== 'undefined' ? chrome.action : null);
+}
+
+function setPendingBadge(tabId) {
+  if (!tabId) return;
+  const actionApi = getActionApi();
+  if (actionApi?.setBadgeText) {
+    try {
+      actionApi.setBadgeText({ text: '1', tabId });
+      actionApi.setBadgeBackgroundColor?.({ color: '#5a9a6e', tabId });
+    } catch {}
+  }
+}
+
 function clearPendingForTab(tabId, notifyClose = false) {
   if (!tabId) return;
   const existing = pendingSaveByTab.get(tabId);
@@ -312,8 +328,9 @@ function clearPendingForTab(tabId, notifyClose = false) {
     existing.username = '';
     pendingSaveByTab.delete(tabId);
   }
-  if (chrome.action?.setBadgeText) {
-    try { chrome.action.setBadgeText({ text: '', tabId }); } catch {}
+  const actionApi = getActionApi();
+  if (actionApi?.setBadgeText) {
+    try { actionApi.setBadgeText({ text: '', tabId }); } catch {}
   }
   if (notifyClose) {
     try {
@@ -386,6 +403,20 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
           stagedUsernameByTab.delete(tabId);
         }
       }
+      if (candidateUrl && inFlightSaveCheckByTab.has(tabId)) {
+        const inFlight = inFlightSaveCheckByTab.get(tabId);
+        let keepInFlight = false;
+        try {
+          const parsed = new URL(candidateUrl);
+          if (parsed.protocol === 'https:' && isSameSiteSafe(parsed.hostname, inFlight.domain)) {
+            keepInFlight = true;
+          }
+        } catch {}
+        if (!keepInFlight) {
+          inFlight.cancelled = true;
+          inFlightSaveCheckByTab.delete(tabId);
+        }
+      }
       if (candidateUrl && pendingSaveByTab.has(tabId)) {
         const pending = pendingSaveByTab.get(tabId);
         let keep = false;
@@ -402,22 +433,30 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
       }
 
       // Sayfa yönlendikten / yüklendikten sonra yalnızca aynı sitedeyse bekleyen kaydetme bildirimini tetikle
+      // Not: Firefox'ta "tabs" izni olmadan tab.url undefined olabilir; bu durumda silme yapma (content script fuin-get-pending-save ile origin doğrulaması yapılır).
       if (changeInfo.status === 'complete') {
         const pending = pendingSaveByTab.get(tabId);
         if (pending) {
-          let tabMatchesOrigin = false;
-          try {
-            if (tab?.url) {
-              const u = new URL(tab.url);
-              tabMatchesOrigin = u.protocol === 'https:' && isSameSiteSafe(u.hostname, pending.domain);
-            }
-          } catch {}
+          const expiredOrDismissed =
+            Date.now() - pending.timestamp >= PENDING_SAVE_TTL_MS ||
+            isCredentialDismissed(pending.domain, pending.username, pending.password);
+          if (expiredOrDismissed) {
+            clearPendingForTab(tabId, false);
+            return;
+          }
 
-          if (
-            tabMatchesOrigin &&
-            Date.now() - pending.timestamp < PENDING_SAVE_TTL_MS &&
-            !isCredentialDismissed(pending.domain, pending.username, pending.password)
-          ) {
+          let tabMatchesOrigin = !candidateUrl;
+          if (candidateUrl) {
+            try {
+              const u = new URL(candidateUrl);
+              tabMatchesOrigin = u.protocol === 'https:' && isSameSiteSafe(u.hostname, pending.domain);
+            } catch {
+              tabMatchesOrigin = false;
+            }
+          }
+
+          if (tabMatchesOrigin) {
+            setPendingBadge(tabId);
             sendTabMessage(tabId, {
               type: 'fuin-trigger-save-prompt',
               candidate: pending,
@@ -433,6 +472,11 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
 
   if (chrome.tabs.onRemoved) {
     chrome.tabs.onRemoved.addListener((tabId) => {
+      const inFlight = inFlightSaveCheckByTab.get(tabId);
+      if (inFlight) {
+        inFlight.cancelled = true;
+        inFlightSaveCheckByTab.delete(tabId);
+      }
       clearPendingForTab(tabId, false);
       stagedUsernameByTab.delete(tabId);
       if (pendingReveal && pendingReveal.tabId === tabId) {
@@ -496,16 +540,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     if (msg.type === 'fuin-get-pending-save-popup') {
-      let found = null;
-      for (const [tId, p] of pendingSaveByTab.entries()) {
-        if (msg.domain && isSameSiteSafe(p.domain, msg.domain)) {
-          if (Date.now() - p.timestamp < PENDING_SAVE_TTL_MS && !isCredentialDismissed(p.domain, p.username, p.password)) {
-            found = { ...p, tabId: tId };
-            break;
+      (async () => {
+        if (inFlightSaveCheckByTab.size > 0) {
+          const matchingFlights = [];
+          for (const entry of inFlightSaveCheckByTab.values()) {
+            if (!msg.domain || isSameSiteSafe(entry.domain, msg.domain)) {
+              matchingFlights.push(Promise.resolve(entry.promise).catch(() => null));
+            }
+          }
+          if (matchingFlights.length > 0) {
+            await Promise.all(matchingFlights);
           }
         }
-      }
-      sendResponse(found ? { hasPending: true, item: found } : { hasPending: false });
+        let found = null;
+        for (const [tId, p] of pendingSaveByTab.entries()) {
+          if (msg.domain && isSameSiteSafe(p.domain, msg.domain)) {
+            if (Date.now() - p.timestamp < PENDING_SAVE_TTL_MS && !isCredentialDismissed(p.domain, p.username, p.password)) {
+              found = { ...p, tabId: tId };
+              break;
+            }
+          }
+        }
+        sendResponse(found ? { hasPending: true, item: found } : { hasPending: false });
+      })();
       return true;
     }
     if (msg.type === 'fuin-save-credential' && msg.password) {
@@ -542,21 +599,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // Content script'lerden gelen mesajlar
-  if (!sender.tab?.url) return;
-
   // Güvenlik: Yalnızca en üst pencereden (top frame) gelen mesajları kabul et.
   // Alt iframelerden (subframe) gelen istekler domain taklidi riskine karşı engellenir.
   if (sender.frameId !== undefined && sender.frameId !== 0) return;
 
+  // Not: Firefox MV3'te "tabs" izni olmadan sender.tab.url undefined olabilir;
+  // top-frame (sender.frameId === 0) content script'in sender.url alanı kullanılır.
+  const rawTabUrl = sender.tab?.url || (sender.tab && sender.frameId === 0 ? sender.url : null);
+  if (!rawTabUrl) return;
+
   let actualDomain;
   try {
-    const parsedTabUrl = new URL(sender.tab.url);
+    const parsedTabUrl = new URL(rawTabUrl);
     if (parsedTabUrl.protocol !== 'https:') return;
     if (sender.url) {
       const parsedSenderUrl = new URL(sender.url);
-      if (parsedSenderUrl.protocol !== 'https:' || parsedSenderUrl.origin !== parsedTabUrl.origin) return;
+      const sameSiteSubmit = (msg.type === 'fuin-form-submitted' || msg.type === 'fuin-stage-username') &&
+        isSameSiteSafe(parsedSenderUrl.hostname, parsedTabUrl.hostname);
+      if (parsedSenderUrl.protocol !== 'https:' || (parsedSenderUrl.origin !== parsedTabUrl.origin && !sameSiteSubmit)) return;
+      actualDomain = sameSiteSubmit ? parsedSenderUrl.hostname : parsedTabUrl.hostname;
+    } else {
+      actualDomain = parsedTabUrl.hostname;
     }
-    actualDomain = parsedTabUrl.hostname;
   } catch { return; }
 
   if (!actualDomain || typeof actualDomain !== 'string' || actualDomain.length > 253) return;
@@ -584,20 +648,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === 'fuin-get-pending-save') {
     const tabId = sender.tab?.id;
-    if (tabId && pendingSaveByTab.has(tabId)) {
-      const p = pendingSaveByTab.get(tabId);
-      if (
-        isSameSiteSafe(actualDomain, p.domain) &&
-        Date.now() - p.timestamp < PENDING_SAVE_TTL_MS &&
-        !isCredentialDismissed(p.domain, p.username, p.password)
-      ) {
-        sendResponse({ hasPending: true, candidate: p, result: { action: p.action, entryId: p.entryId, shouldPrompt: true, locked: !!p.locked } });
-        return true;
-      } else {
-        clearPendingForTab(tabId, false);
+    (async () => {
+      if (tabId && inFlightSaveCheckByTab.has(tabId)) {
+        try { await inFlightSaveCheckByTab.get(tabId)?.promise; } catch {}
       }
-    }
-    sendResponse({ hasPending: false });
+      if (tabId && pendingSaveByTab.has(tabId)) {
+        const p = pendingSaveByTab.get(tabId);
+        if (
+          isSameSiteSafe(actualDomain, p.domain) &&
+          Date.now() - p.timestamp < PENDING_SAVE_TTL_MS &&
+          !isCredentialDismissed(p.domain, p.username, p.password)
+        ) {
+          setPendingBadge(tabId);
+          sendResponse({ hasPending: true, candidate: p, result: { action: p.action, entryId: p.entryId, shouldPrompt: true, locked: !!p.locked } });
+          return;
+        } else {
+          clearPendingForTab(tabId, false);
+        }
+      }
+      sendResponse({ hasPending: false });
+    })();
     return true;
   }
   if (msg.type === 'fuin-dismiss-save') {
@@ -642,12 +712,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ shouldPrompt: false, dismissed: true });
       return true;
     }
-    askFuinWithProtocol({
+    const inFlightEntry = { domain: actualDomain, cancelled: false, promise: null };
+    const checkPromise = askFuinWithProtocol({
       type: 'check-save-candidate',
       domain: actualDomain,
       username: cleanUser,
       password: msg.password
     }).then((res) => {
+      if (inFlightEntry.cancelled) {
+        sendResponse({ shouldPrompt: false, cancelled: true });
+        return;
+      }
       const isLockedState = res && (res.error === 'locked' || res.error === 'fuin-not-running' || res.error === 'native-host-unreachable');
       const shouldStage = Boolean((res && res.shouldPrompt) || isLockedState);
       if (shouldStage && !isCredentialDismissed(actualDomain, cleanUser, msg.password)) {
@@ -662,17 +737,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           timestamp: Date.now()
         };
         const promptResult = isLockedState
-          ? { shouldPrompt: true, action: 'save', entryId: null, locked: true }
+          ? { shouldPrompt: true, action: 'save', entryId: null, locked: true, username: finalUser }
           : res;
         if (tabId) {
           pendingSaveByTab.set(tabId, item);
-          if (chrome.action?.setBadgeText) {
-            try {
-              chrome.action.setBadgeText({ text: '1', tabId });
-              chrome.action.setBadgeBackgroundColor({ color: '#5a9a6e', tabId });
-            } catch {}
-          }
-          sendTabMessage(tabId, { type: 'fuin-trigger-save-prompt', candidate: item, result: promptResult });
+          setPendingBadge(tabId);
+          sendTabMessage(tabId, { type: 'fuin-trigger-save-prompt', candidate: item, result: promptResult }).then((ack) => {
+            if (!ack && pendingSaveByTab.get(tabId) === item && !isCredentialDismissed(item.domain, item.username, item.password)) {
+              setTimeout(() => {
+                if (pendingSaveByTab.get(tabId) === item && !isCredentialDismissed(item.domain, item.username, item.password)) {
+                  sendTabMessage(tabId, { type: 'fuin-trigger-save-prompt', candidate: item, result: promptResult });
+                }
+              }, 400);
+            }
+          });
         }
         sendResponse(promptResult);
         return;
@@ -680,7 +758,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse(res);
     }).catch(() => {
       sendResponse({ shouldPrompt: false });
+    }).finally(() => {
+      if (tabId && inFlightSaveCheckByTab.get(tabId) === inFlightEntry) {
+        inFlightSaveCheckByTab.delete(tabId);
+      }
     });
+    inFlightEntry.promise = checkPromise;
+    if (tabId) {
+      inFlightSaveCheckByTab.set(tabId, inFlightEntry);
+    }
     return true;
   }
   if (msg.type === 'fuin-check-save-candidate' && msg.password) {

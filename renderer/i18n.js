@@ -145,7 +145,7 @@ const TRANSLATIONS = {
 
     cat_social: 'Sosyal Medya', cat_email: 'E-posta', cat_finance: 'Finans',
     cat_shopping: 'Alışveriş', cat_work: 'İş / Kurumsal', cat_gaming: 'Oyun',
-    cat_dev: 'Geliştirici / Araçlar', cat_other: 'Diğer',
+    cat_dev: 'Geliştirici / Araçlar', cat_education: 'Eğitim', cat_other: 'Diğer',
 
     totpModalTitle: '2FA KODU',
     totpHint: 'koda tıkla → kopyala',
@@ -605,7 +605,7 @@ const TRANSLATIONS = {
 
     cat_social: 'Social Media', cat_email: 'Email', cat_finance: 'Finance',
     cat_shopping: 'Shopping', cat_work: 'Work / Corporate', cat_gaming: 'Gaming',
-    cat_dev: 'Developer / Tools', cat_other: 'Other',
+    cat_dev: 'Developer / Tools', cat_education: 'Education', cat_other: 'Other',
 
     totpModalTitle: '2FA CODE',
     totpHint: 'click code → copy',

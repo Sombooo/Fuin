@@ -7,6 +7,7 @@ const crypto = require('crypto');
 
 const NATIVE_HOST_NAME = 'com.fuin.nativehost';
 const PROTOCOL_VERSION = 1; // Native-host & eklenti protokol sürümü
+const DEFAULT_CHROME_EXTENSION_ID = 'fnnfdonpocachpdjkdjpgpmodjnahpbh';
 
 function getChromeOriginsFilePath(app) {
   return app ? path.join(app.getPath('userData'), 'fuin.chrome-origins.json') : null;
@@ -38,7 +39,7 @@ function saveChromeOrigins(app, origins) {
 }
 
 function getKnownExtensionIds(app) {
-  const publishedId = process.env.FUIN_CHROME_EXTENSION_ID || '';
+  const publishedId = process.env.FUIN_CHROME_EXTENSION_ID || DEFAULT_CHROME_EXTENSION_ID;
   const extraOrigins = process.env.FUIN_CHROME_ORIGINS
     ? process.env.FUIN_CHROME_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
     : [];

@@ -15,6 +15,9 @@ build/*
 !build/installer.nsh
 !build/afterPack.js
 fuin-extension.zip
+fuin-extension-chrome.zip
+fuin-extension-firefox.zip
+assets/fuinmockfoto/
 
 # Misc
 .DS_Store

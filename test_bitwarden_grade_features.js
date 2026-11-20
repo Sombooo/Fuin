@@ -395,11 +395,13 @@ test('10. Deep Security Audit Fixes (SEC-01..SEC-05: Backup Auth, Symlink Defens
     const styleCss = fs.readFileSync(path.join(__dirname, 'renderer', 'style.css'), 'utf8');
     const indexHtml = fs.readFileSync(path.join(__dirname, 'renderer', 'index.html'), 'utf8');
 
-    // UI checks: styled scrollbar on #backupHistoryList & default Chrome extension ID in Settings card
+    // UI checks: styled scrollbar on #backupHistoryList & streamlined extension card without raw IDs or developer input
     assert.ok(styleCss.includes('#backupHistoryList::-webkit-scrollbar'), 'style.css must style #backupHistoryList scrollbar');
     assert.ok(styleCss.includes('#backupHistoryList::-webkit-scrollbar-thumb'), 'style.css must style #backupHistoryList scrollbar thumb');
-    assert.ok(indexHtml.includes('fnnfdonpocachpdjkdjpgpmodjnahpbh'), 'index.html must display official Chrome Web Store extension ID');
-    assert.ok(indexHtml.includes('class="ext-dev-details"'), 'index.html must place manual Chrome ID entry in collapsible developer details');
+    assert.ok(indexHtml.includes('data-i18n="extChromeReady"') && indexHtml.includes('data-i18n="extFirefoxReady"'), 'index.html must show Chrome and Firefox ready states cleanly');
+    assert.ok(!indexHtml.includes('fnnfdonpocachpdjkdjpgpmodjnahpbh'), 'index.html must not expose raw Chrome extension ID badge in Settings UI');
+    assert.ok(!indexHtml.includes('fuin-app@sombo.dev'), 'index.html must not expose raw Firefox extension ID badge in Settings UI');
+    assert.ok(!indexHtml.includes('class="ext-dev-details"'), 'index.html must not render developer custom ID input details box');
 
     // Extract recovery & Emergency Kit helpers from renderer/app.js
     const startIdx = appJs.indexOf("const RECOVERY_KIT_STORAGE_KEY = 'fuin-recovery-kit-enc';");

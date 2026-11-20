@@ -9,11 +9,64 @@
 
   const CHANGELOG_ENTRIES = [
     {
+      version: '1.0.0-beta.12',
+      tag: 'v1.0.0-beta.12',
+      date: 'Kasım 2026',
+      dateEn: 'November 2026',
+      isCurrent: true,
+      title: 'Native Android Pano Güvenliği, Uygulama İçi Güncelleyici & Acil Durum Kiti Düzeltmeleri',
+      titleEn: 'Native Android Clipboard Security, In-App Updater Reliability & Emergency Kit Fixes',
+      summary: 'Fuin Mobile için native EXTRA_IS_SENSITIVE + AlarmManager + clearPrimaryClip() pano koruması, Masaüstü uygulama içi güncelleyicide çift tıklama/atomik indirme düzeltmesi, Acil Durum Kiti kurtarma anahtarı senkronizasyonu ve sadeleştirilmiş eklenti ayarları sunar.',
+      summaryEn: 'Delivers native Android EXTRA_IS_SENSITIVE + AlarmManager + clearPrimaryClip() clipboard protection for Fuin Mobile, desktop in-app updater double-trigger & atomic download fixes, up-to-date Emergency Kit recovery key sync, and streamlined browser extension settings.',
+      highlights: [
+        {
+          badge: 'mobile',
+          badgeText: 'MOBİL GÜVENLİK',
+          badgeTextEn: 'MOBILE SECURITY',
+          icon: 'smartphone',
+          title: 'Native Android Pano Koruması (EXTRA_IS_SENSITIVE & AlarmManager)',
+          titleEn: 'Native Android Clipboard Protection (EXTRA_IS_SENSITIVE & AlarmManager)',
+          desc: 'Fuin Mobile artık kopyalanan şifre ve kurtarma anahtarlarını Android 13+ üzerinde hassas (EXTRA_IS_SENSITIVE) işaretler, arka planda AlarmManager + BroadcastReceiver ile clearPrimaryClip() çalıştırır ve harici kullanıcı kopyalarını OnPrimaryClipChangedListener ile korur.',
+          descEn: 'Fuin Mobile now flags copied secrets and recovery keys as EXTRA_IS_SENSITIVE on Android 13+, wipes expired clips in the background via AlarmManager + clearPrimaryClip(), and preserves newer user copies with OnPrimaryClipChangedListener.'
+        },
+        {
+          badge: 'security',
+          badgeText: 'GÜNCELLEYİCİ',
+          badgeTextEn: 'UPDATER',
+          icon: 'shield-check',
+          title: 'Güvenilir Uygulama İçi Güncelleyici (.part Atomik İndirme)',
+          titleEn: 'Reliable In-App Updater (.part Atomic Downloads)',
+          desc: 'Kurulumu Başlat tıklandığında indirilen .dmg dosyasını sıfırlayan çift olay dinleyicisi hatası giderildi; indirmeler artık geçici .part dosyasına yazılıp boyut doğrulaması sonrası atomik taşınır.',
+          descEn: 'Fixed the duplicate click listener bug that truncated downloaded .dmg images upon install launch; updates now stream to a temporary .part file and atomically rename after size verification.'
+        },
+        {
+          badge: 'vault',
+          badgeText: 'KURTARMA & YEDEK',
+          badgeTextEn: 'RECOVERY & BACKUP',
+          icon: 'key',
+          title: 'Acil Durum Kiti Anahtar Senkronizasyonu & Yedek Geçmişi UI',
+          titleEn: 'Emergency Kit Key Sync & Backup History Polish',
+          desc: 'Kurtarma anahtarı yenilendiğinde veya doğrulandığında Argon2id + AES-256-GCM zarfı korunarak Acil Durum Kitine her oturumda güncel anahtar aktarılır; Otomatik Yedekler kaydırma çubuğu warm-dark temaya uyarlandı.',
+          descEn: 'Preserves an Argon2id + AES-256-GCM envelope when regenerating or verifying recovery keys so Emergency Kit exports always match across lock/unlock cycles; styled Backup History scrollbars to match the warm-dark palette.'
+        },
+        {
+          badge: 'extension',
+          badgeText: 'EKLENTİ AYARLARI',
+          badgeTextEn: 'EXTENSION UI',
+          icon: 'puzzle',
+          title: 'Sıfır Kurulumlu Tarayıcı Eklentisi Ayar Kartı',
+          titleEn: 'Zero-Setup Browser Extension Settings Card',
+          desc: 'Resmi Chrome Web Store ve Firefox eklenti kimlikleri yerleşik olarak bağlandığı için Ayarlar kartı gereksiz ID rozetleri ve manuel geliştirici alanından arındırıldı.',
+          descEn: 'With official Chrome Web Store and Firefox extension bridges built in, Settings removes cluttered raw ID badges and manual developer inputs for a calm, ready-to-use overview.'
+        }
+      ]
+    },
+    {
       version: '1.0.0-beta.11',
       tag: 'v1.0.0-beta.11',
       date: 'Kasım 2026',
       dateEn: 'November 2026',
-      isCurrent: true,
+      isCurrent: false,
       title: '2FA QR Tarayıcı, Eklenti Protokol Kontrolü & Kart/Not Kopyalama ve Taşınabilir Yedek Eşliği',
       titleEn: '2FA QR Scanner, Extension Protocol Handshake & Card/Note Copy, and Portable Backup Parity',
       summary: 'Native-Host ↔ Eklenti protokol sürüm el sıkışması, eklenti açılır penceresinde sıfır-bilgi Kredi Kartı & Güvenli Not kopyalama, Mobil 2FA QR tarayıcı, tek adım biyometrik kilit açma, çapraz platform .fuin yedekleme eşliği ve LAN Eşitleme Hotspot rehberliği sunar.',

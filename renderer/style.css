@@ -1936,16 +1936,6 @@ select.fi option { background: var(--paper); }
   font-weight: 500;
 }
 
-.ext-id-code {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ac);
-  background: rgba(90, 154, 110, 0.12);
-  border: 1px solid rgba(90, 154, 110, 0.25);
-  border-radius: 4px;
-  padding: 2px 8px;
-}
-
 .ext-shortcut-row {
   padding-top: 8px;
   border-top: 1px solid var(--b);
@@ -1956,34 +1946,6 @@ select.fi option { background: var(--paper); }
   flex-wrap: wrap;
   font-size: 11px;
   color: var(--mu);
-}
-
-.ext-dev-details {
-  margin-top: 10px;
-  background: var(--paper);
-  border: 1px solid var(--b);
-  border-radius: 6px;
-}
-
-.ext-dev-summary {
-  padding: 8px 12px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--mu);
-  cursor: pointer;
-  user-select: none;
-  outline: none;
-  transition: color .12s;
-}
-
-.ext-dev-summary:hover {
-  color: var(--text);
-}
-
-.ext-dev-body {
-  padding: 0 12px 12px;
-  border-top: 1px solid var(--b);
-  padding-top: 10px;
 }
 
 

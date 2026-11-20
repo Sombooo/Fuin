@@ -39,10 +39,10 @@ check('CHANGELOG_ENTRIES contains at least 3 releases', () => {
   assert.ok(changelog.CHANGELOG_ENTRIES.length >= 3);
 });
 
-check('Latest release is v1.0.0-beta.11 marked as current', () => {
+check('Latest release is v1.0.0-beta.12 marked as current', () => {
   const latest = changelog.getLatestEntry();
-  assert.strictEqual(latest.version, '1.0.0-beta.11');
-  assert.strictEqual(latest.tag, 'v1.0.0-beta.11');
+  assert.strictEqual(latest.version, '1.0.0-beta.12');
+  assert.strictEqual(latest.tag, 'v1.0.0-beta.12');
   assert.strictEqual(latest.isCurrent, true);
 });
 

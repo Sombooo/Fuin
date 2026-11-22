@@ -11,6 +11,7 @@ An offline-first password, card, and 2FA manager I built for my own devices—wi
 [![Platform: macOS | Windows | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgray.svg)](#)
 [![Browser: Chrome | Firefox](https://img.shields.io/badge/Extensions-Chrome%20%7C%20Firefox-5a9a6e.svg)](#browser-extensions-chrome--firefox)
 [![Companion: Fuin Mobile](https://img.shields.io/badge/Mobile-Android-366347.svg)](https://github.com/Sombooo/FuinMobile)
+[![Support: Buy Me A Coffee](https://img.shields.io/badge/Support-Buy_Me_A_Coffee-c88040.svg)](https://fuindev.lemonsqueezy.com/checkout/buy/c898c753-098b-4c0b-a721-77332db06bdc)
 
 </div>
 
@@ -48,14 +49,6 @@ If you decide to try it out, inspect the code, or break something and report it,
     </td>
   </tr>
 </table>
-
-<br />
-
-## Why I Built Fuin
-
-Honestly, I just got tired of trusting remote servers with every account I own. At the end of the day, a password vault is just an encrypted file—I wanted mine to stay on my own computer and phone, without logins, subscriptions, or background network traffic.
-
-So I built Fuin around one simple idea: **everything stays local by default.** When I need my passwords on my phone, I pair it once with a QR code and sync directly over my own Wi-Fi or hotspot.
 
 ---
 
@@ -106,16 +99,6 @@ I also built **[Fuin Mobile](https://github.com/Sombooo/FuinMobile)** for Androi
   </tr>
 </table>
 </div>
-
----
-
-## What I'm Planning Next
-
-Still in beta, I'm taking things one step at a time. Some features on my list for later updates:
-- **Passkeys (WebAuthn)** support
-- **KeePass (`.kdbx`)**, **1Password (`.1pux`)**, and **Apple Passwords** importers
-- **Encrypted file attachments** & **custom fields**
-- **Folders / tags** for organizing larger vaults
 
 ---
 

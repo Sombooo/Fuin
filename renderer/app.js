@@ -348,8 +348,6 @@ async function unlock() {
     })();
   }
   
-  if (api.saveTouchIdKey && localStorage.getItem('fuin-touchid-enabled') === 'true') api.saveTouchIdKey(pw);
-
   if (!exists) {
     await persist();
     const rKey = generateRecoveryKey();
@@ -357,14 +355,43 @@ async function unlock() {
     document.getElementById('recoveryKeyDisplay').textContent = rKey;
     document.getElementById('recoveryOverlay').classList.add('open');
   }
+
+  if (api.saveTouchIdKey && localStorage.getItem('fuin-touchid-enabled') === 'true') {
+    try { await api.saveTouchIdKey(pw); } catch {}
+  }
 }
 
 function lock() {
   master = null;
   sessionKey = null;
   entries = [];
+  const pendingRepromptCancel = repromptCancelAction;
   repromptPendingAction = null;
   repromptCustomVerifier = null;
+  repromptCancelAction = null;
+  if (typeof pendingRepromptCancel === 'function') {
+    try { pendingRepromptCancel(); } catch {}
+  }
+  if (typeof _lastGenRes !== 'undefined') _lastGenRes = null;
+  ['recoveryKeyDisplay','totpCode','totpSiteName','verifyRecoveryMsg','repromptMsg','changePwMsg'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = '';
+      if (['verifyRecoveryMsg','repromptMsg','changePwMsg'].includes(id) && el.style) el.style.display = 'none';
+    }
+  });
+  ['pwHistoryList','backupHistoryList'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+  ['f-site','f-user','f-pw','f-note','f-url','f-totp','f-cardholder','f-card-number','f-card-expiry','f-card-cvv','f-card-pin','f-secure-note','recoveryInp','newPwInp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp','repromptPwInp','verifyRecoveryInp'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['curPwInp','newMasterPwInp','newMasterPwConfirmInp','f-pw','f-card-cvv','f-card-pin','newPwInp','repromptPwInp','masterInp'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.type = 'password';
+  });
   if (typeof revealT === 'object' && revealT) {
     Object.keys(revealT).forEach(k => { clearTimeout(revealT[k]); delete revealT[k]; });
     revealT = {};
@@ -384,19 +411,7 @@ function lock() {
   isCategoriesExpanded = false;
   const catIcon = document.getElementById('catToggleIcon');
   if (catIcon) catIcon.style.transform = 'rotate(0deg)';
-  ['f-site','f-user','f-pw','f-note','f-url','f-totp','genPwResult','syncPasswordInput','curPwInp','newMasterPwInp','newMasterPwConfirmInp','repromptPwInp','verifyRecoveryInp'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  ['recoveryKeyDisplay','verifyRecoveryMsg','repromptMsg'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = '';
-  });
-  ['pwHistoryList','backupHistoryList'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = '';
-  });
-  ['addOverlay','totpOverlay','genOverlay','pairOverlay','lanSyncOverlay','newCategoryOverlay','changePwOverlay','backupOverlay','recoveryOverlay','repromptOverlay','pwHistoryOverlay','verifyRecoveryOverlay','backupHistoryOverlay'].forEach(id => {
+  ['addOverlay','totpOverlay','genOverlay','pairOverlay','lanSyncOverlay','newCategoryOverlay','changePwOverlay','backupOverlay','recoveryOverlay','repromptOverlay','pwHistoryOverlay','verifyRecoveryOverlay','backupHistoryOverlay','forgotOverlay'].forEach(id => {
     document.getElementById(id)?.classList.remove('open');
   });
   const overlaySyncPass = document.getElementById('overlaySyncPass');
@@ -491,10 +506,19 @@ window.addEventListener('keydown', reportUserActivity, { passive: true });
 // hiçbir zaman main process'te veya diskte durmaz.
 function normalizeDomain(str) {
   if (!str) return '';
-  let s = str.trim().toLowerCase();
+  let s = String(str).trim().toLowerCase();
+  if (!s) return '';
   if (!/^https?:\/\//.test(s)) s = 'https://' + s;
   try { return new URL(s).hostname.replace(/^www\./, '').replace(/\.+$/, ''); }
-  catch { return str.toLowerCase().replace(/^www\./, '').split('/')[0].replace(/\.+$/, ''); }
+  catch {
+    const raw = String(str).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+    if (raw.startsWith('[')) {
+      const endBracket = raw.indexOf(']');
+      return (endBracket !== -1 ? raw.slice(0, endBracket + 1) : raw).replace(/\.+$/, '');
+    }
+    if ((raw.match(/:/g) || []).length > 1) return raw.replace(/\.+$/, '');
+    return raw.split(':')[0].replace(/\.+$/, '');
+  }
 }
 const MULTI_TENANT_SUFFIXES = new Set([
   'github.io',
@@ -534,17 +558,44 @@ const MULTI_TENANT_SUFFIXES = new Set([
   'azureedge.net',
   'trafficmanager.net',
   'blob.core.windows.net',
-  'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk',
-  'com.tr', 'org.tr', 'edu.tr', 'gov.tr', 'net.tr', 'gen.tr',
-  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
-  'co.nz', 'org.nz', 'net.nz',
-  'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp',
-  'com.br', 'net.br', 'org.br',
-  'co.za', 'org.za',
-  'com.cn', 'net.cn', 'org.cn', 'gov.cn',
-  'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in',
-  'com.de', 'co.ca'
+  'wordpress.com',
+  'blogspot.com',
+  'tumblr.com',
+  'itch.io',
+  'notion.site',
+  'webflow.io',
+  'replit.app',
+  'run.app',
+  'hf.space',
+  'trycloudflare.com',
+  'pythonanywhere.com'
 ]);
+
+const COMPOUND_CCTLD_SLDS = new Set([
+  'co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'or', 'ne', 'go', 'gob',
+  'mil', 'biz', 'info', 'gen', 'web', 'nom', 'bel', 'pol', 'k12', 'av',
+  'dr', 'bbs', 'tsk', 'kep', 'me', 'firm', 'ind'
+]);
+
+function isIpLiteralHost(h) {
+  if (!h) return false;
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(h) || h.includes(':') || h.startsWith('[');
+}
+
+function isCompoundCcTldSuffix(h) {
+  const parts = String(h || '').split('.');
+  if (parts.length !== 2) return false;
+  return COMPOUND_CCTLD_SLDS.has(parts[0]) && /^[a-z]{2}$/.test(parts[1]);
+}
+
+function isMultiTenantHost(h) {
+  if (!h) return false;
+  if (MULTI_TENANT_SUFFIXES.has(h)) return true;
+  for (const suffix of MULTI_TENANT_SUFFIXES) {
+    if (h.endsWith('.' + suffix)) return true;
+  }
+  return false;
+}
 
 function domainMatches(entry, domain) {
   if (!entry || (entry.type && entry.type !== 'login')) return false;
@@ -558,25 +609,26 @@ function domainMatches(entry, domain) {
   }
 
   // IPv4 / IPv6 adreslerinde yalnızca tam eşleşmeye izin ver
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(entryDomain) || entryDomain.includes(':') || entryDomain.startsWith('[')) {
+  if (isIpLiteralHost(entryDomain) || isIpLiteralHost(targetDomain)) {
     return targetDomain === entryDomain;
   }
 
-  // Multi-tenant public suffix kontrolü (F-01):
-  // Eğer entryDomain doğrudan bir multi-tenant suffix ise (örn: "github.io"),
-  // veya bilinen çok kiracılı bir platformun alt alan adı ise (örn: "myapp.github.io", "myapp.vercel.app"),
-  // subdomain genişletmesi (wildcard match) YASAKLANIR, sadece tam eşleşmeye izin verilir.
-  if (MULTI_TENANT_SUFFIXES.has(entryDomain)) {
+  // Compound ccTLD public suffix'inin kendisi kayıtlıysa (örn. "co.kr", "com.tr") wildcard eşleşmeyi engelle
+  if (isCompoundCcTldSuffix(entryDomain)) {
     return targetDomain === entryDomain;
   }
-  for (const suffix of MULTI_TENANT_SUFFIXES) {
-    if (entryDomain.endsWith('.' + suffix)) {
-      return targetDomain === entryDomain;
-    }
+
+  // Multi-tenant public suffix kontrolü (EXT-01):
+  // Eğer entryDomain doğrudan bir multi-tenant suffix ise (örn: "wordpress.com", "github.io"),
+  // veya bilinen çok kiracılı bir platformun alt alan adı ise (örn: "myapp.github.io", "myapp.run.app"),
+  // subdomain genişletmesi (wildcard match) YASAKLANIR, sadece tam eşleşmeye izin verilir.
+  if (isMultiTenantHost(entryDomain) || isMultiTenantHost(targetDomain)) {
+    return targetDomain === entryDomain;
   }
   
   // Sadece tam eşleşme veya sitenin bir subdomain'i olma durumuna izin ver
   // (Örn: kasa="google.com", site="accounts.google.com" -> Eşleşir)
+  // (Örn: kasa="bank.co.kr", site="login.bank.co.kr" -> Eşleşir; "evil.co.kr" -> EşleşMEZ)
   // (Örn: kasa="accounts.google.com", site="google.com" -> EşleşMEZ - Principle of Least Privilege)
   return targetDomain === entryDomain || targetDomain.endsWith('.' + entryDomain);
 }
@@ -673,6 +725,46 @@ api.onExtRevealRequest(async (req) => {
   document.getElementById('extRevealOverlay').classList.add('open');
 });
 
+async function performExtCopySecure(entry, field, requestId) {
+  try {
+    if (field === 'cardNumber') {
+      if (entry.type !== 'card' || !entry.cardNumber) {
+        api.extRespond(requestId, { error: 'not-found' });
+        return;
+      }
+      const rawNum = await memDecrypt(entry.cardNumber);
+      await copySecure(String(rawNum || '').replace(/\s+/g, ''), t('toastCardCopied'), 30000);
+      api.extRespond(requestId, { ok: true });
+      return;
+    }
+    if (field === 'cardCvv') {
+      if (entry.type !== 'card' || !entry.cardCvv) {
+        api.extRespond(requestId, { error: 'not-found' });
+        return;
+      }
+      const rawCvv = await memDecrypt(entry.cardCvv);
+      await copySecure(String(rawCvv || '').trim(), t('toastCopiedDefault'), 30000);
+      api.extRespond(requestId, { ok: true });
+      return;
+    }
+    if (field === 'secureNote') {
+      if (entry.type !== 'note') {
+        api.extRespond(requestId, { error: 'not-found' });
+        return;
+      }
+      const rawNote = await memDecrypt(entry.secureNote || entry.note || entry.password);
+      await copySecure(String(rawNote || ''), t('toastCopiedDefault'), 30000);
+      api.extRespond(requestId, { ok: true });
+      return;
+    }
+    const pw = await memDecrypt(entry.password);
+    await copySecure(pw, t('toastPwCopied'), 30000);
+    api.extRespond(requestId, { ok: true });
+  } catch {
+    api.extRespond(requestId, { error: 'internal-error' });
+  }
+}
+
 api.onExtCopySecureRequest?.(async (req) => {
   if (!master) {
     api.extRespond(req.requestId, { error: 'locked' });
@@ -695,46 +787,18 @@ api.onExtCopySecureRequest?.(async (req) => {
   }
   const requirePrompt = Boolean(entry.reprompt) || localStorage.getItem('fuin-ext-prompt-approval') === 'true';
   if (requirePrompt) {
-    api.extRespond(req.requestId, { error: 'approval-required' });
+    if (pendingExtReveal !== null) {
+      api.extRespond(req.requestId, { error: 'busy' });
+      return;
+    }
+    pendingExtReveal = { requestId: req.requestId, entry, domain: req.domain, mode: 'copy-secure', field: req.field || 'password' };
+    document.getElementById('extRevealSite').textContent = entry.site || '—';
+    document.getElementById('extRevealUser').textContent = entry.username || '—';
+    document.getElementById('extRevealDomain').textContent = req.domain || '—';
+    document.getElementById('extRevealOverlay').classList.add('open');
     return;
   }
-  try {
-    if (req.field === 'cardNumber') {
-      if (entry.type !== 'card' || !entry.cardNumber) {
-        api.extRespond(req.requestId, { error: 'not-found' });
-        return;
-      }
-      const rawNum = await memDecrypt(entry.cardNumber);
-      await copySecure(String(rawNum || '').replace(/\s+/g, ''), t('toastCardCopied'), 30000);
-      api.extRespond(req.requestId, { ok: true });
-      return;
-    }
-    if (req.field === 'cardCvv') {
-      if (entry.type !== 'card' || !entry.cardCvv) {
-        api.extRespond(req.requestId, { error: 'not-found' });
-        return;
-      }
-      const rawCvv = await memDecrypt(entry.cardCvv);
-      await copySecure(String(rawCvv || '').trim(), t('toastCopiedDefault'), 30000);
-      api.extRespond(req.requestId, { ok: true });
-      return;
-    }
-    if (req.field === 'secureNote') {
-      if (entry.type !== 'note') {
-        api.extRespond(req.requestId, { error: 'not-found' });
-        return;
-      }
-      const rawNote = await memDecrypt(entry.secureNote || entry.note || entry.password);
-      await copySecure(String(rawNote || ''), t('toastCopiedDefault'), 30000);
-      api.extRespond(req.requestId, { ok: true });
-      return;
-    }
-    const pw = await memDecrypt(entry.password);
-    await copySecure(pw, t('toastPwCopied'), 30000);
-    api.extRespond(req.requestId, { ok: true });
-  } catch {
-    api.extRespond(req.requestId, { error: 'internal-error' });
-  }
+  await performExtCopySecure(entry, req.field, req.requestId);
 });
 
 function getExtExcludedDomains() {
@@ -981,10 +1045,24 @@ api.onExtSaveCredentialRequest?.(async (req) => {
 
 async function approveExtReveal() {
   if (!pendingExtReveal) return;
-  const { requestId, entry } = pendingExtReveal;
-  pendingExtReveal = null;
+  const { requestId, entry, mode, field } = pendingExtReveal;
   document.getElementById('extRevealOverlay').classList.remove('open');
+  if (entry.reprompt) {
+    if (!(await requireReprompt(entry))) {
+      if (pendingExtReveal && pendingExtReveal.requestId === requestId) {
+        pendingExtReveal = null;
+      }
+      api.extRespond(requestId, { error: 'denied' });
+      return;
+    }
+  }
+  if (!pendingExtReveal || pendingExtReveal.requestId !== requestId || !master) return;
+  pendingExtReveal = null;
   try {
+    if (mode === 'copy-secure') {
+      await performExtCopySecure(entry, field, requestId);
+      return;
+    }
     api.extRespond(requestId, { username: entry.username, password: await memDecrypt(entry.password) });
     toast(t('toastExtCredSent'));
   } catch (err) {
@@ -1140,11 +1218,26 @@ function setView(v, btn) {
     loadSyncSettings();
     updateExtStatusUI();
     refreshBackupSummaryBadge();
+    refreshSettingsCryptoSummary();
     getLocalAppVersion().then(ver => {
       const sub = document.getElementById('sysUpdateCheckSub');
       if (sub) sub.textContent = `${t('sysUpdateCheckSub')} ${t('sysUpdateCurrent', { v: normalizeVersion(ver) })}`;
     });
   }
+}
+
+async function refreshSettingsCryptoSummary() {
+  if (!api?.cryptoInfo) return;
+  try {
+    const info = await api.cryptoInfo();
+    const kdfLabel = info?.argon2 ? 'Argon2id' : 'PBKDF2';
+    const kdfEl = document.getElementById('quietSpecKdf');
+    if (kdfEl) kdfEl.textContent = kdfLabel;
+    const summaryEl = document.getElementById('securityCryptoSummary');
+    if (summaryEl) {
+      summaryEl.textContent = t('settingCryptoSummary').replace('Argon2id', kdfLabel);
+    }
+  } catch {}
 }
 
 // ── ZXCVBN ───────────────────────────────────────────────────────
@@ -1247,7 +1340,7 @@ async function renderList() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           </div>`;
         } else {
-          iconHtml = `<div class="pw-icon">${esc(e.site.slice(0,2).toUpperCase())}</div>`;
+          iconHtml = `<div class="pw-icon">${esc(String(e.site || '').slice(0, 2).toUpperCase())}</div>`;
         }
 
         let userLabel = '';
@@ -1257,8 +1350,8 @@ async function renderList() {
           const rawNum = (e.cardNumber && typeof e.cardNumber === 'string') ? e.cardNumber.replace(/\D/g, '') : '';
           const l4 = e.cardLastFour || rawNum.slice(-4) || '••••';
           const brandInfo = detectCardBrand(rawNum);
-          const brandName = (brandInfo && brandInfo.name) ? brandInfo.name : (e.cardBrand ? e.cardBrand.toUpperCase() : '');
-          dotsPreview = `${brandName ? brandName + ' ' : ''}•••• ${esc(l4)}`;
+          const brandName = (brandInfo && brandInfo.name) ? brandInfo.name : (e.cardBrand ? String(e.cardBrand).toUpperCase() : '');
+          dotsPreview = `${brandName ? esc(brandName) + ' ' : ''}•••• ${esc(l4)}`;
         } else if (isNote) {
           userLabel = esc(t('typeNote'));
           dotsPreview = '••••••';
@@ -1306,7 +1399,7 @@ async function renderList() {
                 ${e.fav ? `<span class="fav-star" title="${esc(t('navFav'))}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}
                 <span class="pw-site-name">${esc(e.site)}</span>
                 ${e.reprompt ? `<span class="reprompt-badge" title="${esc(t('badgeReprompt'))}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>` : ''}
-                ${e.url && /^http:\/\//i.test(e.url.trim()) ? `<span class="insecure-http-badge" title="${esc(t('warnInsecureHttp'))}">HTTP</span>` : ''}
+                ${e.url && typeof e.url === 'string' && /^http:\/\//i.test(e.url.trim()) ? `<span class="insecure-http-badge" title="${esc(t('warnInsecureHttp'))}">HTTP</span>` : ''}
               </div>
               <div class="pw-meta">
                 <span class="pw-user">${userLabel}</span>
@@ -1877,7 +1970,21 @@ function openForgot() {
   window.FuinRecoveryUI.resetForgotModalUI(t);
 }
 
-function closeForgot() { recoveryVerified=false; closeModal('forgotOverlay'); }
+function closeForgot() {
+  recoveryVerified = false;
+  const recInp = document.getElementById('recoveryInp');
+  if (recInp) recInp.value = '';
+  const newPwInp = document.getElementById('newPwInp');
+  if (newPwInp) {
+    newPwInp.value = '';
+    newPwInp.type = 'password';
+  }
+  const recDisp = document.getElementById('recoveryKeyDisplay');
+  if (recDisp && !document.getElementById('recoveryOverlay')?.classList.contains('open')) {
+    recDisp.textContent = '';
+  }
+  closeModal('forgotOverlay');
+}
 
 async function handleForgot() {
   const inp=document.getElementById('recoveryInp').value.trim();
@@ -1889,6 +1996,8 @@ async function handleForgot() {
     if(inp===rWord) {
       clearRecoveryKitEnvelope();
       await api.fullReset(); // fuin.enc + fuin.recovery + fuin.master.enc siler
+      try { await api.clearTouchIdKey?.(); } catch {}
+      try { await api.setUnlockState?.(false); } catch {}
       closeForgot();
       toast(t('toastAllDataErased'));
     } else {
@@ -1927,10 +2036,15 @@ async function handleForgot() {
       }
     }
     await saveRecoveryKey(normalizeRecoveryKeyFormat(inp), newPw);
+    try { await api.clearTouchIdKey?.(); } catch {}
+    try { await api.setUnlockState?.(false); } catch {}
     recoveryVerified=false;
     closeForgot();
     toast(t('toastPasswordUpdated'));
   } catch {
+    if (!master) {
+      try { await api.setUnlockState?.(false); } catch {}
+    }
     showForgotMsg(t('forgotRecoveryFailed').replace('{word}', t('resetConfirmWord')),'red');
   }
 }
@@ -1947,6 +2061,7 @@ function copyRecoveryKey() {
 // ── MASTER PASSWORD REPROMPT ───────────────────────────────────────
 let repromptPendingAction = null;
 let repromptCustomVerifier = null;
+let repromptCancelAction = null;
 
 function constantTimeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -1959,29 +2074,44 @@ function constantTimeEqual(a, b) {
   return diff === 0;
 }
 
-function requireReprompt(id, callback) {
-  const e = entries.find(x => x.id === id);
+function requireReprompt(idOrEntry, callback) {
+  const id = (idOrEntry && typeof idOrEntry === 'object') ? idOrEntry.id : idOrEntry;
+  const e = entries.find(x => x.id === id) || (idOrEntry && typeof idOrEntry === 'object' ? idOrEntry : null);
+  const isCallbackMode = typeof callback === 'function';
   if (!e || !e.reprompt) {
-    callback();
+    if (isCallbackMode) {
+      callback();
+      return;
+    }
+    return Promise.resolve(true);
+  }
+  const openPrompt = (onSuccess, onCancel) => {
+    repromptCustomVerifier = null;
+    repromptPendingAction = onSuccess;
+    repromptCancelAction = onCancel || null;
+    const overlay = document.getElementById('repromptOverlay');
+    const inp = document.getElementById('repromptPwInp');
+    const msg = document.getElementById('repromptMsg');
+    if (inp) {
+      inp.value = '';
+      inp.type = 'password';
+    }
+    if (msg) {
+      msg.textContent = '';
+      msg.style.display = 'none';
+    }
+    const eyeBtn = document.getElementById('btnEyeReprompt');
+    if (eyeBtn) eyeBtn.textContent = '●';
+    if (overlay) overlay.classList.add('open');
+    setTimeout(() => { if (inp) inp.focus(); }, 80);
+  };
+  if (isCallbackMode) {
+    openPrompt(callback, null);
     return;
   }
-  repromptCustomVerifier = null;
-  repromptPendingAction = callback;
-  const overlay = document.getElementById('repromptOverlay');
-  const inp = document.getElementById('repromptPwInp');
-  const msg = document.getElementById('repromptMsg');
-  if (inp) {
-    inp.value = '';
-    inp.type = 'password';
-  }
-  if (msg) {
-    msg.textContent = '';
-    msg.style.display = 'none';
-  }
-  const eyeBtn = document.getElementById('btnEyeReprompt');
-  if (eyeBtn) eyeBtn.textContent = '●';
-  if (overlay) overlay.classList.add('open');
-  setTimeout(() => { if (inp) inp.focus(); }, 80);
+  return new Promise((resolve) => {
+    openPrompt(() => resolve(true), () => resolve(false));
+  });
 }
 
 async function verifyReprompt() {
@@ -1993,6 +2123,7 @@ async function verifyReprompt() {
     if (ok) {
       repromptCustomVerifier = null;
       repromptPendingAction = null;
+      repromptCancelAction = null;
       closeRepromptModal();
     }
     return;
@@ -2000,6 +2131,7 @@ async function verifyReprompt() {
   if (constantTimeEqual(val, master)) {
     const action = repromptPendingAction;
     repromptPendingAction = null;
+    repromptCancelAction = null;
     closeRepromptModal();
     if (typeof action === 'function') {
       try {
@@ -2021,14 +2153,22 @@ async function verifyReprompt() {
 }
 
 function cancelReprompt() {
+  const cancelAct = repromptCancelAction;
   repromptPendingAction = null;
   repromptCustomVerifier = null;
+  repromptCancelAction = null;
   closeRepromptModal();
+  if (typeof cancelAct === 'function') {
+    try { cancelAct(); } catch {}
+  }
 }
 
 function closeRepromptModal() {
   const inp = document.getElementById('repromptPwInp');
-  if (inp) inp.value = '';
+  if (inp) {
+    inp.value = '';
+    inp.type = 'password';
+  }
   closeModal('repromptOverlay');
 }
 
@@ -2049,7 +2189,7 @@ async function openPwHistory() {
         <div class="pw-history-item">
           <div style="display:flex;flex-direction:column;gap:2px;overflow:hidden;flex:1;">
             <div class="pw-hist-date">${esc(dateFormatted)}</div>
-            <div class="pw-hist-val" title="${esc(decrypted)}">${esc(masked)}</div>
+            <div class="pw-hist-val">${esc(masked)}</div>
           </div>
           <button type="button" class="btn-io" data-copy-hist="${idx}" style="font-size:11px;padding:4px 8px;flex-shrink:0;">
             ${esc(t('btnCopy'))}
@@ -2798,6 +2938,173 @@ async function handleVerifyRecoveryKey() {
     if (btn) {
       btn.disabled = false;
       btn.textContent = origBtnText || t('verifyRecoveryBtn');
+    }
+  }
+}
+
+// ── CHANGE MASTER PASSWORD ────────────────────────────────────────
+function showChangePwMsg(text, type = 'red') {
+  const msg = document.getElementById('changePwMsg');
+  if (!msg) return;
+  if (!text) {
+    msg.style.display = 'none';
+    msg.textContent = '';
+    msg.className = 'forgot-msg';
+    return;
+  }
+  const bgMap = {
+    green: 'rgba(90, 154, 110, 0.14)',
+    red: 'rgba(160, 52, 42, 0.12)',
+    amber: 'rgba(200, 128, 64, 0.12)',
+  };
+  const borderMap = {
+    green: 'rgba(90, 154, 110, 0.35)',
+    red: 'rgba(160, 52, 42, 0.35)',
+    amber: 'rgba(200, 128, 64, 0.35)',
+  };
+  msg.className = `forgot-msg ${type}`;
+  msg.style.display = 'block';
+  msg.style.color = `var(--${type})`;
+  msg.style.background = bgMap[type] || bgMap.red;
+  msg.style.border = `1px solid ${borderMap[type] || borderMap.red}`;
+  msg.style.borderRadius = '4px';
+  msg.textContent = text;
+}
+
+function openChangeMasterPwModal() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+  ['curPwInp', 'newMasterPwInp', 'newMasterPwConfirmInp'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = '';
+      el.type = 'password';
+    }
+  });
+  showChangePwMsg('');
+  const btn = document.getElementById('btnConfirmChangePw');
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = t('btnSaveNewMasterPw');
+  }
+  document.getElementById('changePwOverlay')?.classList.add('open');
+  setTimeout(() => document.getElementById('curPwInp')?.focus(), 80);
+}
+
+function closeChangeMasterPwModal() {
+  ['curPwInp', 'newMasterPwInp', 'newMasterPwConfirmInp'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = '';
+      el.type = 'password';
+    }
+  });
+  showChangePwMsg('');
+  if (document.getElementById('changePwOverlay')) closeModal('changePwOverlay');
+}
+
+async function handleChangeMasterPw() {
+  if (!master) { toast(t('toastLoginFirst')); return; }
+
+  const curInp = document.getElementById('curPwInp');
+  const newInp = document.getElementById('newMasterPwInp');
+  const confirmInp = document.getElementById('newMasterPwConfirmInp');
+  const btn = document.getElementById('btnConfirmChangePw');
+  if (btn && btn.disabled) return;
+
+  const curPw = curInp?.value || '';
+  const newPw = newInp?.value || '';
+  const confirmPw = confirmInp?.value || '';
+
+  showChangePwMsg('');
+
+  if (!constantTimeEqual(curPw, master)) {
+    showChangePwMsg(t('changePwWrongCurrent'), 'red');
+    curInp?.focus();
+    return;
+  }
+  if (!newPw || newPw.length < 8) {
+    showChangePwMsg(t('toastMinChars'), 'amber');
+    newInp?.focus();
+    return;
+  }
+  if (!constantTimeEqual(newPw, confirmPw)) {
+    showChangePwMsg(t('changePwMismatch'), 'amber');
+    confirmInp?.focus();
+    return;
+  }
+  if (constantTimeEqual(newPw, curPw)) {
+    showChangePwMsg(t('changePwSameAsOld'), 'amber');
+    newInp?.focus();
+    return;
+  }
+
+  const origBtnText = btn ? btn.textContent : t('btnSaveNewMasterPw');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t('lockVerifying');
+  }
+
+  try {
+    // Defense-in-depth: confirm on-disk vault decrypts with current password before re-encrypting
+    const existingEnc = typeof api.loadData === 'function' ? await api.loadData() : null;
+    if (existingEnc) {
+      try {
+        await api.decrypt(existingEnc, curPw);
+      } catch {
+        showChangePwMsg(t('changePwWrongCurrent'), 'red');
+        curInp?.focus();
+        return;
+      }
+    }
+
+    const plainEntries = await Promise.all(entries.map(serializeEntryPlain));
+    const vaultPayload = { type: 'fuin/vault', categories: [], entries: plainEntries };
+    const newEnc = await api.encrypt(vaultPayload, newPw);
+    await api.saveData(newEnc);
+
+    const previousMaster = master;
+    master = newPw;
+
+    const touchIdEnabled = (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function')
+      ? localStorage.getItem('fuin-touchid-enabled') === 'true'
+      : false;
+    if (api.saveTouchIdKey && touchIdEnabled) {
+      let touchSaved = false;
+      try {
+        touchSaved = Boolean(await api.saveTouchIdKey(newPw));
+      } catch (touchErr) {
+        console.warn('Touch ID key update error:', touchErr);
+        touchSaved = false;
+      }
+      if (!touchSaved) {
+        try { await api.clearTouchIdKey?.(); } catch {}
+      }
+    }
+
+    let rotatedRecoveryKey = '';
+    const existingRecKey = await resolveActiveRecoveryKey(previousMaster);
+    if (existingRecKey) {
+      await saveRecoveryKey(existingRecKey, newPw);
+    } else {
+      rotatedRecoveryKey = generateRecoveryKey();
+      await saveRecoveryKey(rotatedRecoveryKey, newPw);
+    }
+    await checkRecoveryStatus();
+
+    closeChangeMasterPwModal();
+    if (rotatedRecoveryKey) {
+      const disp = document.getElementById('recoveryKeyDisplay');
+      if (disp) disp.textContent = rotatedRecoveryKey;
+      document.getElementById('recoveryOverlay')?.classList.add('open');
+    }
+    toast(t('toastMasterPwChanged'));
+  } catch (err) {
+    console.error('Change master password error:', err);
+    showChangePwMsg(t('changePwFailed'), 'red');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origBtnText || t('btnSaveNewMasterPw');
     }
   }
 }
@@ -3724,6 +4031,7 @@ function refreshDynamicI18nLabels() {
     updateExtStatusUI();
     refreshBackupSummaryBadge();
     checkRecoveryStatus();
+    refreshSettingsCryptoSummary();
     getLocalAppVersion().then(ver => {
       const sub = document.getElementById('sysUpdateCheckSub');
       if (sub) sub.textContent = `${t('sysUpdateCheckSub')} ${t('sysUpdateCurrent', { v: normalizeVersion(ver) })}`;
@@ -3907,6 +4215,9 @@ function initAppListeners() {
   document.getElementById('btnGoToIO')?.addEventListener('click', () => {
     setView('io', document.getElementById('nav-settings'));
   });
+  document.getElementById('btnGoEncryptedBackup')?.addEventListener('click', () => {
+    setView('io', document.getElementById('nav-io'));
+  });
   document.getElementById('btnGoToSecurity')?.addEventListener('click', () => {
     setView('security', document.getElementById('nav-settings'));
   });
@@ -3919,6 +4230,7 @@ function initAppListeners() {
 
   // Pairing & LAN Sync UI listeners
   document.getElementById('btnOpenPairModal')?.addEventListener('click', openPairingModal);
+  document.getElementById('btnStartLanSyncSettings')?.addEventListener('click', handleSyncClick);
   document.getElementById('btnClosePairModal')?.addEventListener('click', async () => {
     document.getElementById('pairOverlay')?.classList.remove('open');
     if (api.stopLanSync) await api.stopLanSync();
@@ -4079,6 +4391,27 @@ function initAppListeners() {
   });
   document.getElementById('btnDownloadEmergencyKit')?.addEventListener('click', exportEmergencyKit);
   document.getElementById('btnModalEmergencyKit')?.addEventListener('click', exportEmergencyKit);
+
+  // Change Master Password modal
+  document.getElementById('btnOpenChangePw')?.addEventListener('click', openChangeMasterPwModal);
+  document.getElementById('btnCloseChangePw')?.addEventListener('click', closeChangeMasterPwModal);
+  document.getElementById('btnCancelChangePw')?.addEventListener('click', closeChangeMasterPwModal);
+  document.getElementById('btnConfirmChangePw')?.addEventListener('click', handleChangeMasterPw);
+  document.getElementById('btnEyeCurPw')?.addEventListener('click', () => toggleEye('curPwInp'));
+  document.getElementById('btnEyeNewMasterPw')?.addEventListener('click', () => toggleEye('newMasterPwInp'));
+  document.getElementById('btnEyeConfirmMasterPw')?.addEventListener('click', () => toggleEye('newMasterPwConfirmInp'));
+  ['curPwInp', 'newMasterPwInp', 'newMasterPwConfirmInp'].forEach(id => {
+    const inp = document.getElementById(id);
+    if (!inp) return;
+    inp.addEventListener('input', () => showChangePwMsg(''));
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleChangeMasterPw();
+      else if (e.key === 'Escape') closeChangeMasterPwModal();
+    });
+  });
+  document.getElementById('changePwOverlay')?.addEventListener('mousedown', (e) => {
+    if (e.target.id === 'changePwOverlay') closeChangeMasterPwModal();
+  });
 
   // Master Password Reprompt modal
   document.getElementById('btnCloseReprompt')?.addEventListener('click', cancelReprompt);

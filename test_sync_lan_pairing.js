@@ -271,7 +271,7 @@ async function runAll() {
     });
     assert.strictEqual(rogueResponse.status, 401, 'Eşleşmemiş cihaz 401 Unauthorized dönmeli');
 
-    // Case 2: Bilinen cihaz ama yanlış şifreli veri (403 Reddedilmeli)
+    // Case 2: Bilinen cihaz ama yanlış şifreli veri (SYNC-05: birleşik 401 Reddedilmeli, deviceId oracle yok)
     const fakeKey = crypto.randomBytes(32);
     const fakeEnc = syncLan.encryptLanPayload({ entries: [] }, fakeKey);
     const authFailResponse = await makePostRequest(assignedPort, '/sync', {
@@ -279,7 +279,7 @@ async function runAll() {
       nonce: fakeEnc.nonce,
       ciphertext: fakeEnc.ciphertext
     });
-    assert.strictEqual(authFailResponse.status, 403, 'Yanlış anahtarlı istek 403 Forbidden dönmeli');
+    assert.strictEqual(authFailResponse.status, 401, 'Yanlış anahtarlı istek birleşik 401 Unauthorized dönmeli (SYNC-05)');
 
     // Case 3: Geçerli istek (Başarılı senkronizasyon ve iki yönlü birleştirme)
     const mobileEntries = [
@@ -366,13 +366,28 @@ async function runAll() {
   });
 
   // ── TEST 8: REAL MAIN.JS IPC INTEGRATION & LOCK SHUTDOWN ──────────────────
+  const testVaultPw = 'TestMasterPassword123!';
+  let testVaultEnc = null;
+  async function unlockAuthoritatively() {
+    if (!testVaultEnc) {
+      testVaultEnc = await mainHandlers['encrypt'](null, {
+        data: { type: 'fuin/vault', entries: [{ id: '1', site: 'fuin.test', username: 'u', password: 'p' }] },
+        password: testVaultPw
+      });
+      await mainHandlers['save-data'](null, testVaultEnc);
+    }
+    await mainHandlers['decrypt'](null, { b64: testVaultEnc, password: testVaultPw });
+  }
+
   await asyncTest('I. main.js IPC: set-unlock-state(false) kilitlenmesinde soketin kapanması doğrulaması', async () => {
     assert.ok(mainHandlers['set-unlock-state'], 'set-unlock-state IPC kayıtlı olmalı');
     assert.ok(mainHandlers['lan-start-sync'], 'lan-start-sync IPC kayıtlı olmalı');
     assert.ok(mainHandlers['lan-set-sync-mode'], 'lan-set-sync-mode IPC kayıtlı olmalı');
 
-    // 1. Kilit açık yap
-    await mainHandlers['set-unlock-state'](null, true);
+    // 1. CRYPTO-02: Yetkisiz set-unlock-state(true) kilidi açamaz; gerçek kasa çözümü ile kilit aç
+    const bypassUnlock = await mainHandlers['set-unlock-state'](null, true);
+    assert.strictEqual(bypassUnlock, false, 'Renderer tek başına set-unlock-state(true) ile kilidi açamamalı');
+    await unlockAuthoritatively();
 
     // 2. LAN moduna al
     await mainHandlers['lan-set-sync-mode'](null, 'lan');
@@ -396,8 +411,8 @@ async function runAll() {
 
   // ── TEST 9: AIR-GAP SETTINGS TOGGLE (R4) ───────────────────────────────────
   await asyncTest('J. Ayarlardan Air-Gap seçildiğinde ağ devre dışı kalır ve open-sync-window hazırdır', async () => {
-    // 1. Kilit aç
-    await mainHandlers['set-unlock-state'](null, true);
+    // 1. Kilit aç (authoritative decrypt)
+    await unlockAuthoritatively();
 
     // 2. Sync modunu Air-Gap'e geçir
     await mainHandlers['lan-set-sync-mode'](null, 'airgap');
@@ -416,22 +431,21 @@ async function runAll() {
     assert.strictEqual(await mainHandlers['lan-get-sync-mode'](), 'lan');
   });
 
-  // ── TEST 10: PENDING PAIRING DISK PERSISTENCE ACROSS RESTARTS (R1) ──────────
-  test('K. Pending pairing persistansı ve masaüstü yeniden başlatılmasında korunması', () => {
+  // ── TEST 10: PENDING PAIRING MEMORY-ONLY LIFECYCLE (SYNC-03) ────────────────
+  test('K. Pending pairing yalnızca RAM üzerinde tutulur ve yeniden başlatmada diske yazılmaz (SYNC-03)', () => {
     const pm1 = new syncLan.PairingManager(tmpDir);
     const pData = pm1.generatePairingData();
     assert.ok(pm1.pendingPairings.has(pData.pairKey));
+    assert.strictEqual(fs.existsSync(path.join(tmpDir, 'fuin.pending-pairings.json')), false, 'Pending pairing diske yazılmamalı');
 
     // Masaüstü uygulamasının kapatılıp yeniden açılması simülasyonu
     const pmRestarted = new syncLan.PairingManager(tmpDir);
-    assert.ok(pmRestarted.pendingPairings.has(pData.pairKey), 'Pending pairing diskten geri yüklenmeli');
-    const key = pmRestarted.getDeviceKey(pData.pairKey);
-    assert.ok(Buffer.isBuffer(key));
-    assert.strictEqual(key.toString('hex'), pData.pairKey);
+    assert.strictEqual(pmRestarted.pendingPairings.has(pData.pairKey), false, 'Pending pairing yeniden başlatmada taşınmamalı');
+    assert.strictEqual(pmRestarted.getDeviceKey(pData.pairKey), null, 'Onaylanmamış pending anahtar getDeviceKey ile dönmemeli');
   });
 
-  // ── TEST 11: END-TO-END QR OPTICAL PAIRING & AUTO-FINALIZATION (R1, R2) ────
-  await asyncTest('L. Gerçek optik eşleşme akışı: QR okuma -> ilk sync ile kesinleşme -> ayarlar listesi -> iptal', async () => {
+  // ── TEST 11: END-TO-END QR OPTICAL PAIRING (/pair -> /sync) & REVOCATION ────
+  await asyncTest('L. Gerçek optik eşleşme akışı: QR okuma -> /pair kesinleşme -> /sync -> ayarlar listesi -> iptal', async () => {
     const pm = new syncLan.PairingManager(tmpDir);
     const pairingQr = pm.generatePairingData();
     const pairKeyBuf = Buffer.from(pairingQr.pairKey, 'hex');
@@ -449,14 +463,39 @@ async function runAll() {
     await server.start({ port: 0 });
     const port = server.getPort();
 
-    // Mobil QR okudu ve ilk sync isteğini gönderiyor (pendingPairKey ile)
+    // 0. SYNC-03: /pair tamamlanmadan doğrudan /sync ile pendingPairKey kullanmak reddedilmeli (401)
+    const unconfirmedEnc = syncLan.encryptLanPayload({ entries: [] }, pairKeyBuf);
+    const unconfirmedSyncRes = await makePostRequest(port, '/sync', {
+      deviceId: pairingQr.deviceId,
+      mobileDeviceId: 'mobile-pixel-8',
+      nonce: unconfirmedEnc.nonce,
+      ciphertext: unconfirmedEnc.ciphertext
+    });
+    assert.strictEqual(unconfirmedSyncRes.status, 401, 'Onaylanmamış pending anahtarla /sync reddedilmeli');
+
+    // 1. Mobil QR okudu ve önce /pair ile AEAD eşleşmesini kesinleştiriyor
+    const pairProof = syncLan.encryptLanPayload({
+      action: 'pair',
+      direction: 'request',
+      deviceId: 'mobile-pixel-8',
+      deviceName: 'Pixel 8',
+      timestamp: Date.now()
+    }, pairKeyBuf);
+    const pairRes = await makePostRequest(port, '/pair', {
+      deviceId: 'mobile-pixel-8',
+      deviceName: 'Pixel 8',
+      ...pairProof
+    });
+    assert.strictEqual(pairRes.status, 200);
+
+    // 2. Eşleşme kesinleşti, şimdi /sync isteğini gönderiyor
     const mobilePayload = { entries: [{ id: '2', site: 'mobile.com', username: 'm', password: 'pw', updatedAt: 200 }] };
     const enc = syncLan.encryptLanPayload(mobilePayload, pairKeyBuf);
 
     const syncRes = await makePostRequest(port, '/sync', {
       deviceId: pairingQr.deviceId,
+      mobileDeviceId: 'mobile-pixel-8',
       deviceName: 'Pixel 8',
-      pendingPairKey: pairingQr.pairKey,
       nonce: enc.nonce,
       ciphertext: enc.ciphertext
     });
@@ -464,13 +503,13 @@ async function runAll() {
     assert.strictEqual(syncRes.status, 200);
     assert.strictEqual(syncRes.data.success, true);
 
-    // Eşleşme otomatik olarak kesinleşti ve ayarlardaki listeye eklendi mi?
+    // Eşleşme kesinleşti ve ayarlardaki listeye eklendi mi?
     const afterDevices = pm.getPairedDevices();
     assert.strictEqual(afterDevices.length, initialCount + 1, 'Cihaz pairedDevices listesine eklenmeli');
     assert.strictEqual(afterDevices[afterDevices.length - 1].deviceName, 'Pixel 8');
 
     // Şimdi cihazı masaüstü ayarlarından iptal et (Revocation)
-    const revoked = pm.removePairedDevice(pairingQr.deviceId);
+    const revoked = pm.removePairedDevice('mobile-pixel-8');
     assert.strictEqual(revoked, true);
 
     // Sunucuyu tekrar başlatıp iptal edilmiş cihazın isteğini sına
@@ -479,7 +518,7 @@ async function runAll() {
 
     const secondSyncRes = await makePostRequest(newPort, '/sync', {
       deviceId: pairingQr.deviceId,
-      pendingPairKey: pairingQr.pairKey,
+      mobileDeviceId: 'mobile-pixel-8',
       nonce: enc.nonce,
       ciphertext: enc.ciphertext
     });
@@ -493,45 +532,67 @@ async function runAll() {
   await asyncTest('M. Çoklu mobil cihaz eşleşmesi: İki telefonun bağımsız eşleşmesi, birlikte listelenmesi ve tek tek iptali', async () => {
     const pm = new syncLan.PairingManager(tmpDir);
 
-    // Telefon 1 (iPhone 15) için QR üret
-    const qr1 = pm.generatePairingData();
-    const key1 = Buffer.from(qr1.pairKey, 'hex');
-
-    // Telefon 2 (Pixel 8) için QR üret
-    const qr2 = pm.generatePairingData();
-    const key2 = Buffer.from(qr2.pairKey, 'hex');
-
     const server = new syncLan.EphemeralServer({
       pairingManager: pm,
       getVaultEntries: () => [{ id: '1', site: 'shared.com', username: 'u', password: 'p', updatedAt: 100 }],
       applyMergedEntries: () => {}
     });
 
-    // 1. Telefon 1 senkronize eder ve eşleşir
+    // 1. Telefon 1 (iPhone 15) için QR üret -> /pair -> /sync
     await server.start({ port: 0 });
     const p1 = server.getPort();
+    const qr1 = pm.generatePairingData({ port: p1 });
+    const key1 = Buffer.from(qr1.pairKey, 'hex');
+
+    const pairProof1 = syncLan.encryptLanPayload({
+      action: 'pair',
+      direction: 'request',
+      deviceId: 'phone-iphone-15',
+      deviceName: 'iPhone 15 Pro',
+      timestamp: Date.now()
+    }, key1);
+    const pairRes1 = await makePostRequest(p1, '/pair', {
+      deviceId: 'phone-iphone-15',
+      deviceName: 'iPhone 15 Pro',
+      ...pairProof1
+    });
+    assert.strictEqual(pairRes1.status, 200);
 
     const enc1 = syncLan.encryptLanPayload({ entries: [] }, key1);
     const res1 = await makePostRequest(p1, '/sync', {
       deviceId: qr1.deviceId,
       mobileDeviceId: 'phone-iphone-15',
       deviceName: 'iPhone 15 Pro',
-      pendingPairKey: qr1.pairKey,
       nonce: enc1.nonce,
       ciphertext: enc1.ciphertext
     });
     assert.strictEqual(res1.status, 200);
 
-    // 2. Telefon 2 senkronize eder ve eşleşir
+    // 2. Telefon 2 (Pixel 8) için QR üret -> /pair -> /sync
     await server.start({ port: 0 });
     const p2 = server.getPort();
+    const qr2 = pm.generatePairingData({ port: p2 });
+    const key2 = Buffer.from(qr2.pairKey, 'hex');
+
+    const pairProof2 = syncLan.encryptLanPayload({
+      action: 'pair',
+      direction: 'request',
+      deviceId: 'phone-pixel-8',
+      deviceName: 'Google Pixel 8',
+      timestamp: Date.now()
+    }, key2);
+    const pairRes2 = await makePostRequest(p2, '/pair', {
+      deviceId: 'phone-pixel-8',
+      deviceName: 'Google Pixel 8',
+      ...pairProof2
+    });
+    assert.strictEqual(pairRes2.status, 200);
 
     const enc2 = syncLan.encryptLanPayload({ entries: [] }, key2);
     const res2 = await makePostRequest(p2, '/sync', {
       deviceId: qr2.deviceId,
       mobileDeviceId: 'phone-pixel-8',
       deviceName: 'Google Pixel 8',
-      pendingPairKey: qr2.pairKey,
       nonce: enc2.nonce,
       ciphertext: enc2.ciphertext
     });
@@ -667,8 +728,8 @@ async function runAll() {
       await mainHandlers['lan-generate-pairing-qr'](null);
     }, /SYNC_LAN: Vault is locked/);
 
-    // 2. Kilit aç
-    await mainHandlers['set-unlock-state'](null, true);
+    // 2. Kilit aç (authoritative decrypt)
+    await unlockAuthoritatively();
 
     // 3. Air-Gap modundayken pairing QR üretimi reddedilmeli
     await mainHandlers['lan-set-sync-mode'](null, 'airgap');
@@ -728,6 +789,7 @@ async function runAll() {
     // 2. Doğru anahtarla şifrelenmiş /pair kanıtı (HTTP gövdesinde pairKeyHex YOK) kabul edilmeli (200)
     const validProof = syncLan.encryptLanPayload({
       action: 'pair',
+      direction: 'request',
       deviceId: 'mobile-secure-1',
       deviceName: 'Secure Phone',
       timestamp: Date.now()

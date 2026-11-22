@@ -58,6 +58,25 @@ let tray = null;
 let isQuitting = false;
 
 // ── Pencereler ────────────────────────────────────────────────────
+const RENDERER_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://api.github.com https://api.pwnedpasswords.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none';";
+
+function ensurePrivateUserDataDir(dirPath) {
+  if (!dirPath || typeof dirPath !== 'string') return;
+  try {
+    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+    if (process.platform !== 'win32') {
+      const resolved = path.resolve(dirPath);
+      const tmpRoot = path.resolve(require('os').tmpdir());
+      if (resolved !== tmpRoot && resolved !== '/tmp' && resolved !== '/private/tmp') {
+        const st = fs.lstatSync(dirPath);
+        if (!st.isSymbolicLink() && st.isDirectory()) {
+          fs.chmodSync(dirPath, 0o700);
+        }
+      }
+    }
+  } catch {}
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1100, height: 750, minWidth: 860, minHeight: 600,
@@ -68,6 +87,8 @@ function createWindow() {
       sandbox: true,
       webSecurity: true,
       allowRunningInsecureContent: false,
+      webviewTag: false,
+      navigateOnDragDrop: false,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
@@ -76,6 +97,7 @@ function createWindow() {
   const allowDevScreenshots = !app.isPackaged && (process.argv.includes('--dev-allow-screenshots') || process.env.FUIN_DEV_SCREENSHOTS === '1');
   mainWindow.setContentProtection(!allowDevScreenshots);
   mainWindow.webContents?.on?.('will-navigate', (e) => e.preventDefault());
+  mainWindow.webContents?.on?.('will-redirect', (e) => e.preventDefault());
   mainWindow.webContents?.on?.('will-attach-webview', (e) => e.preventDefault());
   mainWindow.webContents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -101,9 +123,15 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-
+app.on?.('web-contents-created', (_, contents) => {
+  contents?.on?.('will-navigate', (e) => e.preventDefault());
+  contents?.on?.('will-redirect', (e) => e.preventDefault());
+  contents?.on?.('will-attach-webview', (e) => e.preventDefault());
+  contents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
+});
 
 app.whenReady().then(() => {
+  ensurePrivateUserDataDir(app.getPath('userData'));
   if (process.platform === 'win32') {
     try { app.setAppUserModelId('com.fuin.app'); } catch {}
   }
@@ -118,14 +146,29 @@ app.whenReady().then(() => {
     session.defaultSession.setPermissionCheckHandler(() => false);
   }
 
-  session.defaultSession?.webRequest?.onHeadersReceived?.((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://api.github.com https://api.pwnedpasswords.com; object-src 'none'; base-uri 'self';"]
+  if (typeof session?.defaultSession?.webRequest?.onHeadersReceived === 'function') {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const existingHeaders = (details && details.responseHeaders && typeof details.responseHeaders === 'object')
+        ? details.responseHeaders
+        : {};
+      const isLocalFile = !details?.url || String(details.url).startsWith('file://');
+      let responseHeaders;
+      if (isLocalFile) {
+        responseHeaders = {
+          ...existingHeaders,
+          'Content-Security-Policy': [RENDERER_CSP],
+          'X-Content-Type-Options': ['nosniff'],
+          'X-Frame-Options': ['DENY'],
+        };
+      } else {
+        const hasNoSniff = Object.keys(existingHeaders).some(k => k.toLowerCase() === 'x-content-type-options');
+        responseHeaders = hasNoSniff
+          ? existingHeaders
+          : { ...existingHeaders, 'X-Content-Type-Options': ['nosniff'] };
       }
+      callback({ responseHeaders });
     });
-  });
+  }
   createWindow();
   createTray();
   app.on('activate', () => {
@@ -249,32 +292,38 @@ function triggerForceLock(reason) {
   }
 }
 
-// Renderer, unlock()/lock() olduğunda bu state'i main process'e bildirir
+// Renderer, lock() olduğunda bu state'i main process'e bildirir.
+// CRYPTO-02: Renderer asla yetkisiz şekilde isUnlocked = true yapamaz;
+// kilit açma yalnızca main process'te on-disk DATA_FILE şifre çözümü veya ilk kasa kurulumuyla gerçekleşir.
 ipcMain.handle('set-unlock-state', (_, unlocked) => {
-  isUnlocked = !!unlocked;
-  if (!isUnlocked) {
-    clearAuthoritativeVaultSession();
-    if (clipboardTimer) {
-      clearTimeout(clipboardTimer);
-      clipboardTimer = null;
+  if (unlocked) {
+    if (isUnlocked) {
+      powerMonitorManager.startIdleWatcher();
     }
-    try {
-      const current = clipboard.readText();
-      const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
-      if (lastCopiedHash && currentHash === lastCopiedHash) {
-        clipboard.writeText('');
-        if (isWindowInactive()) {
-          trayManager.showNotification('clipboardCleared');
-        }
-      }
-    } catch {}
-    lastCopiedHash = null;
-
-    if (_ephemeralLanServer) {
-      try { _ephemeralLanServer.stop('vault-locked'); } catch {}
-    }
+    return isUnlocked;
   }
-  if (isUnlocked) powerMonitorManager.startIdleWatcher(); else powerMonitorManager.stopIdleWatcher();
+  isUnlocked = false;
+  clearAuthoritativeVaultSession();
+  if (clipboardTimer) {
+    clearTimeout(clipboardTimer);
+    clipboardTimer = null;
+  }
+  try {
+    const current = clipboard.readText();
+    const currentHash = crypto.createHash('sha256').update(String(current)).digest('hex');
+    if (lastCopiedHash && currentHash === lastCopiedHash) {
+      clipboard.writeText('');
+      if (isWindowInactive()) {
+        trayManager.showNotification('clipboardCleared');
+      }
+    }
+  } catch {}
+  lastCopiedHash = null;
+
+  if (_ephemeralLanServer) {
+    try { _ephemeralLanServer.stop('vault-locked'); } catch {}
+  }
+  powerMonitorManager.stopIdleWatcher();
   return true;
 });
 
@@ -635,6 +684,9 @@ ipcMain.handle('touchid-unlock', async () => {
 });
 
 ipcMain.handle('save-touchid-key', (_, key) => {
+  if (!isUnlocked) {
+    throw new Error('Vault is locked');
+  }
   try {
     const buf = safeStorage.encryptString(key);
     const p = path.join(app.getPath('userData'), 'fuin.touchid.enc');
@@ -709,7 +761,7 @@ async function deriveVaultKey(passwordStr, vaultSalt, bindHardware = false) {
 
 // AES-256-GCM şifreleme — vaultKey ile
 async function encryptData(plaintext, passwordStr) {
-  if (plaintext && plaintext.type === 'fuin/vault' && Array.isArray(plaintext.entries)) {
+  if ((isUnlocked || !fs.existsSync(DATA_FILE)) && plaintext && plaintext.type === 'fuin/vault' && Array.isArray(plaintext.entries)) {
     setAuthoritativeVaultSession(plaintext.entries, null);
   }
   const vaultSalt = crypto.randomBytes(32);
@@ -791,97 +843,131 @@ function setRecoveryLegacyBound(bound) {
   }
 }
 
+// CRYPTO-02: Serialize all vault/backup decryption attempts via an async mutex queue
+// so concurrent IPC calls cannot race lockout counters.
+let _decryptMutexChain = Promise.resolve();
+function runSerializedDecrypt(fn) {
+  const run = _decryptMutexChain.then(fn, fn);
+  _decryptMutexChain = run.then(() => {}, () => {});
+  return run;
+}
+
+function isOnDiskVaultCiphertext(b64Str) {
+  if (typeof b64Str !== 'string') return false;
+  const candidate = b64Str.trim();
+  if (!candidate || !fs.existsSync(DATA_FILE)) return false;
+  try {
+    const diskRaw = fs.readFileSync(DATA_FILE, 'utf8').trim();
+    if (!diskRaw) return false;
+    return safeCompare(candidate, diskRaw);
+  } catch {
+    return false;
+  }
+}
+
 // AES-256-GCM şifre çözme — vaultKey ile
 async function decryptData(b64Str, passwordStr) {
-  // Girdi ve boyut doğrulaması (fuzzing ve bellek taşması koruması)
-  if (typeof b64Str !== 'string' || b64Str.length < 80) {
-    throw new Error('Invalid vault packet format: payload too short or invalid type');
-  }
-  if (b64Str.length > 50 * 1024 * 1024) {
-    throw new Error('Invalid vault packet format: payload exceeds maximum allowable size (50MB)');
-  }
-
-  // Brute-force koruması: üstel geri çekilme
-  const lockout = loadLockoutState();
-  const now = Date.now();
-  if (now < lockout.until) {
-    const waitSec = Math.ceil((lockout.until - now) / 1000);
-    throw new Error(`Too many attempts. Wait ${waitSec}s`);
-  }
-
-  const buf       = Buffer.from(b64Str, 'base64');
-  const vaultSalt = buf.slice(0, 32);
-  const iv        = buf.slice(32, 44);
-  const tag       = buf.slice(44, 60);
-  const data      = buf.slice(60);
-  
-  let vaultKey;
-  
-  // FIX-04 Pass 1: Try portable standard key first (no machineId)
-  try {
-    vaultKey = await deriveVaultKey(passwordStr, vaultSalt, false);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', vaultKey, iv);
-    decipher.setAuthTag(tag);
-    let dec1 = decipher.update(data);
-    let dec2 = decipher.final();
-    
-    unsecureBuffer(vaultKey);
-    vaultKey.fill(0);
-    
-    secureBuffer(dec1); secureBuffer(dec2);
-    const jsonStr = Buffer.concat([dec1, dec2]).toString('utf8');
-    unsecureBuffer(dec1); unsecureBuffer(dec2);
-    dec1.fill(0); dec2.fill(0);
-    
-    saveLockoutState(0, 0); // başarılı — sayacı sıfırla
-    const parsedVault = JSON.parse(jsonStr);
-    if (parsedVault && parsedVault.type === 'fuin/vault' && Array.isArray(parsedVault.entries)) {
-      setAuthoritativeVaultSession(parsedVault.entries, b64Str);
+  return runSerializedDecrypt(async () => {
+    // Girdi ve boyut doğrulaması (fuzzing ve bellek taşması koruması)
+    if (typeof b64Str !== 'string' || b64Str.length < 80) {
+      throw new Error('Invalid vault packet format: payload too short or invalid type');
     }
-    return parsedVault;
-  } catch (e) {
-    if (vaultKey) { unsecureBuffer(vaultKey); vaultKey.fill(0); }
+    if (b64Str.length > 50 * 1024 * 1024) {
+      throw new Error('Invalid vault packet format: payload exceeds maximum allowable size (50MB)');
+    }
+
+    // Brute-force koruması: üstel geri çekilme
+    const lockout = loadLockoutState();
+    const now = Date.now();
+    if (now < lockout.until) {
+      const waitSec = Math.ceil((lockout.until - now) / 1000);
+      throw new Error(`Too many attempts. Wait ${waitSec}s`);
+    }
+
+    const buf       = Buffer.from(b64Str, 'base64');
+    const vaultSalt = buf.slice(0, 32);
+    const iv        = buf.slice(32, 44);
+    const tag       = buf.slice(44, 60);
+    const data      = buf.slice(60);
     
-    // FIX-04 Pass 2: Backward compatibility for existing hardware-bound vaults
-    if (machineId) {
-      try {
-        vaultKey = await deriveVaultKey(passwordStr, vaultSalt, true);
-        const decipher = crypto.createDecipheriv('aes-256-gcm', vaultKey, iv);
-        decipher.setAuthTag(tag);
-        let dec1 = decipher.update(data);
-        let dec2 = decipher.final();
-        
-        unsecureBuffer(vaultKey);
-        vaultKey.fill(0);
-        
-        secureBuffer(dec1); secureBuffer(dec2);
-        const jsonStr = Buffer.concat([dec1, dec2]).toString('utf8');
-        unsecureBuffer(dec1); unsecureBuffer(dec2);
-        dec1.fill(0); dec2.fill(0);
-        
-        saveLockoutState(0, 0);
-        console.log('[decryptData] Decrypted with legacy hardware-bound key (ready for portable re-encryption)');
-
-        // ADV-03: If recovery material exists, record that it remains bound to legacy hardware
-        if (fs.existsSync(RECOVERY_FILE) || fs.existsSync(MASTER_ENC_FILE)) {
-          setRecoveryLegacyBound(true);
-        }
-
-        const parsedVault = JSON.parse(jsonStr);
+    let vaultKey;
+    
+    // FIX-04 Pass 1: Try portable standard key first (no machineId)
+    try {
+      vaultKey = await deriveVaultKey(passwordStr, vaultSalt, false);
+      const decipher = crypto.createDecipheriv('aes-256-gcm', vaultKey, iv);
+      decipher.setAuthTag(tag);
+      let dec1 = decipher.update(data);
+      let dec2 = decipher.final();
+      
+      unsecureBuffer(vaultKey);
+      vaultKey.fill(0);
+      
+      secureBuffer(dec1); secureBuffer(dec2);
+      const jsonStr = Buffer.concat([dec1, dec2]).toString('utf8');
+      unsecureBuffer(dec1); unsecureBuffer(dec2);
+      dec1.fill(0); dec2.fill(0);
+      
+      const matchedOnDiskVault = isOnDiskVaultCiphertext(b64Str);
+      const parsedVault = JSON.parse(jsonStr);
+      if (matchedOnDiskVault) {
+        saveLockoutState(0, 0); // başarılı on-disk vault çözümü — sayacı sıfırla
+        isUnlocked = true;
+        powerMonitorManager.startIdleWatcher();
         if (parsedVault && parsedVault.type === 'fuin/vault' && Array.isArray(parsedVault.entries)) {
           setAuthoritativeVaultSession(parsedVault.entries, b64Str);
         }
-        return parsedVault;
-      } catch (e2) {
-        if (vaultKey) { unsecureBuffer(vaultKey); vaultKey.fill(0); }
       }
+      return parsedVault;
+    } catch (e) {
+      if (vaultKey) { unsecureBuffer(vaultKey); vaultKey.fill(0); }
+      
+      // FIX-04 Pass 2: Backward compatibility for existing hardware-bound vaults
+      if (machineId) {
+        try {
+          vaultKey = await deriveVaultKey(passwordStr, vaultSalt, true);
+          const decipher = crypto.createDecipheriv('aes-256-gcm', vaultKey, iv);
+          decipher.setAuthTag(tag);
+          let dec1 = decipher.update(data);
+          let dec2 = decipher.final();
+          
+          unsecureBuffer(vaultKey);
+          vaultKey.fill(0);
+          
+          secureBuffer(dec1); secureBuffer(dec2);
+          const jsonStr = Buffer.concat([dec1, dec2]).toString('utf8');
+          unsecureBuffer(dec1); unsecureBuffer(dec2);
+          dec1.fill(0); dec2.fill(0);
+          
+          const matchedOnDiskVault = isOnDiskVaultCiphertext(b64Str);
+          console.log('[decryptData] Decrypted with legacy hardware-bound key (ready for portable re-encryption)');
+
+          // ADV-03: If recovery material exists, record that it remains bound to legacy hardware
+          if (matchedOnDiskVault && (fs.existsSync(RECOVERY_FILE) || fs.existsSync(MASTER_ENC_FILE))) {
+            setRecoveryLegacyBound(true);
+          }
+
+          const parsedVault = JSON.parse(jsonStr);
+          if (matchedOnDiskVault) {
+            saveLockoutState(0, 0);
+            isUnlocked = true;
+            powerMonitorManager.startIdleWatcher();
+            if (parsedVault && parsedVault.type === 'fuin/vault' && Array.isArray(parsedVault.entries)) {
+              setAuthoritativeVaultSession(parsedVault.entries, b64Str);
+            }
+          }
+          return parsedVault;
+        } catch (e2) {
+          if (vaultKey) { unsecureBuffer(vaultKey); vaultKey.fill(0); }
+        }
+      }
+      
+      lockout.count++;
+      const delay = Math.min(1000 * Math.pow(2, lockout.count), 300000); // max 5 dk
+      saveLockoutState(lockout.count, Date.now() + delay);
+      throw new Error('Decryption failed');
     }
-    
-    lockout.count++;
-    const delay = Math.min(1000 * Math.pow(2, lockout.count), 300000); // max 5 dk
-    saveLockoutState(lockout.count, Date.now() + delay);
-    throw new Error('Decryption failed');
-  }
+  });
 }
 
 function safeCompare(a, b) {
@@ -974,7 +1060,29 @@ async function decryptBackupPacket(b64Str, passwordStr, kdfTag) {
   }
 }
 
-ipcMain.handle('decrypt-backup', async (_, { b64, password, kdf }) => decryptBackupPacket(b64, password, kdf));
+ipcMain.handle('decrypt-backup', async (_, { b64, password, kdf } = {}) => {
+  return runSerializedDecrypt(async () => {
+    if (!isUnlocked) {
+      throw new Error('Vault is locked');
+    }
+    const lockout = loadLockoutState();
+    const now = Date.now();
+    if (now < lockout.until) {
+      const waitSec = Math.ceil((lockout.until - now) / 1000);
+      throw new Error(`Too many attempts. Wait ${waitSec}s`);
+    }
+    try {
+      return await decryptBackupPacket(b64, password, kdf);
+    } catch (err) {
+      if (err && err.message !== 'Vault is locked') {
+        lockout.count++;
+        const delay = Math.min(1000 * Math.pow(2, lockout.count), 300000);
+        saveLockoutState(lockout.count, Date.now() + delay);
+      }
+      throw err;
+    }
+  });
+});
 ipcMain.handle('safe-compare', (_,    { a, b })              => safeCompare(a, b));
 
 ipcMain.handle('zxcvbn', (_, password) => {
@@ -1467,7 +1575,11 @@ ipcMain.handle('load-data', () => {
   return fs.readFileSync(DATA_FILE, 'utf8');
 });
 ipcMain.handle('save-data', (_, enc) => { 
+  if (!isUnlocked && fs.existsSync(DATA_FILE)) {
+    throw new Error('Vault is locked');
+  }
   isUnlocked = true;
+  powerMonitorManager.startIdleWatcher();
   backupFile(DATA_FILE, 'auto-save');
   writeAtomicSync(DATA_FILE, enc, { encoding: 'utf8', mode: 0o600 }); 
   if (_authoritativeVaultSession) {
@@ -1481,6 +1593,9 @@ ipcMain.handle('data-exists', () => fs.existsSync(DATA_FILE));
 
 // ── IPC: Recovery ─────────────────────────────────────────────────
 ipcMain.handle('save-recovery-pair', (_, payload, maybeMasterEnc) => {
+  if (!isUnlocked && fs.existsSync(DATA_FILE)) {
+    throw new Error('Vault is locked');
+  }
   let recoveryData, masterEncData;
   if (payload && typeof payload === 'object' && !Buffer.isBuffer(payload)) {
     recoveryData = payload.recovery || payload.recoveryData;
@@ -1494,6 +1609,9 @@ ipcMain.handle('save-recovery-pair', (_, payload, maybeMasterEnc) => {
 // DEPRECATED (IPC-IPC-01): Standalone recovery/master handlers are deprecated and removed
 // from preload.js to prevent split-write desynchronization. Retained strictly for test harness compatibility.
 ipcMain.handle('save-recovery', (_, d) => { 
+  if (!isUnlocked && fs.existsSync(DATA_FILE)) {
+    throw new Error('Vault is locked');
+  }
   backupFile(RECOVERY_FILE, 'recovery-save');
   writeAtomicSync(RECOVERY_FILE, d, { encoding: 'utf8', mode: 0o600 }); 
   setRecoveryLegacyBound(false);
@@ -1517,6 +1635,9 @@ ipcMain.handle('get-recovery-status', () => getRecoveryStatus());
 // master.enc — şifre değiştirmek için vault'u yeniden şifrelemede kullanılır
 // localStorage yerine bu dosya kullanılır; renderer erişemez, yalnızca IPC üzerinden
 ipcMain.handle('save-master-enc', (_, d) => { 
+  if (!isUnlocked && fs.existsSync(DATA_FILE)) {
+    throw new Error('Vault is locked');
+  }
   backupFile(MASTER_ENC_FILE, 'master-enc-save');
   writeAtomicSync(MASTER_ENC_FILE, d, { encoding: 'utf8', mode: 0o600 }); 
   return true; 
@@ -1534,6 +1655,8 @@ ipcMain.handle('load-master-enc', () => {
 
 // ── IPC: Tam sıfırlama ────────────────────────────────────────────
 ipcMain.handle('full-reset', () => {
+  isUnlocked = false;
+  powerMonitorManager.stopIdleWatcher();
   syncV2.cancelSyncSession();
   clearAuthoritativeVaultSession();
   if (_ephemeralLanServer) {
@@ -1756,7 +1879,160 @@ ipcMain.handle('import-file', async (_, { filters }) => {
 });
 
 // ── IPC: Uygulama İçi Güncelleme Yöneticisi ────────────────────────
-ipcMain.handle('download-update', async (event, { url, filename }) => {
+const MAX_CHECKSUMS_FILE_BYTES = 64 * 1024;
+const CHECKSUM_FETCH_TIMEOUT_MS = 8000;
+
+function isValidSha256Hex(v) {
+  return typeof v === 'string' && /^[0-9a-f]{64}$/i.test(v.trim());
+}
+
+function isTrustedUpdateRedirectUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return false;
+  let finalUrl;
+  try {
+    finalUrl = new URL(rawUrl.trim());
+  } catch {
+    return false;
+  }
+  if (finalUrl.protocol !== 'https:' || finalUrl.username || finalUrl.password) {
+    return false;
+  }
+  return (
+    finalUrl.hostname === 'github.com' ||
+    finalUrl.hostname.endsWith('.github.com') ||
+    finalUrl.hostname === 'githubusercontent.com' ||
+    finalUrl.hostname.endsWith('.githubusercontent.com') ||
+    finalUrl.hostname.endsWith('.amazonaws.com') ||
+    finalUrl.hostname.endsWith('.blob.core.windows.net')
+  );
+}
+
+function normalizeUpdateAssetName(name) {
+  const normalizedPath = String(name || '').trim().replace(/\\/g, '/');
+  return path.basename(normalizedPath).toLowerCase().replace(/[\s.]+/g, '.');
+}
+
+function parseSha256FromChecksumsText(text, targetFilename) {
+  if (typeof text !== 'string' || !text.trim() || typeof targetFilename !== 'string' || !targetFilename.trim()) {
+    return null;
+  }
+  const targetBase = path.basename(targetFilename.trim().replace(/\\/g, '/')).toLowerCase();
+  const targetNorm = normalizeUpdateAssetName(targetFilename);
+  const lines = text.split(/\r?\n/);
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    // Standard shasum / sha256sum format: "<64-hex>  [*]filename"
+    const stdMatch = line.match(/^([0-9a-f]{64})\s+\*?(.+)$/i);
+    if (stdMatch) {
+      const hash = stdMatch[1].toLowerCase();
+      const entryName = stdMatch[2].trim().replace(/^["'`]|["'`]$/g, '').replace(/\\/g, '/');
+      const entryBase = path.basename(entryName).toLowerCase();
+      if (entryBase === targetBase || normalizeUpdateAssetName(entryBase) === targetNorm) {
+        return hash;
+      }
+      continue;
+    }
+
+    // BSD shasum format: "SHA256 (filename) = <64-hex>"
+    const bsdMatch = line.match(/^SHA-?256\s*\((.+)\)\s*=\s*([0-9a-f]{64})$/i);
+    if (bsdMatch) {
+      const entryName = bsdMatch[1].trim().replace(/\\/g, '/');
+      const hash = bsdMatch[2].toLowerCase();
+      const entryBase = path.basename(entryName).toLowerCase();
+      if (entryBase === targetBase || normalizeUpdateAssetName(entryBase) === targetNorm) {
+        return hash;
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchExpectedSha256FromChecksumsUrl(checksumUrl, safeFilename) {
+  if (!checksumUrl || typeof checksumUrl !== 'string') {
+    throw new Error('Invalid checksum URL');
+  }
+  let parsedChecksumUrl;
+  try {
+    parsedChecksumUrl = new URL(checksumUrl.trim());
+  } catch {
+    throw new Error('Malformed checksum URL');
+  }
+  if (
+    parsedChecksumUrl.protocol !== 'https:' ||
+    parsedChecksumUrl.username ||
+    parsedChecksumUrl.password ||
+    parsedChecksumUrl.hostname !== 'github.com' ||
+    !parsedChecksumUrl.pathname.startsWith('/Sombooo/Fuin/releases/download/')
+  ) {
+    throw new Error('Unauthorized checksum source');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    try { controller.abort(); } catch {}
+  }, CHECKSUM_FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(parsedChecksumUrl.href, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Fuin-Desktop-Updater' }
+    });
+    if (!res.ok) {
+      throw new Error(`Checksum HTTP error ${res.status}`);
+    }
+    if (!isTrustedUpdateRedirectUrl(res.url)) {
+      throw new Error('Untrusted redirect host during checksum download');
+    }
+
+    const declaredBytes = parseInt(res.headers?.get?.('content-length') || '0', 10);
+    if (declaredBytes > MAX_CHECKSUMS_FILE_BYTES) {
+      throw new Error('Checksums file exceeds maximum allowed size');
+    }
+
+    let text;
+    if (res.body && typeof res.body.getReader === 'function') {
+      const reader = res.body.getReader();
+      const chunks = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunkBuf = Buffer.from(value);
+        total += chunkBuf.length;
+        if (total > MAX_CHECKSUMS_FILE_BYTES) {
+          try { await reader.cancel(); } catch {}
+          throw new Error('Checksums file exceeds maximum allowed size');
+        }
+        chunks.push(chunkBuf);
+      }
+      text = Buffer.concat(chunks, total).toString('utf8');
+    } else {
+      text = await res.text();
+      if (Buffer.byteLength(text, 'utf8') > MAX_CHECKSUMS_FILE_BYTES) {
+        throw new Error('Checksums file exceeds maximum allowed size');
+      }
+    }
+
+    return parseSha256FromChecksumsText(text, safeFilename);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const _verifiedUpdateDownloads = new Map();
+
+function getPrivateUpdatesDir() {
+  const userDataDir = app.getPath('userData');
+  ensurePrivateUserDataDir(userDataDir);
+  const updatesDir = path.join(userDataDir, 'updates');
+  ensurePrivateUserDataDir(updatesDir);
+  return updatesDir;
+}
+
+ipcMain.handle('download-update', async (event, { url, filename, expectedSha256, checksumUrl } = {}) => {
   if (!url || typeof url !== 'string') throw new Error('Invalid download URL');
   let parsedUrl;
   try {
@@ -1766,6 +2042,8 @@ ipcMain.handle('download-update', async (event, { url, filename }) => {
   }
   if (
     parsedUrl.protocol !== 'https:' ||
+    parsedUrl.username ||
+    parsedUrl.password ||
     parsedUrl.hostname !== 'github.com' ||
     !parsedUrl.pathname.startsWith('/Sombooo/Fuin/releases/download/')
   ) {
@@ -1781,10 +2059,27 @@ ipcMain.handle('download-update', async (event, { url, filename }) => {
     throw new Error('Unsupported installer format');
   }
 
-  const updatesDir = path.join(app.getPath('temp'), 'fuin-updates');
-  if (!fs.existsSync(updatesDir)) {
-    fs.mkdirSync(updatesDir, { recursive: true, mode: 0o700 });
+  let resolvedExpectedSha256 = null;
+  if (expectedSha256 !== undefined && expectedSha256 !== null && expectedSha256 !== '') {
+    if (!isValidSha256Hex(expectedSha256)) {
+      throw new Error('Invalid SHA-256 checksum format');
+    }
+    resolvedExpectedSha256 = expectedSha256.trim().toLowerCase();
+  } else if (checksumUrl !== undefined && checksumUrl !== null && checksumUrl !== '') {
+    resolvedExpectedSha256 = await fetchExpectedSha256FromChecksumsUrl(checksumUrl, safeFilename);
   }
+
+  // UPD-01: Fail CLOSED when expected SHA-256 cannot be resolved
+  if (!resolvedExpectedSha256) {
+    return {
+      success: false,
+      verified: false,
+      error: 'sha256-missing'
+    };
+  }
+
+  // UPD-02: Store update packages strictly inside private 0o700 userData/updates directory
+  const updatesDir = getPrivateUpdatesDir();
   const destinationPath = path.join(updatesDir, safeFilename);
 
   const controller = new AbortController();
@@ -1795,15 +2090,7 @@ ipcMain.handle('download-update', async (event, { url, filename }) => {
 
   if (!res.ok) throw new Error(`Download HTTP error ${res.status}`);
 
-  const finalUrl = new URL(res.url);
-  const isTrustedHost =
-    finalUrl.hostname === 'github.com' ||
-    finalUrl.hostname.endsWith('.github.com') ||
-    finalUrl.hostname === 'githubusercontent.com' ||
-    finalUrl.hostname.endsWith('.githubusercontent.com') ||
-    finalUrl.hostname.endsWith('.amazonaws.com') ||
-    finalUrl.hostname.endsWith('.blob.core.windows.net');
-  if (finalUrl.protocol !== 'https:' || !isTrustedHost) {
+  if (!isTrustedUpdateRedirectUrl(res.url)) {
     throw new Error('Untrusted redirect host during update download');
   }
 
@@ -1815,18 +2102,22 @@ ipcMain.handle('download-update', async (event, { url, filename }) => {
 
   let receivedBytes = 0;
   const partPath = `${destinationPath}.${process.pid}.${Date.now()}.part`;
-  const fileStream = fs.createWriteStream(partPath, { mode: 0o644 });
+  const fileStream = fs.createWriteStream(partPath, { mode: 0o600 });
+  const hash = crypto.createHash('sha256');
+  let actualSha256 = null;
 
   try {
     const reader = res.body.getReader();
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      receivedBytes += value.length;
+      const chunkBuf = Buffer.from(value);
+      receivedBytes += chunkBuf.length;
       if (receivedBytes > MAX_UPDATE_SIZE) {
         throw new Error('Downloaded file exceeded size limit');
       }
-      fileStream.write(Buffer.from(value));
+      hash.update(chunkBuf);
+      fileStream.write(chunkBuf);
 
       const percent = totalBytes > 0 ? Math.round((receivedBytes / totalBytes) * 100) : 0;
       try {
@@ -1849,27 +2140,62 @@ ipcMain.handle('download-update', async (event, { url, filename }) => {
       throw new Error('Incomplete update download');
     }
 
+    actualSha256 = hash.digest('hex').toLowerCase();
+    if (!resolvedExpectedSha256) {
+      try { if (fs.existsSync(partPath)) fs.unlinkSync(partPath); } catch {}
+      return {
+        success: false,
+        verified: false,
+        error: 'sha256-missing'
+      };
+    }
+
+    const actualBuf = Buffer.from(actualSha256, 'utf8');
+    const expectedBuf = Buffer.from(resolvedExpectedSha256, 'utf8');
+    if (actualBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(actualBuf, expectedBuf)) {
+      throw new Error('SHA-256 integrity verification failed');
+    }
+
     if (process.platform === 'darwin' && fs.existsSync(destinationPath)) {
       try {
         require('child_process').execFileSync('hdiutil', ['detach', destinationPath], { stdio: 'ignore', timeout: 5000 });
       } catch {}
     }
 
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(partPath, 0o600); } catch {}
+    }
     fs.renameSync(partPath, destinationPath);
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(destinationPath, 0o600); } catch {}
+    }
+
+    const realDestPath = fs.realpathSync(destinationPath);
+    _verifiedUpdateDownloads.set(realDestPath, {
+      filePath: realDestPath,
+      sha256: actualSha256,
+      verifiedAt: Date.now()
+    });
   } catch (err) {
     try { fileStream.destroy(); } catch {}
     try { if (fs.existsSync(partPath)) fs.unlinkSync(partPath); } catch {}
     throw err;
   }
 
-  return { success: true, filePath: destinationPath };
+  return {
+    success: true,
+    filePath: destinationPath,
+    sha256: actualSha256,
+    verified: true
+  };
 });
 
-ipcMain.handle('install-update', async (_, { filePath }) => {
+ipcMain.handle('install-update', async (_, { filePath } = {}) => {
   if (!filePath || typeof filePath !== 'string') return false;
-  const updatesDir = path.join(app.getPath('temp'), 'fuin-updates');
+  const updatesDir = getPrivateUpdatesDir();
+  const realUpdatesDir = fs.realpathSync(updatesDir);
   const resolvedPath = path.resolve(filePath);
-  if (!resolvedPath.startsWith(updatesDir + path.sep)) {
+  if (!resolvedPath.startsWith(updatesDir + path.sep) && !resolvedPath.startsWith(realUpdatesDir + path.sep)) {
     throw new Error('Unauthorized installer path');
   }
   if (!fs.existsSync(resolvedPath)) {
@@ -1878,7 +2204,32 @@ ipcMain.handle('install-update', async (_, { filePath }) => {
   const stat = fs.lstatSync(resolvedPath);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Not a valid file');
 
-  const openError = await shell.openPath(resolvedPath);
+  const realPath = fs.realpathSync(resolvedPath);
+  if (!realPath.startsWith(realUpdatesDir + path.sep)) {
+    throw new Error('Unauthorized installer path');
+  }
+
+  // UPD-01 & UPD-02: Require prior verified download record AND re-verify SHA-256 right before opening
+  const verifiedRecord = _verifiedUpdateDownloads.get(realPath);
+  if (!verifiedRecord || !isValidSha256Hex(verifiedRecord.sha256)) {
+    throw new Error('Installer has not passed SHA-256 verification');
+  }
+
+  const currentSha256 = await new Promise((resolve, reject) => {
+    const h = crypto.createHash('sha256');
+    const stream = fs.createReadStream(realPath);
+    stream.on('data', (chunk) => h.update(chunk));
+    stream.on('end', () => resolve(h.digest('hex').toLowerCase()));
+    stream.on('error', reject);
+  });
+  const actualBuf = Buffer.from(currentSha256, 'utf8');
+  const expectedBuf = Buffer.from(verifiedRecord.sha256.toLowerCase(), 'utf8');
+  if (actualBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(actualBuf, expectedBuf)) {
+    _verifiedUpdateDownloads.delete(realPath);
+    throw new Error('SHA-256 integrity verification failed before install');
+  }
+
+  const openError = await shell.openPath(realPath);
   if (openError) {
     throw new Error(openError);
   }
@@ -1964,6 +2315,9 @@ ipcMain.handle('ext-bridge-status', () => {
 });
 
 ipcMain.handle('register-chrome-ext-id', (_, { extensionId }) => {
+  if (!isUnlocked) {
+    throw new Error('Vault is locked');
+  }
   return extensionBridge.registerChromeOrigin(app, extensionId);
 });
 
@@ -1996,6 +2350,10 @@ if (typeof module !== 'undefined' && module.exports) {
     initLanSync,
     getPairingManager,
     getEphemeralLanServer,
-    getSavedSyncMode
+    getSavedSyncMode,
+    isValidSha256Hex,
+    isTrustedUpdateRedirectUrl,
+    parseSha256FromChecksumsText,
+    fetchExpectedSha256FromChecksumsUrl
   };
 }

@@ -60,6 +60,34 @@
     return digits.length >= 4 ? digits.slice(-4) : '';
   }
 
+  function sanitizeCardBrand(rawBrand) {
+    if (typeof rawBrand !== 'string') return '';
+    var cleaned = rawBrand
+      .replace(/<[^>]*>/g, '')
+      .replace(/[<>"'`&]/g, '')
+      .replace(/[\u0000-\u001f\u007f]/g, '')
+      .trim()
+      .slice(0, 32);
+    if (!cleaned) return '';
+    var lower = cleaned.toLowerCase();
+    var brandMap = {
+      troy: 'Troy',
+      visa: 'Visa',
+      mastercard: 'Mastercard',
+      'master card': 'Mastercard',
+      amex: 'Amex',
+      'american express': 'Amex',
+      discover: 'Discover',
+      jcb: 'JCB',
+      maestro: 'Maestro',
+      generic: ''
+    };
+    if (Object.prototype.hasOwnProperty.call(brandMap, lower)) {
+      return brandMap[lower];
+    }
+    return '';
+  }
+
   function formatBitwardenExpiry(expMonth, expYear) {
     var m = expMonth != null ? String(expMonth).replace(/\D/g, '') : '';
     var y = expYear != null ? String(expYear).replace(/\D/g, '') : '';
@@ -108,7 +136,8 @@
       entry.cardExpiry = fields.cardExpiry || '';
       entry.cardCvv = fields.cardCvv || '';
       entry.cardPin = fields.cardPin || '';
-      if (fields.cardBrand) entry.cardBrand = fields.cardBrand;
+      var safeBrand = sanitizeCardBrand(fields.cardBrand);
+      if (safeBrand) entry.cardBrand = safeBrand;
       var last4 = normalizeCardLastFour(entry.cardNumber, fields.cardLastFour);
       if (last4) entry.cardLastFour = last4;
     } else if (entry.type === 'note') {
@@ -148,7 +177,7 @@
       var cardExpiry = formatBitwardenExpiry(card.expMonth, card.expYear);
       var cardCvv = String(card.code || '').trim();
       var cardPin = String(card.pin || '').trim();
-      var cardBrand = String(card.brand || '').trim();
+      var cardBrand = sanitizeCardBrand(String(card.brand || '').trim());
       if (!title) title = cardBrand || cardholderName;
       if (!title || !(cardNumber || cardholderName || notes)) return null;
 
@@ -252,7 +281,7 @@
       var cardExpiry = String(e.cardExpiry || '').trim();
       var cardCvv = String(e.cardCvv || '').trim();
       var cardPin = String(e.cardPin || '').trim();
-      var cardBrand = String(e.cardBrand || '').trim();
+      var cardBrand = sanitizeCardBrand(String(e.cardBrand || '').trim());
       if (!title) title = cardBrand || cardholderName;
       if (!title || !(cardNumber || cardholderName || cardExpiry || cardCvv || cardPin || notes)) return null;
 

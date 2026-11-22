@@ -17,6 +17,7 @@
 
 const crypto = require('crypto');
 const http   = require('http');
+const net    = require('net');
 const os     = require('os');
 const fs     = require('fs');
 const path   = require('path');
@@ -72,39 +73,23 @@ function writeAtomicSync(targetPath, data, options = {}) {
 }
 
 // ── RFC1918 & NETWORK UTILITIES ───────────────────────────────────────────────
-/**
- * Verifies if an IPv4 or loopback address belongs strictly to local private networks (RFC 1918 / loopback / link-local).
- * Never permits public internet routing.
- *
- * @param {string} ip
- * @returns {boolean}
- */
-function isRFC1918OrLoopback(ip) {
-  if (!ip || typeof ip !== 'string') return false;
-  let cleanIp = ip.trim();
+function isCanonicalPrivateIPv4(ipStr) {
+  if (typeof ipStr !== 'string' || !ipStr) return false;
+  if (/[\s@?#/\\:\[\]]/.test(ipStr)) return false;
 
-  // Strip IPv4-mapped IPv6 prefix if present (e.g. ::ffff:192.168.1.10)
-  if (cleanIp.startsWith('::ffff:')) {
-    cleanIp = cleanIp.slice(7);
+  const parts = ipStr.split('.');
+  if (parts.length !== 4) return false;
+
+  const octets = [];
+  for (const p of parts) {
+    // Reject leading zeros (e.g. "010.8.8.8"), hex, signs, or non-digits
+    if (!/^(?:0|[1-9]\d{0,2})$/.test(p)) return false;
+    const n = Number(p);
+    if (!Number.isInteger(n) || n < 0 || n > 255) return false;
+    octets.push(n);
   }
 
-  const lower = cleanIp.toLowerCase();
-  if (lower === '::1' || lower === 'localhost') return true;
-
-  // IPv6 Link-Local (fe80::/10, RFC 4291)
-  if (lower.startsWith('fe80:')) return true;
-
-  // IPv6 Unique Local Address (fc00::/7 - fc00:: or fd00::, RFC 4193)
-  if (lower.startsWith('fc') || lower.startsWith('fd')) {
-    if (lower.includes(':')) return true;
-  }
-
-  const parts = cleanIp.split('.');
-  if (parts.length !== 4 || parts.some(p => !/^\d+$/.test(p) || parseInt(p, 10) < 0 || parseInt(p, 10) > 255)) {
-    return false;
-  }
-
-  const [a, b] = parts.map(p => parseInt(p, 10));
+  const [a, b] = octets;
   // 127.0.0.0/8 (Loopback)
   if (a === 127) return true;
   // 10.0.0.0/8 (RFC 1918 Class A)
@@ -117,6 +102,72 @@ function isRFC1918OrLoopback(ip) {
   if (a === 169 && b === 254) return true;
 
   return false;
+}
+
+/**
+ * Verifies if an IPv4 or IPv6 address belongs strictly to local private networks (RFC 1918 / loopback / link-local / ULA).
+ * Never permits public internet routing, octal/hex/userinfo/hostname tricks, or loose prefix bypasses.
+ *
+ * @param {string} ip
+ * @returns {boolean}
+ */
+function isRFC1918OrLoopback(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  const cleanIp = ip.trim();
+  if (!cleanIp || /[\s@?#/\\\[\]%]/.test(cleanIp)) return false;
+
+  const lower = cleanIp.toLowerCase();
+  if (lower === 'localhost') return true;
+
+  // Strip IPv4-mapped IPv6 prefix strictly (e.g. ::ffff:192.168.1.10)
+  if (lower.startsWith('::ffff:')) {
+    return isCanonicalPrivateIPv4(cleanIp.slice(7));
+  }
+
+  // Strict IPv6 validation via net.isIPv6 BEFORE checking private IPv6 ranges (SYNC-01)
+  if (net.isIPv6(cleanIp)) {
+    if (lower === '::1' || lower === '0:0:0:0:0:0:0:1') return true;
+    // IPv6 Link-Local (fe80::/10, RFC 4291)
+    if (/^fe[89ab][0-9a-f]:/.test(lower)) return true;
+    // IPv6 Unique Local Address (fc00::/7, RFC 4193)
+    if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true;
+    return false;
+  }
+
+  return isCanonicalPrivateIPv4(cleanIp);
+}
+
+function isValidLanHostHeader(hostHeader) {
+  if (typeof hostHeader !== 'string') return false;
+  const trimmed = hostHeader.trim();
+  if (!trimmed || /[\s@?#/\\]/.test(trimmed)) return false;
+
+  let hostPart = trimmed;
+  if (trimmed.startsWith('[')) {
+    const closeIdx = trimmed.indexOf(']');
+    if (closeIdx <= 1) return false;
+    hostPart = trimmed.slice(1, closeIdx);
+    const rest = trimmed.slice(closeIdx + 1);
+    if (rest) {
+      if (!/^:\d{1,5}$/.test(rest)) return false;
+      const portNum = Number(rest.slice(1));
+      if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) return false;
+    }
+    return net.isIPv6(hostPart) && isRFC1918OrLoopback(hostPart);
+  }
+
+  const colonIdx = trimmed.indexOf(':');
+  if (colonIdx !== -1) {
+    hostPart = trimmed.slice(0, colonIdx);
+    const portStr = trimmed.slice(colonIdx + 1);
+    if (!/^\d{1,5}$/.test(portStr)) return false;
+    const portNum = Number(portStr);
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) return false;
+  }
+
+  const lowerHost = hostPart.toLowerCase();
+  if (lowerHost === 'localhost') return true;
+  return isCanonicalPrivateIPv4(hostPart);
 }
 
 /**
@@ -215,6 +266,15 @@ function parseTimestamp(val) {
   return null;
 }
 
+function sanitizeCardBrand(raw) {
+  if (typeof raw !== 'string') return '';
+  const cleaned = raw.trim();
+  if (!cleaned) return '';
+  return /^(?:troy|visa|mastercard|amex|discover|jcb|maestro|generic|)$/i.test(cleaned)
+    ? cleaned
+    : '';
+}
+
 /**
  * Normalizes entry ensuring updatedAt, deletedAt, isDeleted, and history are standard.
  *
@@ -255,9 +315,14 @@ function normalizeEntry(entry) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(safeBase, 'cardBrand')) {
+    safeBase.cardBrand = sanitizeCardBrand(safeBase.cardBrand);
+  }
+
   const sanitized = {
     ...safeBase,
     id,
+    site: typeof entry.site === 'string' ? entry.site : '',
     updatedAt,
     updated: updatedAt,
     deletedAt,
@@ -540,9 +605,21 @@ class PairingManager {
     this.devicesFilePath = path.join(userDataPath, 'fuin.paired-devices.json');
     this.pendingFilePath = path.join(userDataPath, 'fuin.pending-pairings.json');
     this.deviceIdFilePath = path.join(userDataPath, 'fuin.device-id');
+    this.fallbackKeyFilePath = path.join(userDataPath, 'fuin.pairing.key');
+    this._needsFallbackMigration = false;
     this.desktopDeviceId = this._loadOrGenerateDeviceId();
+    // SYNC-03: Remove any legacy persisted pending-pairings file; keep pendingPairings memory-only
+    try {
+      if (fs.existsSync(this.pendingFilePath)) {
+        fs.unlinkSync(this.pendingFilePath);
+      }
+    } catch {}
     this.pairedDevices = this._loadDevices();
-    this.pendingPairings = this._loadPendingPairings();
+    if (this._needsFallbackMigration && this.pairedDevices.length > 0) {
+      try { this._saveDevices(); } catch {}
+      this._needsFallbackMigration = false;
+    }
+    this.pendingPairings = new Map();
   }
 
   _loadOrGenerateDeviceId() {
@@ -572,9 +649,37 @@ class PairingManager {
     return null;
   }
 
-  _deriveLocalFallbackKey() {
+  _deriveLegacyDeviceIdFallbackKey() {
     const devId = this.getDesktopDeviceId() || 'fuin-desktop-default';
     return crypto.scryptSync(devId, 'FUIN_LOCAL_PAIRING_STORE_V1', 32);
+  }
+
+  // SYNC-07: Dedicated 0o600 32-byte random fallback key file with symlink defense
+  // (never derives encryption key solely from plaintext fuin.device-id).
+  _loadOrCreateLocalFallbackKey() {
+    try {
+      const st = fs.lstatSync(this.fallbackKeyFilePath);
+      if (st.isSymbolicLink()) {
+        try { fs.unlinkSync(this.fallbackKeyFilePath); } catch {}
+      } else if (!st.isFile()) {
+        throw new Error('SYNC_LAN: Fallback key path is non-regular');
+      } else {
+        const hex = fs.readFileSync(this.fallbackKeyFilePath, 'utf8').trim();
+        if (/^[0-9a-f]{64}$/i.test(hex)) {
+          return Buffer.from(hex, 'hex');
+        }
+      }
+    } catch (err) {
+      if (err && err.code !== 'ENOENT' && /non-regular/i.test(String(err.message))) {
+        throw err;
+      }
+    }
+
+    const freshKey = crypto.randomBytes(32);
+    try {
+      writeAtomicSync(this.fallbackKeyFilePath, freshKey.toString('hex'), { mode: 0o600 });
+    } catch {}
+    return freshKey;
   }
 
   _serializeProtected(data) {
@@ -586,8 +691,8 @@ class PairingManager {
         return JSON.stringify({ safeStorage: true, payload: encBuf.toString('base64') });
       } catch {}
     }
-    // Fallback encryption (AES-256-GCM) when OS keyring / safeStorage is unavailable
-    const key = this._deriveLocalFallbackKey();
+    // Fallback encryption (AES-256-GCM) with dedicated 0o600 32-byte random key when OS keyring is unavailable
+    const key = this._loadOrCreateLocalFallbackKey();
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
     const enc = Buffer.concat([cipher.update(Buffer.from(jsonStr, 'utf8')), cipher.final()]);
@@ -595,10 +700,21 @@ class PairingManager {
     key.fill(0);
     return JSON.stringify({
       localEncrypted: true,
+      keyVersion: 2,
       iv: iv.toString('base64'),
       tag: tag.toString('base64'),
       payload: enc.toString('base64')
     });
+  }
+
+  _decryptLocalEnvelope(parsed, key) {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(parsed.iv, 'base64'));
+    decipher.setAuthTag(Buffer.from(parsed.tag, 'base64'));
+    const dec = Buffer.concat([
+      decipher.update(Buffer.from(parsed.payload, 'base64')),
+      decipher.final()
+    ]);
+    return JSON.parse(dec.toString('utf8'));
   }
 
   _deserializeProtected(raw) {
@@ -618,17 +734,22 @@ class PairingManager {
       typeof parsed.tag === 'string' &&
       typeof parsed.payload === 'string'
     ) {
-      const key = this._deriveLocalFallbackKey();
+      if (parsed.keyVersion === 2) {
+        const key = this._loadOrCreateLocalFallbackKey();
+        try {
+          return this._decryptLocalEnvelope(parsed, key);
+        } finally {
+          key.fill(0);
+        }
+      }
+      // Backward-compatible migration for legacy v1 device-id encrypted files
+      const legacyKey = this._deriveLegacyDeviceIdFallbackKey();
       try {
-        const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(parsed.iv, 'base64'));
-        decipher.setAuthTag(Buffer.from(parsed.tag, 'base64'));
-        const dec = Buffer.concat([
-          decipher.update(Buffer.from(parsed.payload, 'base64')),
-          decipher.final()
-        ]);
-        return JSON.parse(dec.toString('utf8'));
+        const migrated = this._decryptLocalEnvelope(parsed, legacyKey);
+        this._needsFallbackMigration = true;
+        return migrated;
       } finally {
-        key.fill(0);
+        legacyKey.fill(0);
       }
     }
     return parsed;
@@ -649,30 +770,8 @@ class PairingManager {
     writeAtomicSync(this.devicesFilePath, this._serializeProtected(this.pairedDevices), { mode: 0o600 });
   }
 
-  _loadPendingPairings() {
-    const map = new Map();
-    try {
-      if (fs.existsSync(this.pendingFilePath)) {
-        const raw = fs.readFileSync(this.pendingFilePath, 'utf8');
-        const parsed = this._deserializeProtected(raw);
-        if (Array.isArray(parsed)) {
-          const now = Date.now();
-          for (const item of parsed) {
-            if (item && item.pairKeyHex && (now - (item.createdAt || 0) < 24 * 60 * 60 * 1000)) {
-              map.set(item.pairKeyHex, item);
-            }
-          }
-        }
-      }
-    } catch {}
-    return map;
-  }
-
-  _savePendingPairings() {
-    try {
-      const arr = Array.from(this.pendingPairings.values());
-      writeAtomicSync(this.pendingFilePath, this._serializeProtected(arr), { mode: 0o600 });
-    } catch {}
+  clearPendingPairings() {
+    this.pendingPairings.clear();
   }
 
   clearAll() {
@@ -681,6 +780,7 @@ class PairingManager {
     try { if (fs.existsSync(this.devicesFilePath)) fs.unlinkSync(this.devicesFilePath); } catch {}
     try { if (fs.existsSync(this.pendingFilePath)) fs.unlinkSync(this.pendingFilePath); } catch {}
     try { if (fs.existsSync(this.deviceIdFilePath)) fs.unlinkSync(this.deviceIdFilePath); } catch {}
+    try { if (fs.existsSync(this.fallbackKeyFilePath)) fs.unlinkSync(this.fallbackKeyFilePath); } catch {}
   }
 
   getDesktopDeviceId() {
@@ -690,6 +790,7 @@ class PairingManager {
   /**
    * Generates static QR pairing payload.
    * QR contains: deviceId, 32-byte CSPRNG pairKey, port, and RFC1918 addresses.
+   * SYNC-03: Pending pairings are single-active and kept in memory only.
    *
    * @param {object} [opts]
    * @returns {object}
@@ -710,14 +811,14 @@ class PairingManager {
       timestamp: Date.now()
     };
 
-    // Store in pending pairings (persisted across restarts)
+    // SYNC-03: Keep only one active pending pairing in memory (never persisted on disk)
+    this.pendingPairings.clear();
     this.pendingPairings.set(pairKeyHex, {
       pairKeyHex,
       createdAt: Date.now(),
       port,
       addresses
     });
-    this._savePendingPairings();
 
     return pairingPayload;
   }
@@ -740,7 +841,6 @@ class PairingManager {
 
     // Remove from pending if present
     this.pendingPairings.delete(info.pairKeyHex);
-    this._savePendingPairings();
 
     const existingIndex = this.pairedDevices.findIndex(d => d.deviceId === info.deviceId);
     const record = {
@@ -778,24 +878,33 @@ class PairingManager {
 
   /**
    * Revokes/deletes paired device by deviceId (one-click revocation).
+   * SYNC-02: Also deletes ALL paired device records sharing the revoked device's pairKeyHex
+   * so shadow clones cannot survive revocation.
    *
    * @param {string} deviceId
    * @returns {boolean}
    */
   removePairedDevice(deviceId) {
     const initialCount = this.pairedDevices.length;
-    this.pairedDevices = this.pairedDevices.filter(d => d.deviceId !== deviceId && d.pairKeyHex !== deviceId);
+    const revokedKeys = new Set();
+    for (const d of this.pairedDevices) {
+      if (d.deviceId === deviceId || d.pairKeyHex === deviceId) {
+        if (d.pairKeyHex) revokedKeys.add(d.pairKeyHex);
+      }
+    }
+
+    this.pairedDevices = this.pairedDevices.filter(
+      d => d.deviceId !== deviceId && d.pairKeyHex !== deviceId && !revokedKeys.has(d.pairKeyHex)
+    );
     let removed = this.pairedDevices.length !== initialCount;
 
     if (this.pendingPairings.has(deviceId)) {
       this.pendingPairings.delete(deviceId);
-      this._savePendingPairings();
       removed = true;
     }
     for (const [keyHex, item] of this.pendingPairings.entries()) {
-      if (item.deviceId === deviceId || keyHex === deviceId) {
+      if (item.deviceId === deviceId || keyHex === deviceId || revokedKeys.has(keyHex)) {
         this.pendingPairings.delete(keyHex);
-        this._savePendingPairings();
         removed = true;
       }
     }
@@ -808,8 +917,8 @@ class PairingManager {
   }
 
   /**
-   * Looks up 32-byte Buffer pairKey for deviceId.
-   * Checks confirmed paired devices first, then pending pairings.
+   * Looks up 32-byte Buffer pairKey for confirmed paired deviceId.
+   * SYNC-03: Never returns unconfirmed pendingPairing keys.
    *
    * @param {string} deviceId
    * @returns {Buffer|null}
@@ -819,22 +928,6 @@ class PairingManager {
     if (paired) {
       return Buffer.from(paired.pairKeyHex, 'hex');
     }
-
-    // If device presents a pending pairing key (most recent first)
-    const now = Date.now();
-    const sortedPending = Array.from(this.pendingPairings.values())
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-    for (const pending of sortedPending) {
-      if (now - (pending.createdAt || 0) > 24 * 60 * 60 * 1000) {
-        this.pendingPairings.delete(pending.pairKeyHex);
-        continue;
-      }
-      if (deviceId === pending.pairKeyHex) {
-        return Buffer.from(pending.pairKeyHex, 'hex');
-      }
-    }
-
     return null;
   }
 
@@ -906,6 +999,7 @@ class EphemeralServer {
     this.isRunning = false;
     this.startedAt = null;
     this.onCloseCallbacks = new Set();
+    this._inFlightBodyReads = 0;
   }
 
   isListening() {
@@ -953,6 +1047,11 @@ class EphemeralServer {
       this.server = http.createServer((req, res) => {
         this._handleRequest(req, res);
       });
+
+      // SYNC-05: Connection and slowloris timeout hardening
+      this.server.maxConnections = 8;
+      this.server.headersTimeout = 10000;
+      this.server.requestTimeout = 30000;
 
       // Socket tracking and RFC1918 interface guard (R2)
       this.server.on('connection', (socket) => {
@@ -1011,6 +1110,12 @@ class EphemeralServer {
     }
     this.activeSockets.clear();
     this.usedNonces.clear();
+    this._inFlightBodyReads = 0;
+
+    // SYNC-03: Clear memory-only pending pairings when the ephemeral server stops
+    if (this.pairingManager && typeof this.pairingManager.clearPendingPairings === 'function') {
+      try { this.pairingManager.clearPendingPairings(); } catch {}
+    }
 
     if (this.server) {
       await new Promise(resolve => {
@@ -1053,6 +1158,42 @@ class EphemeralServer {
       return;
     }
 
+    // SYNC-05: Browser / CORS / CSRF / Private Network Access (PNA) guard BEFORE reading body
+    if (req.headers['origin'] !== undefined || req.headers['sec-fetch-site'] !== undefined) {
+      this._sendJson(res, 403, { error: 'Browser cross-origin requests are not allowed' });
+      return;
+    }
+
+    // SYNC-05: DNS rebinding guard — Host header must be a valid local IPv4/IPv6/localhost literal
+    if (!isValidLanHostHeader(req.headers['host'])) {
+      this._sendJson(res, 403, { error: 'Invalid Host header' });
+      return;
+    }
+
+    // SYNC-05: Require strict application/json Content-Type before reading body
+    const contentType = String(req.headers['content-type'] || '').trim().toLowerCase();
+    if (!(contentType === 'application/json' || contentType.startsWith('application/json;'))) {
+      this._sendJson(res, 415, { error: 'Content-Type must be application/json' });
+      return;
+    }
+
+    // SYNC-05: Cap concurrent in-flight body reads to 2 (mitigate LAN memory exhaustion)
+    if (this._inFlightBodyReads >= 2) {
+      this._sendJson(res, 429, { error: 'Too many concurrent requests' });
+      return;
+    }
+    this._inFlightBodyReads++;
+    let released = false;
+    const releaseInFlight = () => {
+      if (!released) {
+        released = true;
+        this._inFlightBodyReads = Math.max(0, this._inFlightBodyReads - 1);
+      }
+    };
+    req.on('close', releaseInFlight);
+    req.on('aborted', releaseInFlight);
+    req.on('error', releaseInFlight);
+
     const chunks = [];
     let totalBytes = 0;
     let destroyed = false;
@@ -1062,6 +1203,7 @@ class EphemeralServer {
       if (totalBytes > 5 * 1024 * 1024) { // Strict 5MB byte guard
         destroyed = true;
         chunks.length = 0;
+        releaseInFlight();
         req.destroy();
         return;
       }
@@ -1069,6 +1211,7 @@ class EphemeralServer {
     });
 
     req.on('end', async () => {
+      releaseInFlight();
       if (destroyed) return;
       try {
         const bodyStr = Buffer.concat(chunks, totalBytes).toString('utf8');
@@ -1090,19 +1233,33 @@ class EphemeralServer {
   }
 
   async _handlePairRequest(body, res) {
-    const { deviceId, deviceName, nonce, ciphertext } = body;
+    if (!body || typeof body !== 'object') {
+      this._sendJson(res, 400, { error: 'Malformed encrypted pair request' });
+      return;
+    }
+    const { nonce, ciphertext } = body;
 
     // Require AEAD-encrypted pairing proof (Zero-knowledge key confirmation over HTTP)
-    if (!deviceId || typeof nonce !== 'string' || typeof ciphertext !== 'string') {
+    if (typeof nonce !== 'string' || typeof ciphertext !== 'string') {
       this._sendJson(res, 400, { error: 'Malformed encrypted pair request' });
+      return;
+    }
+
+    if (this.usedNonces.has(nonce)) {
+      this._sendJson(res, 400, { error: 'Pair request replay detected (nonce already used)' });
       return;
     }
 
     let matchedKeyHex = null;
     let decryptedProof = null;
+    const now = Date.now();
 
-    // 1. Check pending pairings
-    for (const [keyHex] of this.pairingManager.pendingPairings.entries()) {
+    // SYNC-02 & SYNC-03: ONLY try active, non-expired pendingPairings keys (NEVER pairedDevices!)
+    for (const [keyHex, pending] of this.pairingManager.pendingPairings.entries()) {
+      if (!pending || (now - (pending.createdAt || 0)) > EPHEMERAL_TIMEOUT_MS) {
+        this.pairingManager.pendingPairings.delete(keyHex);
+        continue;
+      }
       const keyBuf = Buffer.from(keyHex, 'hex');
       try {
         decryptedProof = decryptLanPayload({ nonce, ciphertext }, keyBuf);
@@ -1113,45 +1270,33 @@ class EphemeralServer {
       }
     }
 
-    // 2. Check existing paired devices if not in pending
-    if (!matchedKeyHex) {
-      for (const d of this.pairingManager.pairedDevices) {
-        const keyBuf = Buffer.from(d.pairKeyHex, 'hex');
-        try {
-          decryptedProof = decryptLanPayload({ nonce, ciphertext }, keyBuf);
-          matchedKeyHex = d.pairKeyHex;
-          break;
-        } catch {} finally {
-          keyBuf.fill(0);
-        }
-      }
-    }
-
-    if (!matchedKeyHex || !decryptedProof) {
+    if (!matchedKeyHex || !decryptedProof || typeof decryptedProof !== 'object') {
       this._sendJson(res, 401, { error: 'Unauthorized pairing proof' });
       return;
     }
 
-    if (this.usedNonces.has(nonce)) {
-      this._sendJson(res, 400, { error: 'Pair request replay detected (nonce already used)' });
+    // SYNC-02: Strict proof contract — require authenticated action==='pair', direction==='request', and non-empty inner deviceId
+    if (decryptedProof.action !== 'pair' || decryptedProof.direction !== 'request') {
+      this._sendJson(res, 400, { error: 'Invalid pair packet action or direction' });
       return;
     }
 
-    if (decryptedProof.direction === 'response' || decryptedProof.action === 'pair-ack') {
-      this._sendJson(res, 400, { error: 'Invalid pair packet direction (reflection detected)' });
+    if (typeof decryptedProof.deviceId !== 'string' || decryptedProof.deviceId.trim().length === 0) {
+      this._sendJson(res, 400, { error: 'Authenticated pairing proof must include a non-empty deviceId' });
       return;
     }
 
-    if (typeof decryptedProof.timestamp === 'number') {
-      if (Math.abs(Date.now() - decryptedProof.timestamp) > 120000) {
-        this._sendJson(res, 400, { error: 'Pair request timestamp expired' });
-        return;
-      }
+    if (typeof decryptedProof.timestamp !== 'number' || Math.abs(Date.now() - decryptedProof.timestamp) > EPHEMERAL_TIMEOUT_MS) {
+      this._sendJson(res, 400, { error: 'Pair request timestamp missing or expired' });
+      return;
     }
 
     this.usedNonces.add(nonce);
-    const finalDeviceId = decryptedProof.deviceId || deviceId;
-    const finalDeviceName = decryptedProof.deviceName || deviceName || 'Mobil Cihaz';
+    // SYNC-02: NEVER fall back to unauthenticated outer body.deviceId
+    const finalDeviceId = decryptedProof.deviceId.trim().slice(0, 128);
+    const finalDeviceName = (typeof decryptedProof.deviceName === 'string' && decryptedProof.deviceName.trim())
+      ? decryptedProof.deviceName.trim().slice(0, 128)
+      : 'Mobil Cihaz';
     const savedRecord = this.pairingManager.addPairedDevice({
       deviceId: finalDeviceId,
       deviceName: finalDeviceName,
@@ -1191,6 +1336,10 @@ class EphemeralServer {
   }
 
   async _handleSyncRequest(body, res) {
+    if (!body || typeof body !== 'object') {
+      this._sendJson(res, 400, { error: 'Malformed sync packet' });
+      return;
+    }
     const { deviceId, nonce, ciphertext } = body;
     if (!deviceId || typeof nonce !== 'string' || typeof ciphertext !== 'string') {
       this._sendJson(res, 400, { error: 'Malformed sync packet' });
@@ -1198,12 +1347,11 @@ class EphemeralServer {
     }
 
     let pairKeyBuf = null;
-    let pendingKeyHexToFinalize = null;
     let matchedDeviceId = null;
     let decryptedPayload = null;
-    let hadKnownDeviceKeyFailure = false;
 
-    // 1. Check known confirmed paired devices by explicit deviceId / mobileDeviceId first
+    // SYNC-03: ONLY authenticate against confirmed pairedDevices (NO pendingPairings lookup!)
+    // 1. Check known confirmed paired devices by explicit mobileDeviceId / deviceId first
     const confirmedDevice = this.pairingManager.pairedDevices.find(
       d => (body.mobileDeviceId && d.deviceId === body.mobileDeviceId) ||
            (body.deviceId && d.deviceId === body.deviceId)
@@ -1216,46 +1364,13 @@ class EphemeralServer {
         matchedDeviceId = confirmedDevice.deviceId;
       } catch {
         candidateBuf.fill(0);
-        hadKnownDeviceKeyFailure = true;
       }
     }
 
-    // 2. If not found, check getDeviceKey
-    if (!pairKeyBuf) {
-      const candidateBuf = this.pairingManager.getDeviceKey(deviceId);
-      if (candidateBuf) {
-        try {
-          decryptedPayload = decryptLanPayload({ nonce, ciphertext }, candidateBuf);
-          pairKeyBuf = candidateBuf;
-          const hexStr = candidateBuf.toString('hex');
-          if (this.pairingManager.pendingPairings.has(hexStr)) {
-            pendingKeyHexToFinalize = hexStr;
-          }
-        } catch {
-          candidateBuf.fill(0);
-          hadKnownDeviceKeyFailure = true;
-        }
-      }
-    }
-
-    // 3. If still not found and pending pairings exist, test candidate pending keys (single decrypt)
-    if (!pairKeyBuf && this.pairingManager.pendingPairings.size > 0) {
-      for (const [keyHex] of this.pairingManager.pendingPairings.entries()) {
-        const candidateBuf = Buffer.from(keyHex, 'hex');
-        try {
-          decryptedPayload = decryptLanPayload({ nonce, ciphertext }, candidateBuf);
-          pairKeyBuf = candidateBuf;
-          pendingKeyHexToFinalize = keyHex;
-          break;
-        } catch {
-          candidateBuf.fill(0);
-        }
-      }
-    }
-
-    // 4. If still not found, check if a known paired device matches (single decrypt)
+    // 2. If not matched directly, try remaining confirmed pairedDevices
     if (!pairKeyBuf && this.pairingManager.pairedDevices.length > 0) {
       for (const d of this.pairingManager.pairedDevices) {
+        if (confirmedDevice && d.deviceId === confirmedDevice.deviceId) continue;
         const candidateBuf = Buffer.from(d.pairKeyHex, 'hex');
         try {
           decryptedPayload = decryptLanPayload({ nonce, ciphertext }, candidateBuf);
@@ -1268,12 +1383,9 @@ class EphemeralServer {
       }
     }
 
-    if (!pairKeyBuf || !decryptedPayload) {
-      if (hadKnownDeviceKeyFailure) {
-        this._sendJson(res, 403, { error: 'Authentication failed (wrong or forged key)' });
-      } else {
-        this._sendJson(res, 401, { error: 'Device not paired or unauthorized' });
-      }
+    // SYNC-05: Unify all /sync auth failures to HTTP 401 (eliminates 403-vs-401 deviceId oracle)
+    if (!pairKeyBuf || !decryptedPayload || typeof decryptedPayload !== 'object') {
+      this._sendJson(res, 401, { error: 'Unauthorized' });
       return;
     }
 
@@ -1303,30 +1415,6 @@ class EphemeralServer {
 
       this.usedNonces.add(nonce);
 
-      const mobileId = (body.mobileDeviceId && typeof body.mobileDeviceId === 'string')
-        ? body.mobileDeviceId
-        : (body.deviceId && typeof body.deviceId === 'string')
-          ? body.deviceId
-          : `mobile-${(pendingKeyHexToFinalize || crypto.randomBytes(6).toString('hex')).slice(0, 12)}`;
-
-      // If this was a pending pairing, officially finalize it now that authentication succeeded
-      if (pendingKeyHexToFinalize) {
-        const savedRecord = this.pairingManager.addPairedDevice({
-          deviceId: mobileId,
-          deviceName: body.deviceName || 'Mobil Cihaz',
-          pairKeyHex: pendingKeyHexToFinalize
-        });
-        matchedDeviceId = mobileId;
-        if (this.onDevicePaired) {
-          try {
-            this.onDevicePaired({
-              deviceId: savedRecord.deviceId,
-              deviceName: savedRecord.deviceName
-            });
-          } catch {}
-        }
-      }
-
       if (!Array.isArray(decryptedPayload.entries)) {
         this._sendJson(res, 400, { error: 'Decrypted payload must contain entries array' });
         return;
@@ -1342,7 +1430,7 @@ class EphemeralServer {
       await Promise.resolve(this.applyMergedEntries(mergedEntries, stats));
 
       // 4. Update device's lastSyncAt
-      this.pairingManager.updateDeviceLastSync(matchedDeviceId || mobileId);
+      this.pairingManager.updateDeviceLastSync(matchedDeviceId);
 
       // 5. Encrypt merged entries for client response with pairKey and cryptographic requestNonce binding
       const responsePayload = {
@@ -1385,6 +1473,7 @@ module.exports = {
 
   // Network & RFC1918
   isRFC1918OrLoopback,
+  isValidLanHostHeader,
   getLocalRFC1918Addresses,
 
   // Crypto Framing
@@ -1392,6 +1481,7 @@ module.exports = {
   decryptLanPayload,
 
   // Two-Way Merge (R3)
+  sanitizeCardBrand,
   normalizeEntry,
   mergeHistories,
   mergeVaultEntries,

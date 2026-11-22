@@ -41,7 +41,11 @@ const TEST_FILES = [
   'test_sync_v2_phase1.js',
   'test_sync_v2_phase2.js',
   'test_sync_v2_phase3.js',
-  'test_sync_v2_phase4.js'
+  'test_sync_v2_phase4.js',
+  'test_updater_sha256.js',
+  'test_change_master_password.js',
+  'test_local_isolation_hardening.js',
+  'test_security_audit_desktop_core.js'
 ];
 
 let totalPassedSuites = 0;

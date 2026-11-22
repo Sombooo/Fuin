@@ -1,8 +1,10 @@
-# FUIN SYNC PROTOCOL V2 — FINAL SPECIFICATION
+# FUIN SYNC PROTOCOL V2 — CONTAINER SPECIFICATION
 
 **Document Version:** 2.0.0  
-**Status:** Implementation-Ready  
+**Status:** Payload / Crypto Baseline (`sync-v2*.js`)  
 **Replaces:** SYNC_PROTOCOL V1
+
+> **Note on Current Architecture:** Optical QR codes are used strictly for one-time device pairing (`sync-lan.js`). Active cross-device synchronization runs two-way over your private Local Area Network (LAN P2P) using XChaCha20-Poly1305 encrypted packets and deterministic LWW/history merge (`sync-lan.js`). This specification documents the underlying V2 binary payload/crypto container primitives preserved in `sync-v2*.js`.
 
 Bu doküman, FUIN Sync V2 mimarisinin byte-level deterministik ve implementasyona hazır teknik spesifikasyonudur.
 V1 spesifikasyonundaki şu kritik mimari problemler bu versiyonda çözülmüştür:

@@ -225,39 +225,64 @@
       </div>
       
       <!-- settings view -->
-      <div id="view-settings" style="display:none;padding:16px 20px;background:var(--bg);overflow-y:auto;flex:1;min-height:0">
-        <div class="main-title" style="margin-bottom:14px" data-i18n="navSettings">AYARLAR</div>
-        
-        <div class="io-grid" style="grid-template-columns: 1fr;">
-          <div class="io-card">
-            <div class="io-title" data-i18n="settingAutoLockTitle">Otomatik Kilitleme</div>
-            <div class="io-sub" data-i18n="settingAutoLockSub">Hareketsizlik süresi dolduğunda veya ekran kilitlendiğinde kasanız otomatik kilitlenir.</div>
-            <div style="margin-top:10px;">
-              <select id="autoLockTimer" style="background:var(--paper);color:var(--text);border:1px solid var(--b);padding:8px 12px;border-radius:6px;font-size:13px;width:100%;cursor:pointer;outline:none;">
-                <option value="60" data-i18n="autoLockOpt1m">1 Dakika Hareketsizlikte</option>
-                <option value="300" data-i18n="autoLockOpt5m" selected>5 Dakika Hareketsizlikte</option>
-                <option value="900" data-i18n="autoLockOpt15m">15 Dakika Hareketsizlikte</option>
-                <option value="0" data-i18n="autoLockOptNever">Sadece Ekran Kilitlendiğinde</option>
-              </select>
+      <div id="view-settings" class="settings-view" style="display:none;">
+        <div class="main-title settings-page-title" data-i18n="navSettings">AYARLAR</div>
+
+        <!-- 1. VAULT & ACCESS -->
+        <div class="settings-section-title" data-i18n="settingVaultSectionTitle">KASA &amp; GÜVENLİK</div>
+        <div class="settings-stack">
+          <div class="io-card" id="autoLockCard">
+            <div class="settings-card-head-group">
+              <div class="io-title settings-card-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span data-i18n="settingAutoLockTitle">Otomatik Kilitleme</span>
+              </div>
+              <div class="io-sub" data-i18n="settingAutoLockSub">Hareketsizlik süresi dolduğunda veya ekran kilitlendiğinde kasanız otomatik kilitlenir.</div>
+            </div>
+            <select id="autoLockTimer" class="settings-select">
+              <option value="60" data-i18n="autoLockOpt1m">1 Dakika Hareketsizlikte</option>
+              <option value="300" data-i18n="autoLockOpt5m" selected>5 Dakika Hareketsizlikte</option>
+              <option value="900" data-i18n="autoLockOpt15m">15 Dakika Hareketsizlikte</option>
+              <option value="0" data-i18n="autoLockOptNever">Sadece Ekran Kilitlendiğinde</option>
+            </select>
+            <div class="settings-inline-status">
+              <svg class="settings-inline-status-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+              <div class="settings-inline-status-body">
+                <div class="settings-inline-title" data-i18n="settingClipboardTitle">Otomatik Pano Temizliği</div>
+                <div class="settings-inline-sub" data-i18n="settingClipboardSub">Kopyaladığınız şifreler <b style="color:var(--ac)">30 saniye</b> sonra panodan otomatik silinir.</div>
+              </div>
             </div>
           </div>
-          
-          <div class="io-card">
-            <div class="io-title" data-i18n="settingClipboardTitle">Otomatik Pano Temizliği</div>
-            <div class="io-sub" data-i18n="settingClipboardSub">Kopyaladığınız şifreler <b style="color:var(--ac)">30 saniye</b> sonra panodan otomatik silinir.</div>
+
+          <!-- Master Password Management Card -->
+          <div class="io-card" id="changePwSettingCard">
+            <div class="settings-card-head-group">
+              <div class="settings-card-header">
+                <div class="io-title settings-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <span data-i18n="settingChangePwTitle">Ana Şifre</span>
+                </div>
+              </div>
+              <div class="io-sub" data-i18n="settingChangePwSub">Kasanızı koruyan ana şifrenizi istediğiniz zaman güncelleyin. Mevcut kayıtlarınız ve kurtarma anahtarınız yeni şifrenizle otomatik olarak yeniden şifrelenir.</div>
+            </div>
+            <div class="settings-action-bar single-col">
+              <button class="btn-io pri" id="btnOpenChangePw" data-i18n="btnChangeMasterPw">Ana Şifreyi Değiştir</button>
+            </div>
           </div>
-          
+
           <!-- ADV-03: Recovery Key Management Card -->
           <div class="io-card" id="recoverySettingCard">
-            <div class="settings-card-header">
-              <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-                <span data-i18n="settingRecoveryTitle">Kurtarma Anahtarı</span>
+            <div class="settings-card-head-group">
+              <div class="settings-card-header">
+                <div class="io-title settings-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                  <span data-i18n="settingRecoveryTitle">Kurtarma Anahtarı</span>
+                </div>
+                <span id="recoveryStatusBadge" class="settings-status-pill"></span>
               </div>
-              <span id="recoveryStatusBadge" class="settings-status-pill"></span>
+              <div class="io-sub" id="recoverySettingSub" data-i18n="settingRecoverySub">Ana şifrenizi unutmanız durumunda kasanızı kurtarmanızı sağlar. Anahtarınızı istediğiniz zaman test edebilir veya yenileyebilirsiniz.</div>
             </div>
-            <div class="io-sub" id="recoverySettingSub" data-i18n="settingRecoverySub">Ana şifrenizi unutmanız durumunda kasanızı kurtarmanızı sağlar. Anahtarınızı istediğiniz zaman test edebilir veya yenileyebilirsiniz.</div>
-            <div id="recoverySettingWarning" style="display:none; margin-top:4px; padding:8px 12px; background:rgba(176,112,32,0.1); border:1px solid rgba(176,112,32,0.25); border-radius:4px; font-size:11px; color:var(--amber); line-height:1.4;">
+            <div id="recoverySettingWarning" class="settings-warning-note">
               <span data-i18n="recoveryLegacyWarnText">⚠ Eski Kurtarma Anahtarı: Kasanızı başka bir bilgisayarda da kurtarabilmek için kurtarma anahtarınızı yenileyin.</span>
             </div>
             <div class="settings-action-bar">
@@ -266,12 +291,17 @@
               <button class="btn-io" id="btnDownloadEmergencyKit" data-i18n="btnEmergencyKit">Acil Durum Kiti İndir (.html)</button>
             </div>
           </div>
-          
+
           <div class="io-card" id="touchIdSettingCard" style="display:none;">
-            <div class="io-title" data-i18n="settingTouchIdTitle">Touch ID ile Giriş</div>
-            <div class="io-sub" data-i18n="settingTouchIdSub">Ana şifrenizi Touch ID ile otomatik kaydetmek ve kullanmak için etkinleştirin.</div>
-            <div style="margin-top:10px; display:flex; align-items:center;">
-              <label class="toggle">
+            <div class="settings-card-header settings-card-header-nowrap">
+              <div class="settings-card-head-group">
+                <div class="io-title settings-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04.054-.09A13.916 13.916 0 0 0 8 11a4 4 0 1 1 8 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0 0 15.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 0 0 8 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"/></svg>
+                  <span data-i18n="settingTouchIdTitle">Touch ID ile Giriş</span>
+                </div>
+                <div class="io-sub" data-i18n="settingTouchIdSub">Ana şifrenizi Touch ID ile otomatik kaydetmek ve kullanmak için etkinleştirin.</div>
+              </div>
+              <label class="toggle" style="flex-shrink:0;">
                 <input type="checkbox" id="touchIdSettingToggle">
                 <span class="slider"></span>
               </label>
@@ -279,95 +309,44 @@
           </div>
         </div>
 
-        <div class="main-title" style="margin-top:28px; margin-bottom:14px;" data-i18n="sysTitle">SİSTEM & GÜNCELLEMELER</div>
-        <div class="io-grid" style="grid-template-columns: 1fr;">
-          <div class="io-card">
-            <div class="settings-card-header">
-              <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <span data-i18n="sysBackupTitle">Otomatik Yedekler & Kurtarma</span>
-              </div>
-              <div id="backupSummaryBadge" class="settings-status-pill"></div>
-            </div>
-            <div class="io-sub" id="sysBackupSub" data-i18n="sysBackupSub">Sunucusuz koruma: Her değişiklikte alınan şifreli yedekleri görün, anlık yedek alın veya eski bir yedeğe dönün.</div>
-            <div class="settings-action-bar">
-              <button class="btn-io pri" id="btnOpenBackupHistory" data-i18n="btnOpenBackupHistory">Yedek Geçmişi & Geri Yükle</button>
-              <button class="btn-io" id="btnCreateBackupNow" data-i18n="btnCreateBackupNow">Şimdi Yedek Al</button>
-              <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
-            </div>
-          </div>
-
-          <div class="io-card">
-            <div class="settings-card-header">
-              <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                <span data-i18n="sysUpdateCheckTitle">Sürüm Kontrolü</span>
-              </div>
-              <span id="updateMsg" style="font-family:var(--mono);font-size:12px;color:var(--text);display:flex;align-items:center;flex-wrap:wrap;gap:6px;"></span>
-            </div>
-            <div class="io-sub" id="sysUpdateCheckSub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.</div>
-            <div style="padding:8px 12px;background:var(--paper);border:1px solid var(--b);border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px;">
-              <div>
-                <div style="font-size:12px;font-weight:500;color:var(--text);" data-i18n="sysAutoUpdateCheckTitle">Açılışta Otomatik Denetle</div>
-                <div style="font-size:11px;color:var(--mu);" data-i18n="sysAutoUpdateCheckSub">Yeni sürüm olup olmadığını kasa açıldığında sessizce denetler.</div>
-              </div>
-              <input type="checkbox" id="toggleAutoUpdateCheck" style="cursor:pointer;accent-color:var(--ac);width:16px;height:16px;flex-shrink:0;">
-            </div>
-            <div class="settings-action-bar single-col">
-              <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
-            </div>
-          </div>
-
-          <div class="io-card">
-            <div class="settings-card-header">
-              <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                <span data-i18n="whatsNewTitle">Neler Yeni?</span>
-              </div>
-              <span class="settings-status-pill" style="color:var(--ac)" data-i18n="whatsNewLatestBadge">GÜNCEL</span>
-            </div>
-            <div class="io-sub" data-i18n="whatsNewSub">Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.</div>
-            <div class="settings-action-bar single-col">
-              <button class="btn-io" id="btnOpenWhatsNew" data-i18n="whatsNewBtn">Yama Notlarını Gör</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="main-title" style="margin-top:28px; margin-bottom:14px;" data-i18n="settingConnDevicesTitle">CİHAZLAR & EKLENTİLER</div>
-        <div class="io-grid" style="grid-template-columns: 1fr;">
-          <!-- Paired Mobile Devices Card (R1) -->
+        <!-- 2. DEVICES & BROWSER -->
+        <div class="settings-section-title" data-i18n="settingConnDevicesTitle">CİHAZLAR &amp; TARAYICI</div>
+        <div class="settings-stack">
+          <!-- Paired Mobile Devices & LAN Sync Card (R1) -->
           <div class="io-card" id="pairedDevicesCard">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div>
-                <div class="io-title" data-i18n="settingPairedDevicesTitle">Eşleşmiş Cihazlar</div>
-                <div class="io-sub" data-i18n="settingPairedDevicesSub">Yerel ağda şifreli eşitleme yapabilecek yetkilendirilmiş mobil cihazlar.</div>
+            <div class="settings-card-head-group">
+              <div class="io-title settings-card-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                <span data-i18n="settingPairedDevicesTitle">Eşleşmiş Cihazlar</span>
               </div>
-              <button class="btn-io pri sync-pair-btn" id="btnOpenPairModal" style="white-space:nowrap;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;display:inline-block;">
-                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-                  <line x1="12" y1="18" x2="12.01" y2="18"/>
-                </svg>
+              <div class="io-sub" data-i18n="settingPairedDevicesSub">Yerel ağda şifreli eşitleme yapabilecek yetkilendirilmiş mobil cihazlar.</div>
+            </div>
+            <div id="pairedDevicesList" class="paired-devices-list">
+              <!-- Paired devices populated by app.js -->
+            </div>
+            <div class="settings-action-bar two-col">
+              <button class="btn-io pri sync-pair-btn" id="btnOpenPairModal">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                 <span data-i18n="btnPairPhone">Telefon Eşle</span>
               </button>
-            </div>
-            <div id="pairedDevicesList" style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
-              <!-- Paired devices populated by app.js -->
+              <button class="btn-io" id="btnStartLanSyncSettings">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                <span data-i18n="btnStartLanSync">Yerel Ağda Eşitle</span>
+              </button>
             </div>
           </div>
 
           <!-- Browser Autofill Extension Card -->
           <div class="io-card" id="browserExtCard">
-            <div class="settings-card-header">
-              <div>
-                <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
-                    <circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/>
-                  </svg>
-                  <span data-i18n="settingExtTitle">Tarayıcı Eklentisi & Autofill</span>
+            <div class="settings-card-head-group">
+              <div class="settings-card-header">
+                <div class="io-title settings-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/></svg>
+                  <span data-i18n="settingExtTitle">Tarayıcı Eklentisi &amp; Autofill</span>
                 </div>
-                <div class="io-sub" data-i18n="settingExtSub">Chrome, Brave, Edge ve Firefox eklentileri ek kurulum gerektirmeden masaüstü kasanızla otomatik eşleşir.</div>
+                <span id="extStatusBadge" class="settings-status-pill" data-i18n="extStatusActive">Köprü Aktif</span>
               </div>
-              <span id="extStatusBadge" class="settings-status-pill" data-i18n="extStatusActive">Köprü Aktif</span>
+              <div class="io-sub" data-i18n="settingExtSub">Chrome, Brave, Edge ve Firefox eklentileri ek kurulum gerektirmeden masaüstü kasanızla otomatik eşleşir.</div>
             </div>
 
             <div class="ext-browsers-box">
@@ -389,30 +368,120 @@
               </div>
             </div>
 
-            <div style="margin-top:10px;padding:10px 12px;background:var(--paper);border:1px solid var(--b);border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div class="settings-toggle-row">
               <div>
-                <div style="font-size:12px;font-weight:500;color:var(--text);" data-i18n="extPromptApprovalTitle">Şifre Doldururken Onay İste</div>
-                <div style="font-size:11px;color:var(--mu);" data-i18n="extPromptApprovalSub">Kapalıyken (önerilen) anında ve kesintisiz doldurur; açıkken her doldurmada masaüstünden onay sorar.</div>
+                <div class="settings-toggle-title" data-i18n="extPromptApprovalTitle">Şifre Doldururken Onay İste</div>
+                <div class="settings-toggle-sub" data-i18n="extPromptApprovalSub">Kapalıyken (önerilen) anında ve kesintisiz doldurur; açıkken her doldurmada masaüstünden onay sorar.</div>
               </div>
-              <input type="checkbox" id="toggleExtPromptApproval" style="cursor:pointer;accent-color:var(--ac);width:16px;height:16px;flex-shrink:0;">
+              <input type="checkbox" id="toggleExtPromptApproval" class="settings-checkbox">
             </div>
           </div>
         </div>
 
-        <div class="main-title" style="margin-top:28px; margin-bottom:14px;" data-i18n="settingSecuritySectionTitle">GÜVENLİK & KRİPTOGRAFİ</div>
-        <div class="io-grid" style="grid-template-columns: 1fr;">
-          <!-- Security Info (placed at the bottom of Settings) -->
-          <div class="io-card" id="securityInfoCard">
-            <div class="settings-card-header">
-              <div class="io-title" style="display:flex;align-items:center;gap:6px;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;display:inline-block;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                <span data-i18n="navSecurity">Güvenlik Bilgisi</span>
+        <!-- 3. BACKUPS & SYSTEM -->
+        <div class="settings-section-title" data-i18n="sysTitle">YEDEKLEME &amp; SİSTEM</div>
+        <div class="settings-stack">
+          <div class="io-card">
+            <div class="settings-card-head-group">
+              <div class="settings-card-header">
+                <div class="io-title settings-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span data-i18n="sysBackupTitle">Otomatik Yedekler &amp; Kurtarma</span>
+                </div>
+                <div id="backupSummaryBadge" class="settings-status-pill"></div>
               </div>
+              <div class="io-sub" id="sysBackupSub" data-i18n="sysBackupSub">Sunucusuz koruma: Her değişiklikte alınan şifreli yedekleri görün, anlık yedek alın veya eski bir yedeğe dönün.</div>
             </div>
-            <div class="io-sub" data-i18n="settingSecCardSub">Argon2id KDF, AES-256-GCM ve sıfır-bilgi kanıtı detaylarını görüntüleyin.</div>
+            <div class="settings-action-bar two-col">
+              <button class="btn-io pri" id="btnOpenBackupHistory" data-i18n="btnOpenBackupHistory">Yedek Geçmişi &amp; Geri Yükle</button>
+              <button class="btn-io" id="btnCreateBackupNow" data-i18n="btnCreateBackupNow">Şimdi Yedek Al</button>
+              <button class="btn-io" id="btnGoEncryptedBackup" data-i18n="btnPortableFuinBackup">Taşınabilir .fuin Yedek →</button>
+              <button class="btn-io" id="btnBackupFolder" data-i18n="sysBackupBtn">Klasörü Aç</button>
+            </div>
+          </div>
+
+          <div class="io-card">
+            <div class="settings-card-head-group">
+              <div class="settings-card-header">
+                <div class="io-title settings-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  <span data-i18n="sysUpdateCheckTitle">Sürüm Kontrolü</span>
+                </div>
+                <span id="updateMsg" class="settings-update-msg"></span>
+              </div>
+              <div class="io-sub" id="sysUpdateCheckSub" data-i18n="sysUpdateCheckSub">Fuin'in yeni bir sürümü olup olmadığını GitHub üzerinden kontrol edin.</div>
+            </div>
+            <div class="settings-toggle-row">
+              <div>
+                <div class="settings-toggle-title" data-i18n="sysAutoUpdateCheckTitle">Açılışta Otomatik Denetle</div>
+                <div class="settings-toggle-sub" data-i18n="sysAutoUpdateCheckSub">Yeni sürüm olup olmadığını kasa açıldığında sessizce denetler.</div>
+              </div>
+              <input type="checkbox" id="toggleAutoUpdateCheck" class="settings-checkbox">
+            </div>
             <div class="settings-action-bar single-col">
-              <button class="btn-io" id="btnGoToSecurity" data-i18n="btnView">Görüntüle →</button>
+              <button class="btn-io" id="updateBtn" data-i18n="sysUpdateBtn">Şimdi Denetle</button>
             </div>
+          </div>
+
+          <div class="io-card">
+            <div class="settings-card-head-group">
+              <div class="settings-card-header">
+                <div class="io-title settings-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span data-i18n="whatsNewTitle">Neler Yeni?</span>
+                </div>
+                <span class="settings-status-pill" style="color:var(--ac)" data-i18n="whatsNewLatestBadge">GÜNCEL</span>
+              </div>
+              <div class="io-sub" data-i18n="whatsNewSub">Son sürümlerdeki güncellemeleri, özellikleri ve güvenlik iyileştirmelerini görüntüleyin.</div>
+            </div>
+            <div class="settings-action-bar single-col">
+              <button class="btn-io" id="btnOpenWhatsNew" data-i18n="whatsNewBtn">Yama Notlarını Gör</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. CRYPTOGRAPHY & ARCHITECTURE -->
+        <div class="settings-section-title" data-i18n="settingSecuritySectionTitle">KRİPTOGRAFİ &amp; MİMARİ</div>
+        <div class="settings-stack">
+          <div class="io-card settings-quiet-card" id="securityInfoCard">
+            <details class="quiet-details" id="securityQuietDetails">
+              <summary class="quiet-details-summary">
+                <div class="quiet-details-head">
+                  <div class="io-title settings-card-title">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span data-i18n="navSecurity">Güvenlik Bilgisi</span>
+                  </div>
+                  <span class="quiet-spec-summary" id="securityCryptoSummary" data-i18n="settingCryptoSummary">Argon2id · AES-256-GCM · Sıfır Bulut</span>
+                </div>
+                <span class="quiet-details-chevron" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+              </summary>
+              <div class="quiet-details-body">
+                <div class="io-sub" data-i18n="settingSecCardSub">Argon2id KDF, AES-256-GCM ve sıfır-bilgi kanıtı detaylarını görüntüleyin.</div>
+                <div class="quiet-spec-grid">
+                  <div class="quiet-spec-item">
+                    <span class="quiet-spec-label" data-i18n="secKdf">Şifreleme Motoru</span>
+                    <span class="quiet-spec-val" id="quietSpecKdf">Argon2id</span>
+                  </div>
+                  <div class="quiet-spec-item">
+                    <span class="quiet-spec-label" data-i18n="secEncryption">Kasa Şifreleme</span>
+                    <span class="quiet-spec-val">AES-256-GCM</span>
+                  </div>
+                  <div class="quiet-spec-item">
+                    <span class="quiet-spec-label" data-i18n="secLanSync">Wi-Fi Eşitleme</span>
+                    <span class="quiet-spec-val" data-i18n="secLanSyncVal">XChaCha20</span>
+                  </div>
+                  <div class="quiet-spec-item">
+                    <span class="quiet-spec-label" data-i18n="secRamZero">Bellek Temizliği</span>
+                    <span class="quiet-spec-val" data-i18n="secRamZeroVal">Aktif</span>
+                  </div>
+                </div>
+                <div class="settings-action-bar single-col">
+                  <button class="btn-io" id="btnGoToSecurity" data-i18n="btnView">Görüntüle →</button>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </div>
@@ -1115,6 +1184,45 @@
     <div class="modal-footer modal-footer-split">
       <button class="btn-cancel" id="btnCancelVerifyRecovery" data-i18n="btnClose">Kapat</button>
       <button class="btn-save" id="btnConfirmVerifyRecovery" data-i18n="verifyRecoveryBtn">Anahtarı Test Et</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE MASTER PASSWORD MODAL -->
+<div class="overlay" id="changePwOverlay">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="changePwModalTitle">ANA ŞİFREYİ DEĞİŞTİR</div>
+      <button class="modal-close" id="btnCloseChangePw" type="button">✕</button>
+    </div>
+    <div class="modal-body" style="gap:16px">
+      <div class="verify-modal-desc" data-i18n="changePwModalDesc">Mevcut ana şifrenizi doğrulayın ve yeni bir ana şifre belirleyin. Tüm kasa kayıtlarınız, Touch ID kaydınız ve kurtarma anahtarınız güvenle güncellenir.</div>
+      <div class="fg" style="gap:8px">
+        <label for="curPwInp" data-i18n="changePwCurrentLabel">Mevcut Ana Şifre</label>
+        <div class="inp-wrap">
+          <input class="fi" id="curPwInp" type="password" data-i18n-placeholder="changePwCurrentPh" placeholder="mevcut ana şifreniz..." autocomplete="off">
+          <button class="eye-btn" id="btnEyeCurPw" type="button" data-i18n-title="showPwTitle" title="Göster">●</button>
+        </div>
+      </div>
+      <div class="fg" style="gap:8px">
+        <label for="newMasterPwInp" data-i18n="changePwNewLabel">Yeni Ana Şifre</label>
+        <div class="inp-wrap">
+          <input class="fi" id="newMasterPwInp" type="password" data-i18n-placeholder="changePwNewPh" placeholder="en az 8 karakter..." autocomplete="off">
+          <button class="eye-btn" id="btnEyeNewMasterPw" type="button" data-i18n-title="showPwTitle" title="Göster">●</button>
+        </div>
+      </div>
+      <div class="fg" style="gap:8px">
+        <label for="newMasterPwConfirmInp" data-i18n="changePwConfirmLabel">Yeni Ana Şifre (Tekrar)</label>
+        <div class="inp-wrap">
+          <input class="fi" id="newMasterPwConfirmInp" type="password" data-i18n-placeholder="changePwConfirmPh" placeholder="yeni şifrenizi tekrar girin..." autocomplete="off">
+          <button class="eye-btn" id="btnEyeConfirmMasterPw" type="button" data-i18n-title="showPwTitle" title="Göster">●</button>
+        </div>
+      </div>
+      <div class="forgot-msg" id="changePwMsg" style="display:none"></div>
+    </div>
+    <div class="modal-footer modal-footer-split">
+      <button class="btn-cancel" id="btnCancelChangePw" type="button" data-i18n="btnCancel">İptal</button>
+      <button class="btn-save" id="btnConfirmChangePw" type="button" data-i18n="btnSaveNewMasterPw">Şifreyi Güncelle</button>
     </div>
   </div>
 </div>

@@ -50,36 +50,59 @@
     });
   }
 
-  const MULTI_TENANT_HOSTS = new Set([
+  const MULTI_TENANT_SUFFIXES = new Set([
     'github.io', 'pages.dev', 'vercel.app', 'netlify.app', 'gitlab.io',
     'herokuapp.com', 'firebaseapp.com', 'fly.dev', 'render.com', 'onrender.com',
     'workers.dev', 'web.app', 'azurewebsites.net', 'cloudfront.net', 'railway.app',
     'up.railway.app', 'deno.dev', 'appspot.com', 'surge.sh', 'amplifyapp.com',
     'elasticbeanstalk.com', 's3.amazonaws.com', 'fastly.net', 'b-cdn.net',
     'ngrok-free.app', 'ngrok.io', 'glitch.me', 'myshopify.com',
+    '000webhostapp.com', 'pipedream.net', 'pantheonsite.io',
     'wixsite.com', 'ghost.io', 'substack.com', 'azureedge.net', 'trafficmanager.net',
-    'blob.core.windows.net', 'blogspot.com', 'wordpress.com'
+    'blob.core.windows.net', 'wordpress.com', 'blogspot.com', 'tumblr.com',
+    'itch.io', 'notion.site', 'webflow.io', 'replit.app', 'run.app',
+    'hf.space', 'trycloudflare.com', 'pythonanywhere.com'
   ]);
-  const TWO_PART_TLDS = new Set([
-    'com.tr', 'org.tr', 'net.tr', 'edu.tr', 'gov.tr', 'gen.tr',
-    'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk',
-    'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp',
-    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
-    'co.nz', 'org.nz', 'net.nz',
-    'com.br', 'net.br', 'org.br',
-    'co.za', 'org.za',
-    'com.cn', 'net.cn', 'org.cn', 'gov.cn',
-    'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in',
-    'com.de', 'co.ca', 'com.sg', 'com.hk', 'com.mx', 'com.ar'
+
+  const COMPOUND_CCTLD_SLDS = new Set([
+    'co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'or', 'ne', 'go', 'gob',
+    'mil', 'biz', 'info', 'gen', 'web', 'nom', 'bel', 'pol', 'k12', 'av',
+    'dr', 'bbs', 'tsk', 'kep', 'me', 'firm', 'ind'
   ]);
 
   function normExtHost(h) {
-    return String(h || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split(':')[0].trim().replace(/\.$/, '');
+    let s = String(h || '').trim().toLowerCase();
+    if (!s) return '';
+    if (!/^https?:\/\//.test(s)) s = 'https://' + s;
+    try {
+      return new URL(s).hostname.replace(/^www\./, '').replace(/\.+$/, '');
+    } catch {
+      const raw = String(h || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+      if (raw.startsWith('[')) {
+        const endBracket = raw.indexOf(']');
+        return (endBracket !== -1 ? raw.slice(0, endBracket + 1) : raw).replace(/\.+$/, '');
+      }
+      if ((raw.match(/:/g) || []).length > 1) return raw.replace(/\.+$/, '');
+      return raw.split(':')[0].trim().replace(/\.+$/, '');
+    }
+  }
+
+  function isIpLiteralHostExt(h) {
+    if (!h) return false;
+    return /^(\d{1,3}\.){3}\d{1,3}$/.test(h) || h.includes(':') || h.startsWith('[');
+  }
+
+  function isCompoundCcTldSuffixExt(h) {
+    const parts = String(h || '').split('.');
+    if (parts.length !== 2) return false;
+    return COMPOUND_CCTLD_SLDS.has(parts[0]) && /^[a-z]{2}$/.test(parts[1]);
   }
 
   function isMultiTenantHostExt(h) {
-    for (const s of MULTI_TENANT_HOSTS) {
-      if (h === s || h.endsWith('.' + s)) return true;
+    if (!h) return false;
+    if (MULTI_TENANT_SUFFIXES.has(h)) return true;
+    for (const s of MULTI_TENANT_SUFFIXES) {
+      if (h.endsWith('.' + s)) return true;
     }
     return false;
   }
@@ -87,12 +110,12 @@
   function getBaseSiteExt(h) {
     const clean = normExtHost(h);
     if (!clean) return '';
-    if (clean === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(clean) || clean.includes(':')) return clean;
+    if (clean === 'localhost' || isIpLiteralHostExt(clean)) return clean;
     if (isMultiTenantHostExt(clean)) return clean;
     const parts = clean.split('.');
     if (parts.length <= 2) return clean;
     const lastTwo = parts.slice(-2).join('.');
-    if (TWO_PART_TLDS.has(lastTwo) && parts.length >= 3) return parts.slice(-3).join('.');
+    if (isCompoundCcTldSuffixExt(lastTwo) && parts.length >= 3) return parts.slice(-3).join('.');
     return lastTwo;
   }
 
@@ -101,7 +124,9 @@
     const b = normExtHost(domB);
     if (!a || !b) return false;
     if (a === b) return true;
+    if (isIpLiteralHostExt(a) || isIpLiteralHostExt(b)) return false;
     if (isMultiTenantHostExt(a) || isMultiTenantHostExt(b)) return false;
+    if (isCompoundCcTldSuffixExt(a) || isCompoundCcTldSuffixExt(b)) return false;
     return getBaseSiteExt(a) === getBaseSiteExt(b);
   }
 
@@ -190,9 +215,23 @@
   }
 
   function isVisibleInput(el) {
-    if (!el || el.disabled || el.readOnly || el.type === 'hidden') return false;
-    const rect = el.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
+    if (!el || el.disabled || el.readOnly || el.hidden || el.type === 'hidden') return false;
+    if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+      try {
+        const cs = window.getComputedStyle(el);
+        if (cs) {
+          if (cs.display === 'none' || cs.visibility === 'hidden' || cs.visibility === 'collapse') return false;
+          const op = parseFloat(cs.opacity);
+          if (!Number.isNaN(op) && op <= 0.05) return false;
+        }
+      } catch {}
+    }
+    const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+    if (!rect) return false;
+    if (!(rect.width > 1 && rect.height > 1)) return false;
+    if (typeof rect.right === 'number' && rect.right <= 0) return false;
+    if (typeof rect.bottom === 'number' && rect.bottom <= 0) return false;
+    return true;
   }
 
   function findLoginForms() {
@@ -441,32 +480,73 @@
     try { el.dispatchEvent(new Event('blur', { bubbles: true })); } catch {}
   }
 
+  function findAssociatedVisiblePassword(targetField, closestForm) {
+    if (targetField && targetField.type === 'password') {
+      return isVisibleInput(targetField) ? targetField : null;
+    }
+    if (closestForm) {
+      const formPws = Array.from(closestForm.querySelectorAll('input[type="password"]')).filter(isVisibleInput);
+      return formPws[0] || null;
+    }
+    if (!targetField) return null;
+    let cur = targetField.parentElement;
+    for (let depth = 0; cur && depth < 5 && cur !== document.body && cur !== document.documentElement; depth++) {
+      if (typeof cur.querySelectorAll === 'function') {
+        const pws = Array.from(cur.querySelectorAll('input[type="password"]')).filter(isVisibleInput);
+        if (pws.length > 0) return pws[0];
+      }
+      cur = cur.parentElement;
+    }
+    if (targetField.parentElement === document.body) {
+      const directPws = Array.from(document.body.children || []).filter(
+        el => el.tagName === 'INPUT' && el.type === 'password' && isVisibleInput(el)
+      );
+      if (directPws.length === 1) return directPws[0];
+    }
+    return null;
+  }
+
   function fillForm(targetField, creds) {
     if (!creds) return;
-    const form = targetField?.closest?.('form') || document;
+    const closestForm = targetField?.closest?.('form') || null;
 
-    // 1. Kullanıcı adı alanlarını bul ve doldur
-    const userField = targetField ? findUsernameField(targetField) : null;
-    const allUsers = Array.from(form.querySelectorAll(
-      'input[type="text"], input[type="email"], input[type="tel"], input[autocomplete*="user"], input[autocomplete*="email"], input[name*="user"], input[name*="login"], input[name*="email"], input[id*="user"], input[id*="login"], input[id*="email"], input:not([type])'
-    )).filter(c => c.type !== 'password' && c.type !== 'checkbox' && c.type !== 'radio' && c.type !== 'submit');
-
-    const visibleUsers = allUsers.filter(isVisibleInput);
-    if (visibleUsers.length > 0) {
-      visibleUsers.forEach(u => setFieldValue(u, creds.username));
-    } else if (userField) {
-      setFieldValue(userField, creds.username);
+    // 1. Yalnızca görünür ve ilişkili tek bir kullanıcı adı alanını doldur (belge geneline püskürtme YOK)
+    let targetUserField = null;
+    if (targetField && targetField.type !== 'password' && isVisibleInput(targetField)) {
+      targetUserField = targetField;
+    } else if (targetField) {
+      const candidateUser = findUsernameField(targetField);
+      if (candidateUser && isVisibleInput(candidateUser)) {
+        if (closestForm) {
+          if (closestForm.contains(candidateUser)) targetUserField = candidateUser;
+        } else {
+          let sharedContainer = false;
+          let cur = targetField.parentElement;
+          for (let depth = 0; cur && depth < 5 && cur !== document.body && cur !== document.documentElement; depth++) {
+            if (typeof cur.contains === 'function' && cur.contains(candidateUser)) {
+              sharedContainer = true;
+              break;
+            }
+            cur = cur.parentElement;
+          }
+          if (!sharedContainer && targetField.parentElement && candidateUser.parentElement === targetField.parentElement) {
+            const meta = ((candidateUser.name || '') + ' ' + (candidateUser.id || '') + ' ' + (candidateUser.getAttribute?.('autocomplete') || '') + ' ' + (candidateUser.placeholder || '') + ' ' + (candidateUser.getAttribute?.('aria-label') || '')).toLowerCase();
+            if (candidateUser.type === 'email' || idNameRegex.test(meta)) {
+              sharedContainer = true;
+            }
+          }
+          if (sharedContainer) targetUserField = candidateUser;
+        }
+      }
+    }
+    if (targetUserField && creds.username !== undefined && creds.username !== null && creds.username !== '') {
+      setFieldValue(targetUserField, creds.username);
     }
 
-    // 2. Şifre alanlarını bul ve doldur
-    const allPws = Array.from(form.querySelectorAll('input[type="password"]'));
-    const visiblePws = allPws.filter(isVisibleInput);
-    if (visiblePws.length > 0) {
-      visiblePws.forEach(p => setFieldValue(p, creds.password));
-    } else if (targetField && targetField.type === 'password') {
-      setFieldValue(targetField, creds.password);
-    } else if (allPws.length > 0) {
-      allPws.forEach(p => setFieldValue(p, creds.password));
+    // 2. Yalnızca görünür ve ilişkili tek bir şifre alanını doldur (EXT-02: gizli input fallback'i YOK)
+    const targetPwField = findAssociatedVisiblePassword(targetField, closestForm);
+    if (targetPwField && isVisibleInput(targetPwField) && creds.password !== undefined && creds.password !== null) {
+      setFieldValue(targetPwField, creds.password);
     }
   }
 
@@ -539,7 +619,8 @@
     const visibleUser = allInputs.find(isVisibleInput);
     if (visibleUser) return visibleUser;
 
-    return allPws[0] || null;
+    // EXT-02: Asla gizli (görünmeyen) şifre alanlarına geri düşme
+    return null;
   }
 
   function triggerFill() {
@@ -617,6 +698,9 @@
     if (activeSaveHost && !activeSaveHost.isConnected && document.body) {
       try { document.body.appendChild(activeSaveHost); } catch {}
     }
+    if (activeSaveHost && activeSaveHost.isConnected) {
+      enforceSaveHostStyles(activeSaveHost);
+    }
     if (_passwordDirty && _dirtyPasswordInputs.size > 0 && (Date.now() - _lastTrustedActionAt < 10000)) {
       let detachedFound = false;
       for (const el of Array.from(_dirtyPasswordInputs)) {
@@ -679,7 +763,10 @@
         _dirtyPasswordInputs.add(el);
       } else {
         _dirtyPasswordInputs.delete(el);
-        if (_dirtyPasswordInputs.size === 0) _passwordDirty = false;
+        if (_dirtyPasswordInputs.size === 0) {
+          _passwordDirty = false;
+          _lastTypedPassword = '';
+        }
       }
       const uField = findUsernameField(el);
       if (uField && uField.value && uField.value.trim()) {
@@ -725,8 +812,14 @@
   }
 
   function captureFormCredentials(contextEl) {
+    // EXT-03: Yalnızca kullanıcının güvenilir klavye/input olayıyla yazdığı şifre alanlarını yakala.
+    // Önceden doldurulmuş (untyped pre-filled) veya gizli şifre tuzaklarını reddet.
+    if (!_passwordDirty || (_dirtyPasswordInputs.size === 0 && !_lastTypedPassword)) {
+      return null;
+    }
+
     const pwCandidates = Array.from(document.querySelectorAll('input')).filter(
-      el => el.type === 'password' || _knownPasswordInputs.has(el)
+      el => (el.type === 'password' || _knownPasswordInputs.has(el)) && _dirtyPasswordInputs.has(el)
     );
     const scopeForm = contextEl && contextEl.closest ? contextEl.closest('form') : null;
     const scopedPws = scopeForm ? pwCandidates.filter(f => scopeForm.contains(f)) : [];
@@ -741,7 +834,7 @@
 
     const password = (filledPw && filledPw.value)
       ? filledPw.value
-      : (_passwordDirty ? _lastTypedPassword : '');
+      : (_passwordDirty && _dirtyPasswordInputs.size === 0 ? _lastTypedPassword : '');
     if (!password || password.length < 2) return null;
 
     let username = '';
@@ -878,6 +971,55 @@
     } catch (err) {}
   }
 
+  function enforceSaveHostStyles(host) {
+    if (!host || !host.style) return;
+    const criticalStyles = [
+      ['position', 'fixed'],
+      ['top', '16px'],
+      ['right', '16px'],
+      ['display', 'block'],
+      ['opacity', '1'],
+      ['visibility', 'visible'],
+      ['pointer-events', 'auto'],
+      ['z-index', '2147483647'],
+      ['transform', 'none'],
+      ['clip-path', 'none'],
+      ['filter', 'none']
+    ];
+    if (typeof host.style.setProperty === 'function') {
+      const canInspect = typeof host.style.getPropertyValue === 'function' && typeof host.style.getPropertyPriority === 'function';
+      for (const [prop, val] of criticalStyles) {
+        if (!canInspect || host.style.getPropertyValue(prop) !== val || host.style.getPropertyPriority(prop) !== 'important') {
+          host.style.setProperty(prop, val, 'important');
+        }
+      }
+    } else {
+      for (const [prop, val] of criticalStyles) {
+        const camel = prop.replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+        host.style[camel] = val;
+      }
+      host.style.cssText = criticalStyles.map(([p, v]) => `${p}:${v}!important`).join(';');
+    }
+  }
+
+  function isSavePromptVisibleAndUnobstructed(host) {
+    if (!host || !host.isConnected || host.hidden) return false;
+    if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+      try {
+        const cs = window.getComputedStyle(host);
+        if (!cs) return false;
+        const op = parseFloat(cs.opacity);
+        if (Number.isNaN(op) || op < 0.99) return false;
+        if (cs.visibility !== 'visible') return false;
+        if (cs.display === 'none') return false;
+        if (cs.pointerEvents === 'none') return false;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
+
   function showSavePrompt(candidate, result) {
     if (!candidate || !candidate.password) return;
     if (candidate.domain && !isSameSiteDomain(location.hostname, candidate.domain)) return;
@@ -895,13 +1037,7 @@
     }
 
     const host = document.createElement('fuin-save-prompt');
-    Object.assign(host.style, {
-      position: 'fixed',
-      top: '16px',
-      right: '16px',
-      zIndex: '2147483647',
-      pointerEvents: 'auto'
-    });
+    enforceSaveHostStyles(host);
     const shadow = host.attachShadow({ mode: 'closed' });
 
     const card = document.createElement('div');
@@ -1167,7 +1303,7 @@
       textUnderlineOffset: '2px'
     });
     neverBtn.addEventListener('click', (e) => {
-      if (!e.isTrusted) return;
+      if (!e.isTrusted || !isSavePromptVisibleAndUnobstructed(host)) return;
       _domainExcluded = true;
       markLocalDismissed(userInput.value.trim(), pwInput.value || candidate.password);
       userInput.value = '';
@@ -1218,7 +1354,7 @@
     });
 
     saveBtn.addEventListener('click', async (e) => {
-      if (!e.isTrusted) return;
+      if (!e.isTrusted || !isSavePromptVisibleAndUnobstructed(host)) return;
       const finalUsername = userInput.value.trim();
       const finalPassword = pwInput.value;
       if (!finalPassword) return;
@@ -1274,6 +1410,17 @@
 
     shadow.appendChild(card);
     document.body.appendChild(host);
+    enforceSaveHostStyles(host);
+    try {
+      const styleGuardObserver = new MutationObserver(() => {
+        if (activeSaveHost === host && host.isConnected) {
+          enforceSaveHostStyles(host);
+        } else {
+          try { styleGuardObserver.disconnect(); } catch {}
+        }
+      });
+      styleGuardObserver.observe(host, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+    } catch {}
     activeSaveHost = host;
     _activeSaveSignature = sig;
 

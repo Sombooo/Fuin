@@ -42,17 +42,21 @@ function check(desc, fn) {
   }
 }
 
-async function asyncCheck(desc, fn) {
-  try {
-    await fn();
-    console.log(`  [PASS] ${desc}`);
-    passes++;
-  } catch (err) {
-    console.error(`  [FAIL] ${desc}`);
-    console.error(`         Error: ${err.message}`);
-    failures++;
-    findings.push({ test: desc, error: err.message, stack: err.stack });
-  }
+let _asyncChain = Promise.resolve();
+function asyncCheck(desc, fn) {
+  _asyncChain = _asyncChain.then(async () => {
+    try {
+      await fn();
+      console.log(`  [PASS] ${desc}`);
+      passes++;
+    } catch (err) {
+      console.error(`  [FAIL] ${desc}`);
+      console.error(`         Error: ${err.message}`);
+      failures++;
+      findings.push({ test: desc, error: err.message, stack: err.stack });
+    }
+  });
+  return _asyncChain;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -542,5 +546,5 @@ async function finish() {
   }
 }
 
-// Allow asynchronous tests to complete before exiting
-setTimeout(finish, 2000);
+// Allow queued asynchronous tests to complete sequentially before exiting
+_asyncChain.then(() => finish());

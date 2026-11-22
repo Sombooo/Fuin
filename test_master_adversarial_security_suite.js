@@ -204,6 +204,8 @@ console.log('══════════════════════�
   // 4.4 Nonce Replay Attack Prevention on /pair
   const pairKeyBuf = Buffer.from(testPair.pairKey, 'hex');
   const validProof = encryptLanPayload({
+    action: 'pair',
+    direction: 'request',
     deviceId: 'test-device-uuid',
     deviceName: 'Test Phone',
     timestamp: Date.now()

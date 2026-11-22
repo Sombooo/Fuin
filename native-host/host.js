@@ -111,7 +111,23 @@ function forwardToFuin(request, cb) {
     }
   } catch { return safeCb({ error: 'fuin-not-installed-or-never-run', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true }); }
 
-  const socket = net.createConnection(getSocketPath(token));
+  const socketPath = getSocketPath(token);
+  if (process.platform !== 'win32') {
+    let sockStat;
+    try {
+      sockStat = fs.lstatSync(socketPath);
+    } catch {
+      return safeCb({ error: 'fuin-not-running', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true });
+    }
+    if (sockStat.isSymbolicLink() || !sockStat.isSocket()) {
+      return safeCb({ error: 'socket-path-invalid', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true });
+    }
+    if (typeof process.getuid === 'function' && sockStat.uid !== process.getuid()) {
+      return safeCb({ error: 'socket-path-wrong-owner', hostProtocolVersion: PROTOCOL_VERSION, hostOk: true });
+    }
+  }
+
+  const socket = net.createConnection(socketPath);
   let buf = '';
   const reqId = request.id || crypto.randomBytes(8).toString('hex');
 

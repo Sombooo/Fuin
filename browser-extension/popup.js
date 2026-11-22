@@ -313,6 +313,8 @@ function copyVaultItemField(entryId, field, btn, restoreFactory, okToastKey) {
       }
       if (secRes && secRes.error === 'protocol-mismatch') {
         showToast(pt('toastMismatch'));
+      } else if (secRes && secRes.error === 'denied') {
+        showToast(pt('toastApprovalDenied'));
       } else if (secRes && secRes.error === 'approval-required') {
         showToast(pt('toastProtectedDesktop'));
       } else if (secRes && secRes.error === 'locked') {
@@ -850,7 +852,10 @@ function renderMatches(matches, container, tab) {
             btnEye.style.color = 'var(--mu)';
           }, 8000);
         } else {
-          showToast(rev && rev.error === 'protocol-mismatch' ? pt('toastMismatch') : pt('toastRevealFailed'));
+          const msg = rev && rev.error === 'protocol-mismatch'
+            ? pt('toastMismatch')
+            : (rev && rev.error === 'denied' ? pt('toastApprovalDenied') : pt('toastRevealFailed'));
+          showToast(msg);
           btnEye.replaceChildren(createPopupSvg('eye', 12));
         }
       } catch {
@@ -931,16 +936,10 @@ function renderMatches(matches, container, tab) {
         }
         if (secRes && secRes.error === 'protocol-mismatch') {
           showToast(pt('toastMismatch'));
-        } else if (secRes && secRes.error === 'approval-required') {
-          const rev = await chrome.runtime.sendMessage({ type: 'fuin-reveal', entryId: m.id, domain: currentDomain });
-          if (rev && rev.password) {
-            await navigator.clipboard.writeText(rev.password);
-            btnCopyPw.replaceChildren(createPopupSvg('check', 13));
-            showToast(pt('toastPwCopied'));
-            setTimeout(() => btnCopyPw.replaceChildren(createPopupSvg('key', 13)), 1200);
-          } else {
-            showToast(pt('toastApprovalDenied'));
-          }
+        } else if (secRes && (secRes.error === 'denied' || secRes.error === 'approval-required')) {
+          showToast(pt('toastApprovalDenied'));
+        } else if (secRes && secRes.error === 'locked') {
+          showToast(pt('toastUnlockFirst'));
         } else {
           showToast(pt('toastErrPw'));
         }

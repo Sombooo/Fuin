@@ -85,12 +85,62 @@
       const parsed = new URL(rawUrl.trim());
       return (
         parsed.protocol === 'https:' &&
+        !parsed.username &&
+        !parsed.password &&
         parsed.hostname === 'github.com' &&
         parsed.pathname.startsWith('/Sombooo/Fuin/releases/download/')
       );
     } catch {
       return false;
     }
+  }
+
+  function lineMatchesAssetName(line, assetName) {
+    if (typeof line !== 'string' || typeof assetName !== 'string') return false;
+    const trimmedName = assetName.trim();
+    if (!trimmedName) return false;
+    const escaped = trimmedName
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\\\.| /g, '[.\\s]');
+    const re = new RegExp(`(^|[^a-zA-Z0-9_.-])${escaped}(?=$|[^a-zA-Z0-9_.-])`, 'i');
+    return re.test(line);
+  }
+
+  function extractExpectedSha256(asset, releaseBody) {
+    if (asset && typeof asset.digest === 'string') {
+      const rawDigest = asset.digest.trim().toLowerCase();
+      const withoutPrefix = rawDigest.startsWith('sha256:') ? rawDigest.slice(7).trim() : rawDigest;
+      if (/^[0-9a-f]{64}$/.test(withoutPrefix)) {
+        return withoutPrefix;
+      }
+    }
+
+    if (typeof releaseBody === 'string' && releaseBody.trim()) {
+      const assetName = asset && typeof asset.name === 'string' ? asset.name.trim() : '';
+      if (assetName) {
+        const lines = releaseBody.split(/\r?\n/);
+        for (const line of lines) {
+          if (lineMatchesAssetName(line, assetName)) {
+            const m = line.match(/(?:^|[^0-9a-fA-F])([0-9a-fA-F]{64})(?=$|[^0-9a-fA-F])/);
+            if (m) return m[1].toLowerCase();
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function findChecksumsAsset(release) {
+    if (!release || !Array.isArray(release.assets)) return null;
+    const found = release.assets.find(
+      (a) =>
+        a &&
+        typeof a.name === 'string' &&
+        a.name.trim().toLowerCase() === 'sha256sums.txt' &&
+        isTrustedFuinDownloadUrl(a.browser_download_url)
+    );
+    return found || null;
   }
 
   function findPlatformAsset(release) {
@@ -250,17 +300,23 @@
             }
 
             try {
+              const expectedSha256 = extractExpectedSha256(asset, latestRelease.body);
+              const checksumsAsset = findChecksumsAsset(latestRelease);
               const res = await window.kekkai.downloadUpdate({
                 url: asset.browser_download_url,
-                filename: asset.name
+                filename: asset.name,
+                expectedSha256,
+                checksumUrl: checksumsAsset?.browser_download_url || null
               });
-              if (res && res.filePath) {
+              if (res && res.success === true && res.verified === true && res.filePath) {
                 downloadedFilePath = res.filePath;
                 statusText.textContent = t('sysUpdateDownloaded');
                 pBar.style.width = '100%';
                 dlBtn.className = 'btn-io pri';
                 dlBtn.textContent = t('sysUpdateInstallBtn');
                 dlBtn.disabled = false;
+              } else {
+                throw new Error(res?.error || 'SHA-256 verification required');
               }
             } catch (err) {
               statusText.textContent = `${t('sysUpdateFailed')}: ${err.message || 'Error'}`;
@@ -313,6 +369,8 @@
     checkForUpdates,
     isAutoUpdateCheckEnabled,
     findPlatformAsset,
+    findChecksumsAsset,
+    extractExpectedSha256,
     isTrustedFuinDownloadUrl,
     onLanguageChanged,
   };

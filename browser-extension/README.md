@@ -1,61 +1,37 @@
 # Fuin Browser Extension / Tarayıcı Eklentisi
 
-Companion browser extension for the [Fuin](https://github.com/Sombooo/Fuin) local-first password manager. Allows you to securely autofill your logins into web forms directly from your local desktop vault.
+Companion browser extension for the [Fuin](https://github.com/Sombooo/Fuin) offline-first password manager. Connects locally to your unlocked Fuin Desktop app over OS native messaging so you can fill logins or copy cards/notes without storing anything in the cloud.
 
 ---
 
-## 🦊 Firefox Installation
+## 🌐 Installation (Chrome, Firefox, Brave & Edge)
 
-> **Status: Submitted to Firefox Add-ons (AMO) — Coming Very Soon!**  
-> The extension has been submitted for review. Once approved, you will be able to install it with a single click from the official store without any manual setup.
-> 
-> In the meantime, you can load it temporarily via `about:debugging` -> **This Firefox** -> **Load Temporary Add-on...** -> select `manifest.json`.
+> **Status: Ready on Firefox Add-ons & Chrome Web Store**  
+> Both the **Firefox** and **Chrome / Chromium** extensions are ready. You can install them from the official browser stores—or if you prefer inspecting and running directly from source, you can load this [`browser-extension/`](./) folder manually.
 
----
+### Running Manually from Source (Optional / Developer Mode)
 
-## 🌐 Chrome, Brave & Edge Setup (Developer Mode)
+#### Firefox (`about:debugging`)
+1. Open `about:debugging` -> **This Firefox** -> **Load Temporary Add-on...**
+2. Select [`manifest.json`](./manifest.json) inside this directory (`fuin-app@sombo.dev`).
 
-Until the extension is published on the Chrome Web Store, you can run it locally in a few quick steps:
-
-### 1. Load the Extension into Your Browser
-1. Navigate to your browser's extensions page:
-   - **Chrome / Brave:** `chrome://extensions`
-   - **Edge:** `edge://extensions`
-2. Enable **Developer Mode** (toggle in the top-right corner).
-3. Click **Load unpacked** (Paketlenmemiş öğe yükle).
-4. Select this `browser-extension/` directory.
-5. Copy the generated 32-character **ID** shown on the extension card (e.g., `abcdefghijklmnop...`).
-
-### 2. Register the Native Messaging Host
-To allow the extension to talk to the Fuin desktop app, register the native messaging host on your system:
-
-Open your terminal, navigate to the `native-host/` directory, and run:
+#### Chrome, Brave & Edge
+1. Open `chrome://extensions` (or `edge://extensions`).
+2. Enable **Developer Mode**.
+3. Click **Load unpacked** and select this [`browser-extension/`](./) directory.
+4. Copy the 32-character extension **ID** shown on the card, then register the native messaging host from `native-host/`:
 
 ```bash
 node install-host.js --chrome-id=YOUR_COPIED_EXTENSION_ID
 ```
 
-*(This command automatically installs the native messaging manifest for Chrome, Brave, and Edge on macOS, Linux, or Windows).*
-
-### 3. Usage & Testing
-1. Launch the Fuin desktop app and unlock your vault.
-2. Open any website where you have saved credentials.
-3. Click the **⬡** Fuin icon next to the login field.
-4. Select your account to automatically autofill the form.
+*(Note: Official store installs use Fuin Desktop's built-in bridge IDs automatically; restart your browser once if native messaging was just installed).*
 
 ---
 
-## 🛠️ Troubleshooting
+## 🔒 How It Works Underneath
 
-- **"Fuin is not running":** Ensure the Fuin desktop app is launched.
-- **"Fuin is locked":** Unlock your vault in the desktop application.
-- **Connection Issues:** Re-run `node install-host.js --chrome-id=...` and restart your browser completely (browsers cache native host manifests on startup).
-
----
-
-## 🔒 Security Architecture
-
-- **Zero Cloud Exposure:** The extension never communicates with remote servers. All credential lookups occur strictly over local OS pipes (`stdio` socket bridge).
-- **DOM Isolation:** Injected dropdown menus use closed Shadow DOM to prevent hostile page scripts from inspecting or scraping credentials.
-- **User Gesture Verification:** Reveal requests require explicit user clicks (`isTrusted`) and approval from the desktop app.
-- **Fixed Gecko ID:** Registered for Firefox as `fuin-app@sombo.dev`.
+- **Local Only:** No external requests or telemetry. Credentials stay inside the Fuin Desktop vault until requested.
+- **Local Socket & Symlink Isolation:** `native-host/host.js` talks to Desktop over owner-only UNIX sockets (`0o600` / `0o700` dir, `lstatSync` symlink checks) or private Windows named pipes with per-message HMAC authentication.
+- **DOM & Domain Isolation:** Menus render inside closed Shadow DOM, click/autofill actions verify trusted user input (`isTrusted`), cross-origin subframes are blocked, and multi-tenant hosts (e.g., `github.io`, `wordpress.com`, `vercel.app`) match by exact subdomain.
+- **No Silent Autofill:** Passwords are only populated when you trigger a fill from the icon, shortcut (`Ctrl+Shift+L` / `Cmd+Shift+L`), or popup.

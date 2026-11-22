@@ -3,11 +3,12 @@ const assert = require('assert');
 const cbor = require('cbor');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { buildSyncPayload, parseSyncPayload, sanitizeForCBOR, GenerationManager } = require('./sync-v2-payload.js');
 const syncCrypto = require('./sync-v2-crypto.js');
 
-const USER_DATA = __dirname; // test in current dir
+const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'fuin-v2-phase2-'));
 const genManager = new GenerationManager(USER_DATA);
 
 let passed = 0;
@@ -205,6 +206,7 @@ async function main() {
   console.log('\n═══════════════════════════════════════════════════════════════');
   console.log(`SONUÇ: ${passed} BAŞARILI, ${failed} BAŞARISIZ`);
   console.log('═══════════════════════════════════════════════════════════════\n');
+  try { fs.rmSync(USER_DATA, { recursive: true, force: true }); } catch {}
   if (failed > 0) process.exit(1);
 }
 

@@ -223,17 +223,52 @@ const MULTI_TENANT_SUFFIXES = new Set([
   'up.railway.app', 'deno.dev', 'appspot.com', 'surge.sh', 'amplifyapp.com',
   'elasticbeanstalk.com', 's3.amazonaws.com', 'fastly.net', 'b-cdn.net',
   'ngrok-free.app', 'ngrok.io', 'glitch.me', 'myshopify.com',
+  '000webhostapp.com', 'pipedream.net', 'pantheonsite.io',
   'wixsite.com', 'ghost.io', 'substack.com', 'azureedge.net', 'trafficmanager.net',
-  'blob.core.windows.net', 'blogspot.com', 'wordpress.com'
+  'blob.core.windows.net', 'wordpress.com', 'blogspot.com', 'tumblr.com',
+  'itch.io', 'notion.site', 'webflow.io', 'replit.app', 'run.app',
+  'hf.space', 'trycloudflare.com', 'pythonanywhere.com'
+]);
+
+const COMPOUND_CCTLD_SLDS = new Set([
+  'co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'or', 'ne', 'go', 'gob',
+  'mil', 'biz', 'info', 'gen', 'web', 'nom', 'bel', 'pol', 'k12', 'av',
+  'dr', 'bbs', 'tsk', 'kep', 'me', 'firm', 'ind'
 ]);
 
 function normDomainKey(d) {
-  return String(d || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].split(':')[0].trim().replace(/\.$/, '');
+  let s = String(d || '').trim().toLowerCase();
+  if (!s) return '';
+  if (!/^https?:\/\//.test(s)) s = 'https://' + s;
+  try {
+    return new URL(s).hostname.replace(/^www\./, '').replace(/\.+$/, '');
+  } catch {
+    const raw = String(d || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+    if (raw.startsWith('[')) {
+      const endBracket = raw.indexOf(']');
+      return (endBracket !== -1 ? raw.slice(0, endBracket + 1) : raw).replace(/\.+$/, '');
+    }
+    if ((raw.match(/:/g) || []).length > 1) return raw.replace(/\.+$/, '');
+    return raw.split(':')[0].trim().replace(/\.+$/, '');
+  }
+}
+
+function isIpLiteralHost(h) {
+  if (!h) return false;
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(h) || h.includes(':') || h.startsWith('[');
+}
+
+function isCompoundCcTldSuffix(h) {
+  const parts = String(h || '').split('.');
+  if (parts.length !== 2) return false;
+  return COMPOUND_CCTLD_SLDS.has(parts[0]) && /^[a-z]{2}$/.test(parts[1]);
 }
 
 function isMultiTenantHost(h) {
+  if (!h) return false;
+  if (MULTI_TENANT_SUFFIXES.has(h)) return true;
   for (const suffix of MULTI_TENANT_SUFFIXES) {
-    if (h === suffix || h.endsWith('.' + suffix)) return true;
+    if (h.endsWith('.' + suffix)) return true;
   }
   return false;
 }
@@ -241,24 +276,12 @@ function isMultiTenantHost(h) {
 function getBaseSite(h) {
   const clean = normDomainKey(h);
   if (!clean) return '';
-  if (clean === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(clean) || clean.includes(':')) return clean;
+  if (clean === 'localhost' || isIpLiteralHost(clean)) return clean;
   if (isMultiTenantHost(clean)) return clean;
   const parts = clean.split('.');
   if (parts.length <= 2) return clean;
-  const twoPartTlds = new Set([
-    'com.tr', 'org.tr', 'net.tr', 'edu.tr', 'gov.tr', 'gen.tr',
-    'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk',
-    'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp',
-    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
-    'co.nz', 'org.nz', 'net.nz',
-    'com.br', 'net.br', 'org.br',
-    'co.za', 'org.za',
-    'com.cn', 'net.cn', 'org.cn', 'gov.cn',
-    'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in',
-    'com.de', 'co.ca', 'com.sg', 'com.hk', 'com.mx', 'com.ar'
-  ]);
   const lastTwo = parts.slice(-2).join('.');
-  if (twoPartTlds.has(lastTwo) && parts.length >= 3) {
+  if (isCompoundCcTldSuffix(lastTwo) && parts.length >= 3) {
     return parts.slice(-3).join('.');
   }
   return lastTwo;
@@ -269,7 +292,9 @@ function isSameSiteSafe(domainA, domainB) {
   const b = normDomainKey(domainB);
   if (!a || !b) return false;
   if (a === b) return true;
+  if (isIpLiteralHost(a) || isIpLiteralHost(b)) return false;
   if (isMultiTenantHost(a) || isMultiTenantHost(b)) return false;
+  if (isCompoundCcTldSuffix(a) || isCompoundCcTldSuffix(b)) return false;
   return getBaseSite(a) === getBaseSite(b);
 }
 

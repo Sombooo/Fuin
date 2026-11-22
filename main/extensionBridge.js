@@ -2,12 +2,48 @@
 
 const net = require('net');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 
 const NATIVE_HOST_NAME = 'com.fuin.nativehost';
 const PROTOCOL_VERSION = 1; // Native-host & eklenti protokol sürümü
 const DEFAULT_CHROME_EXTENSION_ID = 'fnnfdonpocachpdjkdjpgpmodjnahpbh';
+const MAX_BAD_AUTH_PER_SOCKET = 5;
+const SOCKET_IDLE_TIMEOUT_MS = 60000;
+
+function ensurePrivateDirSync(dirPath) {
+  if (!dirPath || typeof dirPath !== 'string') {
+    throw new Error('Invalid directory path');
+  }
+  fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+  if (process.platform !== 'win32') {
+    const resolved = path.resolve(dirPath);
+    const tmpRoot = path.resolve(os.tmpdir());
+    if (resolved !== tmpRoot && resolved !== '/tmp' && resolved !== '/private/tmp') {
+      try {
+        const st = fs.lstatSync(dirPath);
+        if (!st.isSymbolicLink() && st.isDirectory()) {
+          fs.chmodSync(dirPath, 0o700);
+        }
+      } catch {}
+    }
+  }
+  return dirPath;
+}
+
+function unlinkIfSymlinkSync(filePath) {
+  try {
+    const st = fs.lstatSync(filePath);
+    if (st.isSymbolicLink()) {
+      fs.unlinkSync(filePath);
+      return true;
+    }
+  } catch (err) {
+    if (err && err.code !== 'ENOENT') throw err;
+  }
+  return false;
+}
 
 function getChromeOriginsFilePath(app) {
   return app ? path.join(app.getPath('userData'), 'fuin.chrome-origins.json') : null;
@@ -16,7 +52,9 @@ function getChromeOriginsFilePath(app) {
 function loadSavedChromeOrigins(app) {
   try {
     const f = getChromeOriginsFilePath(app);
-    if (f && fs.existsSync(f)) {
+    if (f) {
+      const st = fs.lstatSync(f);
+      if (st.isSymbolicLink() || !st.isFile()) return [];
       const data = JSON.parse(fs.readFileSync(f, 'utf8'));
       if (Array.isArray(data)) {
         return data
@@ -32,8 +70,12 @@ function saveChromeOrigins(app, origins) {
   try {
     const f = getChromeOriginsFilePath(app);
     if (f) {
-      fs.mkdirSync(path.dirname(f), { recursive: true });
+      ensurePrivateDirSync(path.dirname(f));
+      unlinkIfSymlinkSync(f);
       fs.writeFileSync(f, JSON.stringify(origins.slice(0, 16), null, 2), { mode: 0o600, encoding: 'utf8' });
+      if (process.platform !== 'win32') {
+        try { fs.chmodSync(f, 0o600); } catch {}
+      }
     }
   } catch {}
 }
@@ -100,19 +142,50 @@ function getNativeHostJsPath(app) {
     : path.join(__dirname, '..', 'native-host', 'host.js');
 }
 
-function ensureNativeHostWrapper(app) {
-  const hostJs = getNativeHostJsPath(app).replace(/"/g, '');
-  const wrapperDir = app.getPath('userData');
-  const electronPath = process.execPath.replace(/"/g, '');
-  fs.mkdirSync(wrapperDir, { recursive: true });
+function validateWrapperExecPath(rawPath, label) {
+  if (typeof rawPath !== 'string' || !rawPath.trim()) {
+    throw new Error(`Invalid ${label}: empty path`);
+  }
+  if (/[\r\n\0]/.test(rawPath)) {
+    throw new Error(`Invalid ${label}: contains control characters`);
+  }
+  return rawPath;
+}
 
+function escapePosixShellArg(arg) {
+  return `'${String(arg).replace(/'/g, "'\\''")}'`;
+}
+
+function formatNativeHostWrapperScript(electronPath, hostJs, platform = process.platform) {
+  const safeElectron = validateWrapperExecPath(electronPath, 'electronPath');
+  const safeHostJs = validateWrapperExecPath(hostJs, 'hostJs');
+  if (platform === 'win32') {
+    if (/"/.test(safeElectron) || /"/.test(safeHostJs)) {
+      throw new Error('Invalid Windows wrapper path: contains double quote');
+    }
+    const batElectron = safeElectron.replace(/%/g, '%%');
+    const batHostJs = safeHostJs.replace(/%/g, '%%');
+    return `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${batElectron}" "${batHostJs}" %*\r\n`;
+  }
+  return `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec ${escapePosixShellArg(safeElectron)} ${escapePosixShellArg(safeHostJs)} "$@"\n`;
+}
+
+function ensureNativeHostWrapper(app) {
+  const hostJs = getNativeHostJsPath(app);
+  const wrapperDir = app.getPath('userData');
+  const electronPath = process.execPath;
+  ensurePrivateDirSync(wrapperDir);
+
+  const scriptContent = formatNativeHostWrapperScript(electronPath, hostJs, process.platform);
   if (process.platform === 'win32') {
     const batPath = path.join(wrapperDir, 'fuin-host.bat');
-    fs.writeFileSync(batPath, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${electronPath}" "${hostJs}" %*\r\n`);
+    unlinkIfSymlinkSync(batPath);
+    fs.writeFileSync(batPath, scriptContent, { mode: 0o700, encoding: 'utf8' });
     return batPath;
   }
   const shPath = path.join(wrapperDir, 'fuin-host.sh');
-  fs.writeFileSync(shPath, `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec "${electronPath}" "${hostJs}" "$@"\n`);
+  unlinkIfSymlinkSync(shPath);
+  fs.writeFileSync(shPath, scriptContent, { mode: 0o700, encoding: 'utf8' });
   fs.chmodSync(shPath, 0o700);
   return shPath;
 }
@@ -127,7 +200,11 @@ function writeNativeHostManifest(targetPath, key, values, app) {
       [key]: values,
     };
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-    fs.writeFileSync(targetPath, JSON.stringify(manifest, null, 2));
+    unlinkIfSymlinkSync(targetPath);
+    fs.writeFileSync(targetPath, JSON.stringify(manifest, null, 2), { mode: 0o600, encoding: 'utf8' });
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(targetPath, 0o600); } catch {}
+    }
     return true;
   } catch (e) {
     console.error('[native-host-install] yazılamadı:', targetPath, e.message);
@@ -198,21 +275,79 @@ function autoInstallNativeMessagingHosts(app, knownExtensionIds) {
 
 function getOrCreateExtToken(app) {
   const tokenFile = getExtTokenPath(app);
-  if (fs.existsSync(tokenFile)) {
-    try {
-      const raw = fs.readFileSync(tokenFile, 'utf8').trim();
-      if (/^[0-9a-f]{64}$/i.test(raw)) {
-        if (process.platform !== 'win32') {
-          try { fs.chmodSync(tokenFile, 0o600); } catch {}
+  const userDataDir = path.dirname(tokenFile);
+  ensurePrivateDirSync(userDataDir);
+
+  let existingStat = null;
+  try {
+    existingStat = fs.lstatSync(tokenFile);
+  } catch (err) {
+    if (err && err.code !== 'ENOENT') throw err;
+  }
+
+  if (existingStat) {
+    if (existingStat.isSymbolicLink()) {
+      // Never read or write through a symlink; unlink only the symlink itself and regenerate cleanly
+      fs.unlinkSync(tokenFile);
+    } else if (!existingStat.isFile()) {
+      throw new Error('Refusing non-regular extension token path');
+    } else {
+      try {
+        const raw = fs.readFileSync(tokenFile, 'utf8').trim();
+        if (/^[0-9a-f]{64}$/i.test(raw)) {
+          if (process.platform !== 'win32') {
+            try { fs.chmodSync(tokenFile, 0o600); } catch {}
+          }
+          return raw;
         }
-        return raw;
+      } catch {}
+    }
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const tmpFile = path.join(
+    userDataDir,
+    `.fuin.ext-token.${process.pid}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}.tmp`
+  );
+  let fd;
+  try {
+    fd = fs.openSync(tmpFile, 'wx', 0o600);
+    if (process.platform !== 'win32') {
+      try { fs.fchmodSync(fd, 0o600); } catch {}
+    }
+    const buf = Buffer.from(token, 'utf8');
+    let offset = 0;
+    while (offset < buf.length) {
+      offset += fs.writeSync(fd, buf, offset, buf.length - offset);
+    }
+    try { fs.fsyncSync(fd); } catch {}
+  } catch (err) {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch {}
+      fd = undefined;
+    }
+    try { fs.unlinkSync(tmpFile); } catch {}
+    throw err;
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch {}
+    }
+  }
+
+  try {
+    fs.renameSync(tmpFile, tokenFile);
+  } catch (err) {
+    try { fs.unlinkSync(tmpFile); } catch {}
+    throw err;
+  }
+
+  if (process.platform !== 'win32') {
+    try {
+      const finalStat = fs.lstatSync(tokenFile);
+      if (!finalStat.isSymbolicLink() && finalStat.isFile()) {
+        fs.chmodSync(tokenFile, 0o600);
       }
     } catch {}
-  }
-  const token = crypto.randomBytes(32).toString('hex');
-  fs.writeFileSync(tokenFile, token, { mode: 0o600, encoding: 'utf8' });
-  if (process.platform !== 'win32') {
-    try { fs.chmodSync(tokenFile, 0o600); } catch {}
   }
   return token;
 }
@@ -224,6 +359,13 @@ function safeCompare(a, b) {
   return crypto.timingSafeEqual(h1, h2);
 }
 
+function getBridgeListenOptions(socketPath, platform = process.platform) {
+  if (platform === 'win32') {
+    return { path: socketPath, readableAll: false, writableAll: false };
+  }
+  return socketPath;
+}
+
 let extServer = null;
 const pendingExtRequests = new Map(); // requestId -> { resolve, reject, timer }
 let extRequestCounter = 0;
@@ -233,8 +375,13 @@ let socketWatchdog = null;
 function ensureSocketAlive() {
   if (process.platform === 'win32' || !extServer || !lastBridgeOptions) return;
   const socketPath = getExtSocketPath(lastBridgeOptions.app);
-  if (!fs.existsSync(socketPath)) {
-    console.warn('[fuin-ext-bridge] Socket file missing while server is active. Recreating listener at:', socketPath);
+  let alive = false;
+  try {
+    const st = fs.lstatSync(socketPath);
+    alive = !st.isSymbolicLink() && st.isSocket();
+  } catch {}
+  if (!alive) {
+    console.warn('[fuin-ext-bridge] Socket file missing or invalid while server is active. Recreating listener at:', socketPath);
     try { extServer.close(); } catch {}
     extServer = null;
     startExtensionBridge(lastBridgeOptions);
@@ -271,33 +418,62 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
   const token = getOrCreateExtToken(app);
   const socketPath = getExtSocketPath(app);
 
-  if (process.platform !== 'win32' && fs.existsSync(socketPath)) {
-    try { fs.unlinkSync(socketPath); } catch {}
+  if (process.platform !== 'win32') {
+    ensurePrivateDirSync(path.dirname(socketPath));
+    let sockStat = null;
+    try {
+      sockStat = fs.lstatSync(socketPath);
+    } catch (err) {
+      if (err && err.code !== 'ENOENT') throw err;
+    }
+    if (sockStat) {
+      if (sockStat.isSymbolicLink()) {
+        // Safely unlink only the symlink itself — never follow it
+        try { fs.unlinkSync(socketPath); } catch {}
+      } else if (sockStat.isSocket()) {
+        try { fs.unlinkSync(socketPath); } catch {}
+      } else {
+        throw new Error(`Refusing to overwrite non-socket extension bridge path: ${socketPath}`);
+      }
+    }
   }
 
   extServer = net.createServer((socket) => {
+    const socketState = { badAuthCount: 0, terminated: false };
+    socket.setTimeout(SOCKET_IDLE_TIMEOUT_MS, () => {
+      try { socket.destroy(); } catch {}
+    });
     let buf = '';
     socket.on('data', async (chunk) => {
+      if (socket.destroyed || socketState.terminated) return;
       buf += chunk.toString('utf8');
       if (buf.length > 65536) {
+        socketState.terminated = true;
         socket.destroy();
         return;
       }
       let nl;
       while ((nl = buf.indexOf('\n')) >= 0) {
+        if (socket.destroyed || socketState.terminated) return;
         const line = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
         if (!line.trim()) continue;
-        await handleExtMessage(socket, line);
+        await handleExtMessage(socket, line, socketState);
       }
     });
     socket.on('error', () => {});
   });
 
   extServer.on('error', (e) => console.error('[fuin-ext-bridge] socket hatası:', e.message));
-  extServer.listen(socketPath, () => {
+  const listenOptions = getBridgeListenOptions(socketPath, process.platform);
+  extServer.listen(listenOptions, () => {
     if (process.platform !== 'win32') {
-      try { fs.chmodSync(socketPath, 0o600); } catch {}
+      try {
+        const st = fs.lstatSync(socketPath);
+        if (!st.isSymbolicLink() && st.isSocket()) {
+          fs.chmodSync(socketPath, 0o600);
+        }
+      } catch {}
     }
     console.log('[fuin-ext-bridge] dinliyor:', socketPath);
   });
@@ -322,14 +498,31 @@ function startExtensionBridge({ app, getMainWindow, getIsUnlocked, onActivity })
     return true;
   }
 
-  async function handleExtMessage(socket, line) {
+  async function handleExtMessage(socket, line, socketState) {
     let msg;
     try { msg = JSON.parse(line); } catch { return; }
     const reply = (obj) => { try { socket.write(JSON.stringify(obj) + '\n'); } catch {} };
 
     if (!msg.token || typeof msg.token !== 'string' || !safeCompare(msg.token, token)) {
+      socketState.badAuthCount += 1;
+      if (socketState.badAuthCount >= MAX_BAD_AUTH_PER_SOCKET) {
+        socketState.terminated = true;
+        try {
+          socket.end(JSON.stringify({ id: msg.id, error: 'unauthorized' }) + '\n', () => {
+            try { socket.destroy(); } catch {}
+          });
+        } catch {
+          try { socket.destroy(); } catch {}
+        }
+        const killTimer = setTimeout(() => {
+          try { if (!socket.destroyed) socket.destroy(); } catch {}
+        }, 250);
+        if (typeof killTimer.unref === 'function') killTimer.unref();
+        return;
+      }
       return reply({ id: msg.id, error: 'unauthorized' });
     }
+    socketState.badAuthCount = 0;
     if (!checkRateLimit('global', 80, 10000)) {
       return reply({ id: msg.id, error: 'rate-limited' });
     }
@@ -470,7 +663,12 @@ function stopExtensionBridge() {
   if (process.platform !== 'win32' && lastBridgeOptions?.app) {
     try {
       const sock = getExtSocketPath(lastBridgeOptions.app);
-      if (sock && fs.existsSync(sock)) fs.unlinkSync(sock);
+      if (sock) {
+        const st = fs.lstatSync(sock);
+        if (!st.isSymbolicLink() && st.isSocket()) {
+          fs.unlinkSync(sock);
+        }
+      }
     } catch {}
   }
 }
@@ -490,6 +688,10 @@ function getMaskedToken(app) {
 module.exports = {
   NATIVE_HOST_NAME,
   PROTOCOL_VERSION,
+  MAX_BAD_AUTH_PER_SOCKET,
+  ensurePrivateDirSync,
+  formatNativeHostWrapperScript,
+  getBridgeListenOptions,
   getKnownExtensionIds,
   getExtTokenPath,
   getExtSocketPath,

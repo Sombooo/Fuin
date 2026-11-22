@@ -1,7 +1,7 @@
-# Cloudflare Security Audit Report: Fuin Ecosystem (Desktop & Mobile)
+# Security Self-Audit Report: Fuin Ecosystem (Desktop & Mobile)
 
 **Date:** 2026-10-27  
-**Methodology:** [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill)  
+**Methodology:** Open-source [`cloudflare/security-audit-skill`](https://github.com/cloudflare/security-audit-skill) framework (independent self-audit — not affiliated with or performed by Cloudflare, Inc.)  
 **Target:** Fuin Desktop & Fuin Mobile  
 **Status:** Audit Complete · All Findings Remediated · 100% Tests Passing (59/59 Master Audit Checks, 290+ Total Invariant Tests)
 
@@ -59,7 +59,7 @@ Fuin is designed as a **Zero-Knowledge, Offline-First** password manager. The au
 ## 3. Cryptographic & Protocol Verification
 
 The automated verification suite (`test_cloudflare_security_audit.js`) verified the following invariants:
-1. **Argon2id Memory Hardness:** Derives 32-byte key using `m=64MB, t=3, p=4`.
+1. **Argon2id Memory Hardness:** Baseline KAT test suite (`test_cloudflare_security_audit.js`) verifies `m=64MB, t=3, p=4`, while production Desktop runs `m=128 MiB, t=4, p=1` and Mobile runs `m=64 MiB, t=3, p=1`.
 2. **AES-256-GCM Tamper Resistance:** 1-bit mutation in ciphertext or authentication tag immediately triggers rejection before plaintext disclosure.
 3. **Memory Zeroization:** Derived vault keys and intermediate JSON buffers are explicitly cleared (`buffer.fill(0)`) in `finally` blocks.
 4. **RFC1918 Subnet Enforcement:** Non-local IP addresses (e.g. WAN, public DNS) connecting to LAN sync are instantly rejected and their sockets destroyed.

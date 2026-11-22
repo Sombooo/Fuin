@@ -102,16 +102,6 @@ I also built **[Fuin Mobile](https://github.com/Sombooo/FuinMobile)** for Androi
 
 ---
 
-## Support & Feedback
-
-Fuin is free, open-source software under **AGPLv3**. If you try it out and hit a bug, notice a UX rough edge, or spot something that can be safer, feel free to open an issue or PR. And if it ends up being useful to you and you'd like to buy me a coffee, you can do that below.
-
-Wishing you all happy days — and don't forget to drink some water and stay hydrated!
-
-[![Support via Lemon Squeezy](https://img.shields.io/badge/Support_Fuin-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://fuindev.lemonsqueezy.com/checkout/buy/c898c753-098b-4c0b-a721-77332db06bdc)
-
----
-
 ## Technical Details & Source Build
 
 For developers or anyone who wants to inspect how Fuin handles keys, sync packets, and local isolation under the hood:
@@ -143,3 +133,13 @@ npm start
 npm run build-mac
 npm run build-win
 ```
+
+---
+
+## Support & Feedback
+
+Fuin is free, open-source software under **AGPLv3**. If you try it out and hit a bug, notice a UX rough edge, or spot something that can be safer, feel free to open an issue or PR. And if it ends up being useful to you and you'd like to buy me a coffee, you can do that below.
+
+Wishing you all happy days — and don't forget to drink some water and stay hydrated!
+
+[![Support via Lemon Squeezy](https://img.shields.io/badge/Support_Fuin-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://fuindev.lemonsqueezy.com/checkout/buy/c898c753-098b-4c0b-a721-77332db06bdc)
